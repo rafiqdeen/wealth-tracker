@@ -84,14 +84,84 @@ export function initializeDb() {
     )
   `);
 
+  // Transactions table for buy/sell tracking
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS transactions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      asset_id INTEGER NOT NULL,
+      user_id INTEGER NOT NULL,
+      type TEXT NOT NULL CHECK(type IN ('BUY', 'SELL')),
+      quantity REAL NOT NULL,
+      price REAL NOT NULL,
+      total_amount REAL NOT NULL,
+      transaction_date TEXT NOT NULL,
+      notes TEXT,
+      realized_gain REAL,
+      is_initial_holding INTEGER DEFAULT 0,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+
+      FOREIGN KEY (asset_id) REFERENCES assets(id) ON DELETE CASCADE,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    )
+  `);
+
+  // Add status column to assets if not exists
+  const assetColumns = db.prepare("PRAGMA table_info(assets)").all();
+  const hasStatus = assetColumns.some(col => col.name === 'status');
+  if (!hasStatus) {
+    db.exec(`ALTER TABLE assets ADD COLUMN status TEXT DEFAULT 'ACTIVE'`);
+  }
+
   // Create indexes for better performance
   db.exec(`
     CREATE INDEX IF NOT EXISTS idx_assets_user_id ON assets(user_id);
     CREATE INDEX IF NOT EXISTS idx_assets_category ON assets(category);
     CREATE INDEX IF NOT EXISTS idx_price_cache_symbol ON price_cache(symbol);
+    CREATE INDEX IF NOT EXISTS idx_transactions_asset_id ON transactions(asset_id);
+    CREATE INDEX IF NOT EXISTS idx_transactions_user_id ON transactions(user_id);
+    CREATE INDEX IF NOT EXISTS idx_transactions_date ON transactions(transaction_date);
   `);
 
+  // Migrate existing equity assets to transactions (one-time migration)
+  migrateExistingEquityAssets();
+
   console.log('Database initialized successfully');
+}
+
+// Migration: Convert existing equity assets with quantity/avg_buy_price to initial transactions
+function migrateExistingEquityAssets() {
+  // Find equity assets that have quantity but no transactions yet
+  const equityAssets = db.prepare(`
+    SELECT a.* FROM assets a
+    WHERE a.category = 'EQUITY'
+    AND a.quantity > 0
+    AND a.avg_buy_price > 0
+    AND NOT EXISTS (
+      SELECT 1 FROM transactions t WHERE t.asset_id = a.id
+    )
+  `).all();
+
+  if (equityAssets.length === 0) return;
+
+  const insertTxn = db.prepare(`
+    INSERT INTO transactions (
+      asset_id, user_id, type, quantity, price, total_amount, transaction_date, is_initial_holding
+    ) VALUES (?, ?, 'BUY', ?, ?, ?, ?, 1)
+  `);
+
+  for (const asset of equityAssets) {
+    const transactionDate = asset.purchase_date || new Date().toISOString().split('T')[0];
+    insertTxn.run(
+      asset.id,
+      asset.user_id,
+      asset.quantity,
+      asset.avg_buy_price,
+      asset.quantity * asset.avg_buy_price,
+      transactionDate
+    );
+  }
+
+  console.log(`Migrated ${equityAssets.length} existing equity assets to transactions`);
 }
 
 export default db;

@@ -1,5 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { priceService } from '../services/assets';
+import { spring } from '../utils/animations';
 
 export default function StockAutocomplete({
   value,
@@ -86,47 +88,98 @@ export default function StockAutocomplete({
 
   return (
     <div ref={wrapperRef} className="relative">
-      <input
-        type="text"
-        value={query}
-        onChange={handleInputChange}
-        onFocus={() => results.length > 0 && setShowDropdown(true)}
-        placeholder={placeholder}
-        disabled={disabled}
-        className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-      />
+      <div className="relative">
+        <input
+          type="text"
+          value={query}
+          onChange={handleInputChange}
+          onFocus={() => results.length > 0 && setShowDropdown(true)}
+          placeholder={placeholder}
+          disabled={disabled}
+          className="w-full px-4 py-3 bg-[var(--fill-tertiary)] border-0 rounded-xl focus:outline-none focus:ring-2 focus:ring-[var(--system-blue)] transition-all text-[var(--label-primary)] placeholder-[var(--label-tertiary)] text-[15px] disabled:opacity-50"
+        />
 
-      {loading && (
-        <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
-          <svg className="animate-spin h-4 w-4 text-gray-400" fill="none" viewBox="0 0 24 24">
-            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-          </svg>
-        </div>
-      )}
+        {loading && (
+          <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
+            <svg className="animate-spin h-5 w-5 text-[var(--label-tertiary)]" fill="none" viewBox="0 0 24 24">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3"></circle>
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+          </div>
+        )}
 
-      {showDropdown && results.length > 0 && (
-        <ul className="absolute z-10 mt-1 w-full bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-auto">
-          {results.map((item, index) => (
-            <li
-              key={`${item.symbol}-${index}`}
-              onClick={() => handleSelect(item)}
-              className="px-3 py-2 cursor-pointer hover:bg-blue-50 border-b border-gray-100 last:border-b-0"
-            >
-              <div className="font-medium text-gray-900 text-sm">{item.name}</div>
-              <div className="text-xs text-gray-500">
-                {item.symbol} {item.exchange && `• ${item.exchange}`}
+        {!loading && query && (
+          <button
+            type="button"
+            onClick={() => {
+              setQuery('');
+              onChange('');
+              setResults([]);
+              setShowDropdown(false);
+            }}
+            className="absolute right-3 top-1/2 transform -translate-y-1/2 text-[var(--label-tertiary)] hover:text-[var(--label-secondary)] transition-colors"
+          >
+            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        )}
+      </div>
+
+      <AnimatePresence>
+        {showDropdown && results.length > 0 && (
+          <motion.ul
+            initial={{ opacity: 0, y: -10, scale: 0.98 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -10, scale: 0.98 }}
+            transition={spring.snappy}
+            className="absolute z-50 mt-2 w-full bg-[var(--bg-primary)] rounded-xl shadow-lg shadow-black/10 max-h-64 overflow-auto border border-[var(--separator)]/30"
+          >
+            {results.map((item, index) => (
+              <motion.li
+                key={`${item.symbol}-${index}`}
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ delay: index * 0.02 }}
+                onClick={() => handleSelect(item)}
+                className="px-4 py-3 cursor-pointer hover:bg-[var(--fill-tertiary)] border-b border-[var(--separator)]/20 last:border-b-0 transition-colors"
+              >
+                <div className="font-medium text-[15px] text-[var(--label-primary)]">{item.name}</div>
+                <div className="text-[13px] text-[var(--label-tertiary)] mt-0.5">
+                  {item.symbol}
+                  {item.exchange && (
+                    <span className="ml-2 px-1.5 py-0.5 bg-[var(--fill-secondary)] rounded text-[11px] font-medium">
+                      {item.exchange}
+                    </span>
+                  )}
+                </div>
+              </motion.li>
+            ))}
+          </motion.ul>
+        )}
+
+        {showDropdown && query.length >= 2 && !loading && results.length === 0 && (
+          <motion.div
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            transition={spring.snappy}
+            className="absolute z-50 mt-2 w-full bg-[var(--bg-primary)] rounded-xl shadow-lg shadow-black/10 p-4 text-[15px] text-[var(--label-tertiary)] border border-[var(--separator)]/30"
+          >
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-[var(--fill-tertiary)] rounded-xl flex items-center justify-center">
+                <svg className="w-5 h-5 text-[var(--label-tertiary)]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
+                </svg>
               </div>
-            </li>
-          ))}
-        </ul>
-      )}
-
-      {showDropdown && query.length >= 2 && !loading && results.length === 0 && (
-        <div className="absolute z-10 mt-1 w-full bg-white border border-gray-300 rounded-md shadow-lg p-3 text-sm text-gray-500">
-          No results found for "{query}"
-        </div>
-      )}
+              <div>
+                <p className="font-medium text-[var(--label-primary)]">No results found</p>
+                <p className="text-[13px]">Try a different search term</p>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

@@ -1,5 +1,9 @@
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import { AnimatePresence, motion } from 'framer-motion';
 import { AuthProvider, useAuth } from './context/AuthContext';
+import { ThemeProvider } from './context/ThemeContext';
+import { PageSpinner } from './components/apple';
+import { spring } from './utils/animations';
 import Layout from './components/Layout';
 import Login from './pages/Login';
 import Register from './pages/Register';
@@ -7,16 +11,27 @@ import Dashboard from './pages/Dashboard';
 import Assets from './pages/Assets';
 import AddAsset from './pages/AddAsset';
 import EditAsset from './pages/EditAsset';
+import TransactionHistory from './pages/TransactionHistory';
+
+// Page transition wrapper
+const PageTransition = ({ children }) => {
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.15 }}
+    >
+      {children}
+    </motion.div>
+  );
+};
 
 function PrivateRoute({ children }) {
   const { user, loading } = useAuth();
 
   if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
-      </div>
-    );
+    return <PageSpinner message="Loading..." />;
   }
 
   return user ? children : <Navigate to="/login" />;
@@ -26,58 +41,65 @@ function PublicRoute({ children }) {
   const { user, loading } = useAuth();
 
   if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
-      </div>
-    );
+    return <PageSpinner message="Loading..." />;
   }
 
   return user ? <Navigate to="/" /> : children;
 }
 
-function AppRoutes() {
+function AnimatedRoutes() {
+  const location = useLocation();
+
   return (
-    <Routes>
-      <Route
-        path="/login"
-        element={
-          <PublicRoute>
-            <Login />
-          </PublicRoute>
-        }
-      />
-      <Route
-        path="/register"
-        element={
-          <PublicRoute>
-            <Register />
-          </PublicRoute>
-        }
-      />
-      <Route
-        path="/"
-        element={
-          <PrivateRoute>
-            <Layout />
-          </PrivateRoute>
-        }
-      >
-        <Route index element={<Dashboard />} />
-        <Route path="assets" element={<Assets />} />
-        <Route path="assets/add" element={<AddAsset />} />
-        <Route path="assets/edit/:id" element={<EditAsset />} />
-      </Route>
-    </Routes>
+    <AnimatePresence mode="wait">
+      <Routes location={location} key={location.pathname}>
+        <Route
+          path="/login"
+          element={
+            <PublicRoute>
+              <PageTransition>
+                <Login />
+              </PageTransition>
+            </PublicRoute>
+          }
+        />
+        <Route
+          path="/register"
+          element={
+            <PublicRoute>
+              <PageTransition>
+                <Register />
+              </PageTransition>
+            </PublicRoute>
+          }
+        />
+        <Route
+          path="/"
+          element={
+            <PrivateRoute>
+              <Layout />
+            </PrivateRoute>
+          }
+        >
+          <Route index element={<Dashboard />} />
+          <Route path="assets" element={<Assets />} />
+          <Route path="assets/add" element={<AddAsset />} />
+          <Route path="assets/edit/:id" element={<EditAsset />} />
+          <Route path="assets/:id/transactions" element={<TransactionHistory />} />
+        </Route>
+      </Routes>
+    </AnimatePresence>
   );
 }
 
 function App() {
   return (
     <BrowserRouter>
-      <AuthProvider>
-        <AppRoutes />
-      </AuthProvider>
+      <ThemeProvider>
+        <AuthProvider>
+          <AnimatedRoutes />
+        </AuthProvider>
+      </ThemeProvider>
     </BrowserRouter>
   );
 }

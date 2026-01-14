@@ -5,6 +5,7 @@ import { initializeDb } from './db/database.js';
 import authRoutes from './routes/auth.js';
 import assetRoutes from './routes/assets.js';
 import priceRoutes from './routes/prices.js';
+import transactionRoutes from './routes/transactions.js';
 
 dotenv.config();
 
@@ -22,6 +23,7 @@ initializeDb();
 app.use('/api/auth', authRoutes);
 app.use('/api/assets', assetRoutes);
 app.use('/api/prices', priceRoutes);
+app.use('/api/transactions', transactionRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {

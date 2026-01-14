@@ -66,11 +66,43 @@ router.get('/:id', (req, res) => {
   }
 });
 
-// Create new asset
+// Helper: Recalculate asset quantity and avg_buy_price from transactions
+function recalculateAssetFromTransactions(assetId) {
+  const transactions = db.prepare(`
+    SELECT * FROM transactions WHERE asset_id = ? ORDER BY transaction_date, id
+  `).all(assetId);
+
+  let totalQuantity = 0;
+  let totalCost = 0;
+
+  for (const txn of transactions) {
+    if (txn.type === 'BUY') {
+      totalCost += txn.total_amount;
+      totalQuantity += txn.quantity;
+    } else if (txn.type === 'SELL') {
+      const avgCostPerUnit = totalQuantity > 0 ? totalCost / totalQuantity : 0;
+      totalCost -= avgCostPerUnit * txn.quantity;
+      totalQuantity -= txn.quantity;
+    }
+  }
+
+  const avgBuyPrice = totalQuantity > 0 ? totalCost / totalQuantity : 0;
+  const status = totalQuantity <= 0 ? 'CLOSED' : 'ACTIVE';
+
+  db.prepare(`
+    UPDATE assets SET quantity = ?, avg_buy_price = ?, status = ?, updated_at = CURRENT_TIMESTAMP
+    WHERE id = ?
+  `).run(totalQuantity, avgBuyPrice, status, assetId);
+
+  return { quantity: totalQuantity, avg_buy_price: avgBuyPrice, status };
+}
+
+// Create new asset or record transaction
 router.post('/', (req, res) => {
   try {
     const {
-      category, asset_type, name, symbol, exchange, quantity, avg_buy_price,
+      category, asset_type, name, symbol, exchange, quantity, price,
+      transaction_type, // BUY or SELL for equity
       principal, interest_rate, start_date, maturity_date, institution,
       purchase_price, current_value, location, area_sqft, balance,
       weight_grams, purity, premium, sum_assured, policy_number,
@@ -81,6 +113,112 @@ router.post('/', (req, res) => {
       return res.status(400).json({ error: 'Category, asset_type, and name are required' });
     }
 
+    const upperCategory = category.toUpperCase();
+    const upperAssetType = asset_type.toUpperCase();
+    const transactionDate = purchase_date || new Date().toISOString().split('T')[0];
+
+    // Handle EQUITY assets with Buy/Sell transactions
+    if (upperCategory === 'EQUITY' && quantity && price) {
+      const txnType = (transaction_type || 'BUY').toUpperCase();
+
+      // Check if asset already exists
+      let existingAsset = db.prepare(`
+        SELECT * FROM assets
+        WHERE user_id = ? AND category = 'EQUITY' AND symbol = ? AND asset_type = ?
+      `).get(req.user.id, symbol, upperAssetType);
+
+      if (txnType === 'SELL') {
+        // For SELL, asset must exist
+        if (!existingAsset) {
+          return res.status(400).json({ error: `You don't own any ${symbol} to sell` });
+        }
+
+        // Validate quantity
+        if (quantity > existingAsset.quantity) {
+          return res.status(400).json({
+            error: `Cannot sell ${quantity} units. You only have ${existingAsset.quantity} units.`
+          });
+        }
+
+        // Calculate realized gain
+        const avgBuyPrice = existingAsset.avg_buy_price || 0;
+        const costBasis = avgBuyPrice * quantity;
+        const proceeds = price * quantity;
+        const realizedGain = proceeds - costBasis;
+
+        // Create SELL transaction
+        db.prepare(`
+          INSERT INTO transactions (
+            asset_id, user_id, type, quantity, price, total_amount, transaction_date, notes, realized_gain
+          ) VALUES (?, ?, 'SELL', ?, ?, ?, ?, ?, ?)
+        `).run(
+          existingAsset.id,
+          req.user.id,
+          quantity,
+          price,
+          proceeds,
+          transactionDate,
+          notes || null,
+          realizedGain
+        );
+
+        // Recalculate asset
+        recalculateAssetFromTransactions(existingAsset.id);
+
+        const updatedAsset = db.prepare('SELECT * FROM assets WHERE id = ?').get(existingAsset.id);
+        return res.status(201).json({
+          message: 'Sell transaction recorded successfully',
+          asset: updatedAsset,
+          realized_gain: realizedGain
+        });
+
+      } else {
+        // BUY transaction
+        let assetId;
+
+        if (existingAsset) {
+          // Add to existing asset
+          assetId = existingAsset.id;
+        } else {
+          // Create new asset
+          const result = db.prepare(`
+            INSERT INTO assets (
+              user_id, category, asset_type, name, symbol, exchange, quantity, avg_buy_price, status
+            ) VALUES (?, ?, ?, ?, ?, ?, 0, 0, 'ACTIVE')
+          `).run(
+            req.user.id, upperCategory, upperAssetType, name,
+            symbol || null, exchange || null
+          );
+          assetId = result.lastInsertRowid;
+        }
+
+        // Create BUY transaction
+        db.prepare(`
+          INSERT INTO transactions (
+            asset_id, user_id, type, quantity, price, total_amount, transaction_date, notes
+          ) VALUES (?, ?, 'BUY', ?, ?, ?, ?, ?)
+        `).run(
+          assetId,
+          req.user.id,
+          quantity,
+          price,
+          quantity * price,
+          transactionDate,
+          notes || null
+        );
+
+        // Recalculate asset
+        recalculateAssetFromTransactions(assetId);
+
+        const updatedAsset = db.prepare('SELECT * FROM assets WHERE id = ?').get(assetId);
+        return res.status(201).json({
+          message: existingAsset ? 'Buy transaction recorded successfully' : 'Asset created with buy transaction',
+          asset: updatedAsset
+        });
+      }
+    }
+
+    // Non-EQUITY assets: create normally
     const result = db.prepare(`
       INSERT INTO assets (
         user_id, category, asset_type, name, symbol, exchange, quantity, avg_buy_price,
@@ -90,8 +228,8 @@ router.post('/', (req, res) => {
         purchase_date, notes
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
-      req.user.id, category.toUpperCase(), asset_type.toUpperCase(), name,
-      symbol || null, exchange || null, quantity || null, avg_buy_price || null,
+      req.user.id, upperCategory, upperAssetType, name,
+      symbol || null, exchange || null, quantity || null, price || null,
       principal || null, interest_rate || null, start_date || null, maturity_date || null, institution || null,
       purchase_price || null, current_value || null, location || null, area_sqft || null, balance || null,
       weight_grams || null, purity || null, premium || null, sum_assured || null, policy_number || null,

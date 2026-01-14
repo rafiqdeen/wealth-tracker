@@ -1,10 +1,244 @@
 @import "tailwindcss";
 
+:root {
+  /* Apple System Font - SF Pro Display */
+  --font-system: "SF Pro Display", "SF Pro Text", -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+
+  /* iOS System Colors */
+  --system-blue: #007AFF;
+  --system-green: #34C759;
+  --system-red: #FF3B30;
+  --system-orange: #FF9500;
+  --system-yellow: #FFCC00;
+  --system-purple: #AF52DE;
+  --system-pink: #FF2D55;
+  --system-teal: #5AC8FA;
+  --system-indigo: #5856D6;
+
+  /* iOS Gray Palette */
+  --system-gray: #8E8E93;
+  --system-gray-2: #AEAEB2;
+  --system-gray-3: #C7C7CC;
+  --system-gray-4: #D1D1D6;
+  --system-gray-5: #E5E5EA;
+  --system-gray-6: #F2F2F7;
+
+  /* Labels */
+  --label-primary: #000000;
+  --label-secondary: #3C3C43;
+  --label-tertiary: rgba(60, 60, 67, 0.6);
+  --label-quaternary: rgba(60, 60, 67, 0.18);
+
+  /* Backgrounds */
+  --bg-primary: #FFFFFF;
+  --bg-secondary: #F2F2F7;
+  --bg-tertiary: #FFFFFF;
+
+  /* Fill Colors */
+  --fill-primary: rgba(120, 120, 128, 0.2);
+  --fill-secondary: rgba(120, 120, 128, 0.16);
+  --fill-tertiary: rgba(118, 118, 128, 0.12);
+
+  /* Separator */
+  --separator: rgba(60, 60, 67, 0.29);
+  --separator-opaque: #C6C6C8;
+
+  /* Category Colors - iOS Semantic */
+  --category-equity: var(--system-blue);
+  --category-fixed: var(--system-green);
+  --category-realestate: var(--system-purple);
+  --category-physical: var(--system-orange);
+  --category-savings: var(--system-teal);
+  --category-crypto: var(--system-indigo);
+  --category-insurance: var(--system-pink);
+}
+
+/* Dark Mode - iOS System Colors (class-based for manual toggle) */
+:root.dark {
+  /* iOS Dark Mode System Colors */
+  --system-blue: #0A84FF;
+  --system-green: #30D158;
+  --system-red: #FF453A;
+  --system-orange: #FF9F0A;
+  --system-yellow: #FFD60A;
+  --system-purple: #BF5AF2;
+  --system-pink: #FF375F;
+  --system-teal: #64D2FF;
+  --system-indigo: #5E5CE6;
+
+  /* iOS Dark Gray Palette */
+  --system-gray: #8E8E93;
+  --system-gray-2: #636366;
+  --system-gray-3: #48484A;
+  --system-gray-4: #3A3A3C;
+  --system-gray-5: #2C2C2E;
+  --system-gray-6: #1C1C1E;
+
+  /* Labels - Dark */
+  --label-primary: #FFFFFF;
+  --label-secondary: #EBEBF5;
+  --label-tertiary: rgba(235, 235, 245, 0.6);
+  --label-quaternary: rgba(235, 235, 245, 0.18);
+
+  /* Backgrounds - Dark */
+  --bg-primary: #1C1C1E;
+  --bg-secondary: #000000;
+  --bg-tertiary: #2C2C2E;
+
+  /* Fill Colors - Dark */
+  --fill-primary: rgba(120, 120, 128, 0.36);
+  --fill-secondary: rgba(120, 120, 128, 0.32);
+  --fill-tertiary: rgba(118, 118, 128, 0.24);
+
+  /* Separator - Dark */
+  --separator: rgba(84, 84, 88, 0.65);
+  --separator-opaque: #38383A;
+}
+
+/* Reduced Motion - Respect user preferences */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+* {
+  -webkit-tap-highlight-color: transparent;
+}
+
 body {
   margin: 0;
   min-height: 100vh;
+  font-family: var(--font-system);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  background-color: var(--bg-secondary);
+  color: var(--label-primary);
 }
 
 #root {
   min-height: 100vh;
+}
+
+/* iOS-style scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--system-gray-3);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--system-gray-2);
+}
+
+/* Selection color */
+::selection {
+  background: rgba(0, 122, 255, 0.2);
+}
+
+/* Focus ring - iOS style */
+:focus-visible {
+  outline: 2px solid var(--system-blue);
+  outline-offset: 2px;
+}
+
+/* Input autofill styling */
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus {
+  -webkit-box-shadow: 0 0 0 30px var(--bg-primary) inset !important;
+  -webkit-text-fill-color: var(--label-primary) !important;
+}
+
+/* Gradient Utility Classes */
+.gradient-green {
+  background: linear-gradient(135deg, #34C759 0%, #30D158 100%);
+}
+
+.gradient-red {
+  background: linear-gradient(135deg, #FF3B30 0%, #FF453A 100%);
+}
+
+.gradient-blue {
+  background: linear-gradient(135deg, #007AFF 0%, #0A84FF 100%);
+}
+
+.gradient-purple {
+  background: linear-gradient(135deg, #AF52DE 0%, #BF5AF2 100%);
+}
+
+/* P&L Badge Gradients */
+.pnl-badge-positive {
+  background: linear-gradient(135deg, rgba(52, 199, 89, 0.15) 0%, rgba(48, 209, 88, 0.1) 100%);
+  color: var(--system-green);
+}
+
+.pnl-badge-negative {
+  background: linear-gradient(135deg, rgba(255, 59, 48, 0.15) 0%, rgba(255, 69, 58, 0.1) 100%);
+  color: var(--system-red);
+}
+
+/* Shimmer animation for loading */
+@keyframes shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+.shimmer {
+  background: linear-gradient(
+    90deg,
+    var(--fill-tertiary) 25%,
+    var(--fill-secondary) 50%,
+    var(--fill-tertiary) 75%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+}
+
+/* Card glow effect */
+.card-glow {
+  box-shadow:
+    0 1px 2px rgba(0,0,0,0.04),
+    0 2px 8px rgba(0,0,0,0.06),
+    0 8px 24px rgba(0,0,0,0.06),
+    0 0 0 1px rgba(0,122,255,0.05);
+}
+
+.card-glow:hover {
+  box-shadow:
+    0 4px 12px rgba(0,0,0,0.08),
+    0 8px 30px rgba(0,0,0,0.12),
+    0 0 0 1px rgba(0,122,255,0.1);
+}
+
+/* Smooth number transitions */
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Glass effect utilities */
+.glass {
+  background: rgba(255, 255, 255, 0.7);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+}
+
+:root.dark .glass {
+  background: rgba(28, 28, 30, 0.7);
 }
