@@ -28,17 +28,22 @@ async function fetchYahooPrice(symbol) {
       throw new Error('No data found for symbol');
     }
 
-    const price = result.meta.regularMarketPrice;
-    const currency = result.meta.currency;
-    const previousClose = result.meta.previousClose;
+    const meta = result.meta;
+    const price = meta.regularMarketPrice;
+    const currency = meta.currency;
+    const previousClose = meta.chartPreviousClose || meta.previousClose;
+
+    // Calculate change
+    const change = previousClose ? price - previousClose : 0;
+    const changePercent = previousClose ? ((price - previousClose) / previousClose) * 100 : 0;
 
     return {
       symbol,
       price,
       currency,
       previousClose,
-      change: price - previousClose,
-      changePercent: ((price - previousClose) / previousClose) * 100
+      change,
+      changePercent
     };
   } catch (error) {
     console.error(`Error fetching Yahoo price for ${symbol}:`, error.message);
@@ -204,10 +209,22 @@ router.get('/search/mf', authenticateToken, async (req, res) => {
   }
 });
 
+// Clear price cache
+router.delete('/cache', authenticateToken, (req, res) => {
+  try {
+    db.prepare('DELETE FROM price_cache').run();
+    console.log('[Cache] Price cache cleared');
+    res.json({ success: true, message: 'Price cache cleared' });
+  } catch (error) {
+    console.error('Error clearing cache:', error);
+    res.status(500).json({ error: 'Failed to clear cache' });
+  }
+});
+
 // Bulk price fetch
 router.post('/bulk', authenticateToken, async (req, res) => {
   try {
-    const { symbols } = req.body; // Array of { symbol, type }
+    const { symbols, forceRefresh } = req.body; // Array of { symbol, type }, forceRefresh: boolean
 
     if (!symbols || !Array.isArray(symbols)) {
       return res.status(400).json({ error: 'symbols array is required' });
@@ -218,11 +235,19 @@ router.post('/bulk', authenticateToken, async (req, res) => {
     for (const item of symbols) {
       const { symbol, type } = item;
 
-      // Check cache first
-      const cached = getCachedPrice(symbol);
-      if (cached) {
-        results[symbol] = { price: cached.price, currency: cached.currency, cached: true };
-        continue;
+      // Check cache first (skip if forceRefresh)
+      if (!forceRefresh) {
+        const cached = getCachedPrice(symbol);
+        if (cached) {
+          results[symbol] = {
+            price: cached.price,
+            currency: cached.currency,
+            change: 0,
+            changePercent: 0,
+            cached: true
+          };
+          continue;
+        }
       }
 
       let priceData = null;
@@ -235,7 +260,14 @@ router.post('/bulk', authenticateToken, async (req, res) => {
 
       if (priceData) {
         cachePrice(symbol, priceData.price, priceData.currency);
-        results[symbol] = { price: priceData.price, currency: priceData.currency, cached: false };
+        results[symbol] = {
+          price: priceData.price,
+          currency: priceData.currency,
+          change: priceData.change || 0,
+          changePercent: priceData.changePercent || 0,
+          previousClose: priceData.previousClose || null,
+          cached: false
+        };
       } else {
         results[symbol] = { error: 'Price not found' };
       }

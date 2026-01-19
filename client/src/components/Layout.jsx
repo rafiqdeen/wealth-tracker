@@ -1,13 +1,19 @@
+import { useState } from 'react';
 import { Outlet, Link, useLocation } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 import { spring, tapScale } from '../utils/animations';
+import { useKeyboardShortcuts } from '../hooks/useKeyboardShortcuts';
+import KeyboardShortcutsHelp from './KeyboardShortcutsHelp';
+import DataBackup from './DataBackup';
 
 export default function Layout() {
   const { user, logout } = useAuth();
-  const { isDark, toggleTheme } = useTheme();
+  const { isDark, toggleTheme, isHighContrast, toggleContrastMode } = useTheme();
   const location = useLocation();
+  const { showHelp, setShowHelp } = useKeyboardShortcuts();
+  const [showBackup, setShowBackup] = useState(false);
 
   const navItems = [
     {
@@ -28,6 +34,15 @@ export default function Layout() {
         </svg>
       )
     },
+    {
+      path: '/goals',
+      label: 'Goals',
+      icon: (
+        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M3 3v1.5M3 21v-6m0 0l2.77-.693a9 9 0 016.208.682l.108.054a9 9 0 006.086.71l3.114-.732a48.524 48.524 0 01-.005-10.499l-3.11.732a9 9 0 01-6.085-.711l-.108-.054a9 9 0 00-6.208-.682L3 4.5M3 15V4.5" />
+        </svg>
+      )
+    },
   ];
 
   const isActive = (path) => {
@@ -37,8 +52,16 @@ export default function Layout() {
 
   return (
     <div className="min-h-screen bg-[var(--bg-secondary)]">
-      {/* Navigation - Glassmorphism */}
-      <nav className="bg-[var(--bg-primary)]/70 backdrop-blur-xl backdrop-saturate-150 border-b border-white/20 sticky top-0 z-40 shadow-[0_1px_3px_rgba(0,0,0,0.05)]">
+      {/* Skip to main content - Accessibility */}
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-50 focus:px-4 focus:py-2 focus:bg-[var(--system-blue)] focus:text-white focus:rounded-lg focus:text-[14px] focus:font-medium"
+      >
+        Skip to main content
+      </a>
+
+      {/* Navigation - Clean & Professional */}
+      <nav className="bg-[var(--bg-primary)] border-b border-[var(--separator)]/20 sticky top-0 z-40">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between h-14">
             <div className="flex items-center">
@@ -79,7 +102,25 @@ export default function Layout() {
             </div>
 
             {/* User Menu */}
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1">
+              {/* Contrast Toggle */}
+              <motion.button
+                whileTap={tapScale}
+                transition={spring.snappy}
+                onClick={toggleContrastMode}
+                className={`p-2 rounded-lg transition-colors ${
+                  isHighContrast
+                    ? 'bg-[var(--system-blue)]/10 text-[var(--system-blue)]'
+                    : 'text-[var(--label-secondary)] hover:bg-[var(--fill-tertiary)]'
+                }`}
+                aria-label={isHighContrast ? 'Switch to calm mode' : 'Switch to high contrast'}
+                title={isHighContrast ? 'Calm Mode' : 'High Contrast'}
+              >
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9.53 16.122a3 3 0 00-5.78 1.128 2.25 2.25 0 01-2.4 2.245 4.5 4.5 0 008.4-2.245c0-.399-.078-.78-.22-1.128zm0 0a15.998 15.998 0 003.388-1.62m-5.043-.025a15.994 15.994 0 011.622-3.395m3.42 3.42a15.995 15.995 0 004.764-4.648l3.876-5.814a1.151 1.151 0 00-1.597-1.597L14.146 6.32a15.996 15.996 0 00-4.649 4.763m3.42 3.42a6.776 6.776 0 00-3.42-3.42" />
+                </svg>
+              </motion.button>
+
               {/* Theme Toggle */}
               <motion.button
                 whileTap={tapScale}
@@ -97,6 +138,19 @@ export default function Layout() {
                     <path strokeLinecap="round" strokeLinejoin="round" d="M21.752 15.002A9.718 9.718 0 0118 15.75c-5.385 0-9.75-4.365-9.75-9.75 0-1.33.266-2.597.748-3.752A9.753 9.753 0 003 11.25C3 16.635 7.365 21 12.75 21a9.753 9.753 0 009.002-5.998z" />
                   </svg>
                 )}
+              </motion.button>
+
+              {/* Backup Button */}
+              <motion.button
+                whileTap={tapScale}
+                transition={spring.snappy}
+                onClick={() => setShowBackup(true)}
+                className="p-2 text-[var(--label-secondary)] hover:bg-[var(--fill-tertiary)] rounded-lg transition-colors"
+                aria-label="Data backup"
+              >
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M20.25 7.5l-.625 10.632a2.25 2.25 0 01-2.247 2.118H6.622a2.25 2.25 0 01-2.247-2.118L3.75 7.5m8.25 3v6.75m0 0l-3-3m3 3l3-3M3.375 7.5h17.25c.621 0 1.125-.504 1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125H3.375c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125z" />
+                </svg>
               </motion.button>
 
               <div className="hidden sm:flex items-center gap-2.5 pr-3 border-r border-[var(--separator)]/50">
@@ -123,8 +177,8 @@ export default function Layout() {
         </div>
       </nav>
 
-      {/* Mobile Navigation - Glassmorphism */}
-      <div className="sm:hidden bg-[var(--bg-primary)]/70 backdrop-blur-xl backdrop-saturate-150 border-b border-white/20 sticky top-14 z-30">
+      {/* Mobile Navigation - Clean */}
+      <div className="sm:hidden bg-[var(--bg-primary)] border-b border-[var(--separator)]/20 sticky top-14 z-30">
         <div className="flex justify-around px-2 py-1.5">
           {navItems.map((item) => (
             <Link
@@ -149,9 +203,15 @@ export default function Layout() {
       </div>
 
       {/* Main Content */}
-      <main>
+      <main id="main-content" tabIndex={-1}>
         <Outlet />
       </main>
+
+      {/* Keyboard Shortcuts Help Modal */}
+      <KeyboardShortcutsHelp isOpen={showHelp} onClose={() => setShowHelp(false)} />
+
+      {/* Data Backup Modal */}
+      <DataBackup isOpen={showBackup} onClose={() => setShowBackup(false)} />
     </div>
   );
 }

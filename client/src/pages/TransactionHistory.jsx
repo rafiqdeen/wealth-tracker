@@ -2,18 +2,23 @@ import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { transactionService } from '../services/transactions';
-import { Card, Button, Skeleton, SkeletonRow, ProgressBar } from '../components/apple';
+import { Card, Button, Skeleton, SkeletonRow, ProgressBar, BottomSheet } from '../components/apple';
 import { spring, staggerContainer, staggerItem, tapScale } from '../utils/animations';
 import { ANIMATION } from '../constants/theme';
 import { formatCurrency, formatCompact, formatNumber, formatDate, formatPrice } from '../utils/formatting';
+import { calculateFixedIncomeValue, getCompoundingFrequency } from '../utils/interest';
+import { useToast } from '../context/ToastContext';
+import CSVImport from '../components/CSVImport';
 
 export default function TransactionHistory() {
   const { id } = useParams();
+  const toast = useToast();
   const [asset, setAsset] = useState(null);
   const [transactions, setTransactions] = useState([]);
   const [summary, setSummary] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [showCSVImport, setShowCSVImport] = useState(false);
 
   useEffect(() => {
     fetchData();
@@ -39,10 +44,16 @@ export default function TransactionHistory() {
 
     try {
       await transactionService.delete(transactionId);
+      toast.success('Transaction deleted');
       fetchData();
     } catch (err) {
-      alert('Failed to delete transaction');
+      toast.error('Failed to delete transaction');
     }
+  };
+
+  const handleCSVImportSuccess = () => {
+    setShowCSVImport(false);
+    fetchData();
   };
 
   const getGainPercent = () => {
@@ -108,6 +119,17 @@ export default function TransactionHistory() {
   }
 
   const gainPercent = getGainPercent();
+  const isFixedIncome = asset?.category === 'FIXED_INCOME';
+
+  // Calculate interest for Fixed Income assets
+  const interestCalc = isFixedIncome && transactions.length > 0
+    ? calculateFixedIncomeValue(
+        transactions,
+        asset?.interest_rate || 7.1,
+        new Date(),
+        getCompoundingFrequency(asset?.asset_type)
+      )
+    : null;
 
   return (
     <div className="min-h-screen bg-[var(--bg-secondary)]">
@@ -130,21 +152,48 @@ export default function TransactionHistory() {
               </svg>
               Assets
             </Link>
-            <h1 className="text-[28px] font-semibold text-[var(--label-primary)]">Transaction History</h1>
-            <p className="text-[15px] text-[var(--label-secondary)] mt-0.5">{asset.name} • {asset.symbol}</p>
+            <h1 className="text-[28px] font-semibold text-[var(--label-primary)]">
+              {isFixedIncome ? 'Deposit History' : 'Transaction History'}
+            </h1>
+            <p className="text-[15px] text-[var(--label-secondary)] mt-0.5">
+              {asset.name}{asset.symbol && !isFixedIncome ? ` • ${asset.symbol}` : ''}
+              {isFixedIncome && asset.institution ? ` • ${asset.institution}` : ''}
+            </p>
           </div>
-          <Link to="/assets/add" state={{ symbol: asset.symbol, assetType: asset.asset_type, exchange: asset.exchange }}>
-            <Button
-              variant="filled"
-              icon={
-                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
-                </svg>
-              }
-            >
-              Add Transaction
-            </Button>
-          </Link>
+          <div className="flex items-center gap-2">
+            {/* CSV Import Button - Only for Equity */}
+            {!isFixedIncome && (
+              <Button
+                variant="gray"
+                onClick={() => setShowCSVImport(true)}
+                icon={
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
+                  </svg>
+                }
+              >
+                <span className="hidden sm:inline">Import CSV</span>
+              </Button>
+            )}
+            <Link to="/assets/add" state={{
+              symbol: asset.symbol,
+              assetType: asset.asset_type,
+              exchange: asset.exchange,
+              category: asset.category,
+              assetId: asset.id
+            }}>
+              <Button
+                variant="filled"
+                icon={
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+                  </svg>
+                }
+              >
+                {isFixedIncome ? 'Add Deposit' : 'Add Transaction'}
+              </Button>
+            </Link>
+          </div>
         </motion.div>
 
         {/* Summary Cards */}
@@ -159,43 +208,76 @@ export default function TransactionHistory() {
             <Card padding="p-5" hoverable>
               <div className="flex items-start justify-between">
                 <div>
-                  <p className="text-[13px] font-medium text-[var(--label-tertiary)] uppercase tracking-wide">Current Holdings</p>
-                  <p className="text-[34px] font-light text-[var(--label-primary)] tracking-tight">
-                    {formatNumber(summary?.current_quantity || 0)}
+                  <p className="text-[13px] font-medium text-[var(--label-tertiary)] uppercase tracking-wide">
+                    {isFixedIncome ? 'Current Value' : 'Current Holdings'}
                   </p>
-                  <p className="text-[13px] text-[var(--label-tertiary)]">units</p>
+                  <p className="text-[34px] font-semibold text-[var(--label-primary)] tracking-tight">
+                    {isFixedIncome
+                      ? formatCurrency(interestCalc?.currentValue || summary?.total_invested || 0)
+                      : formatNumber(summary?.current_quantity || 0)}
+                  </p>
+                  {!isFixedIncome && <p className="text-[13px] text-[var(--label-tertiary)]">units</p>}
+                  {isFixedIncome && interestCalc && (
+                    <p className="text-[13px] text-[var(--system-green)]">
+                      includes ₹{formatCompact(interestCalc.interest)} interest
+                    </p>
+                  )}
                 </div>
                 <div className="text-right">
-                  <p className="text-[13px] font-medium text-[var(--label-tertiary)] uppercase tracking-wide">Avg Buy Price</p>
-                  <p className="text-[20px] font-semibold text-[var(--label-primary)]">{formatPrice(summary?.avg_buy_price)}</p>
+                  <p className="text-[13px] font-medium text-[var(--label-tertiary)] uppercase tracking-wide">
+                    {isFixedIncome ? 'Total Deposited' : 'Avg Buy Price'}
+                  </p>
+                  <p className="text-[20px] font-semibold text-[var(--label-primary)]">
+                    {isFixedIncome ? formatCurrency(interestCalc?.principal || summary?.total_invested || 0) : formatPrice(summary?.avg_buy_price)}
+                  </p>
+                  {isFixedIncome && (
+                    <p className="text-[13px] text-[var(--label-tertiary)]">{transactions.length} deposits</p>
+                  )}
                 </div>
               </div>
             </Card>
           </motion.div>
 
-          {/* Invested Card */}
+          {/* Interest Earned Card (for Fixed Income) / Invested Card (for Equity) */}
           <motion.div variants={staggerItem}>
             <Card padding="p-5" className="h-full" hoverable>
-              <p className="text-[11px] font-semibold text-[var(--label-tertiary)] uppercase tracking-wider mb-2">Total Invested</p>
-              <p className="text-[22px] font-light text-[var(--label-primary)]">{formatCompact(summary?.total_invested)}</p>
+              <p className="text-[11px] font-semibold text-[var(--label-tertiary)] uppercase tracking-wider mb-2">
+                {isFixedIncome ? 'Interest Earned' : 'Total Invested'}
+              </p>
+              <p className={`text-[22px] font-semibold ${isFixedIncome ? 'text-[var(--system-green)]' : 'text-[var(--label-primary)]'}`}>
+                {isFixedIncome
+                  ? `+${formatCompact(interestCalc?.interest || 0)}`
+                  : formatCompact(summary?.total_invested)}
+              </p>
+              {isFixedIncome && interestCalc && (
+                <p className="text-[13px] text-[var(--system-green)]">+{interestCalc.interestPercent.toFixed(1)}%</p>
+              )}
             </Card>
           </motion.div>
 
-          {/* Realized Gain Card */}
+          {/* Realized Gain Card / Interest Rate Card */}
           <motion.div variants={staggerItem}>
-            <Card
-              padding="p-5"
-              className={`h-full ${
-                (summary?.total_realized_gain || 0) >= 0
-                  ? 'bg-[var(--system-green)]'
-                  : 'bg-[var(--system-red)]'
-              }`}
-            >
-              <p className="text-[11px] font-semibold text-white/80 uppercase tracking-wider mb-2">Realized P&L</p>
-              <p className="text-[22px] font-light text-white">
-                {(summary?.total_realized_gain || 0) >= 0 ? '+' : ''}{formatCompact(summary?.total_realized_gain || 0)}
-              </p>
-            </Card>
+            {isFixedIncome ? (
+              <Card padding="p-5" className="h-full bg-[var(--system-blue)]">
+                <p className="text-[11px] font-semibold text-white/80 uppercase tracking-wider mb-2">Interest Rate</p>
+                <p className="text-[22px] font-semibold text-white">{asset?.interest_rate || 7.1}% p.a.</p>
+                <p className="text-[13px] text-white/70">Compounded annually</p>
+              </Card>
+            ) : (
+              <Card
+                padding="p-5"
+                className={`h-full ${
+                  (summary?.total_realized_gain || 0) >= 0
+                    ? 'bg-[var(--system-green)]'
+                    : 'bg-[var(--system-amber)]'
+                }`}
+              >
+                <p className="text-[11px] font-semibold text-white/80 uppercase tracking-wider mb-2">Realized P&L</p>
+                <p className="text-[22px] font-semibold text-white">
+                  {(summary?.total_realized_gain || 0) >= 0 ? '+' : ''}{formatCompact(summary?.total_realized_gain || 0)}
+                </p>
+              </Card>
+            )}
           </motion.div>
         </motion.div>
 
@@ -207,34 +289,52 @@ export default function TransactionHistory() {
           className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6"
         >
           <Card padding="p-4" hoverable>
-            <p className="text-[11px] font-semibold text-[var(--label-tertiary)] uppercase tracking-wider mb-1">Total Bought</p>
-            <p className="text-[17px] font-semibold text-[var(--label-primary)]">{formatNumber(summary?.total_bought || 0)}</p>
-            <p className="text-[11px] text-[var(--label-tertiary)]">units</p>
+            <p className="text-[11px] font-semibold text-[var(--label-tertiary)] uppercase tracking-wider mb-1">
+              {isFixedIncome ? 'Start Date' : 'Total Bought'}
+            </p>
+            <p className="text-[17px] font-semibold text-[var(--label-primary)]">
+              {isFixedIncome
+                ? (asset?.start_date ? formatDate(asset.start_date) : formatDate(transactions[transactions.length - 1]?.transaction_date))
+                : formatNumber(summary?.total_bought || 0)}
+            </p>
+            {!isFixedIncome && <p className="text-[11px] text-[var(--label-tertiary)]">units</p>}
           </Card>
           <Card padding="p-4" hoverable>
-            <p className="text-[11px] font-semibold text-[var(--label-tertiary)] uppercase tracking-wider mb-1">Total Sold</p>
-            <p className="text-[17px] font-semibold text-[var(--label-primary)]">{formatNumber(summary?.total_sold || 0)}</p>
-            <p className="text-[11px] text-[var(--label-tertiary)]">units</p>
+            <p className="text-[11px] font-semibold text-[var(--label-tertiary)] uppercase tracking-wider mb-1">
+              {isFixedIncome ? 'Maturity Date' : 'Total Sold'}
+            </p>
+            <p className="text-[17px] font-semibold text-[var(--label-primary)]">
+              {isFixedIncome
+                ? (asset?.maturity_date ? formatDate(asset.maturity_date) : '—')
+                : formatNumber(summary?.total_sold || 0)}
+            </p>
+            {!isFixedIncome && <p className="text-[11px] text-[var(--label-tertiary)]">units</p>}
           </Card>
           <Card padding="p-4" hoverable>
-            <p className="text-[11px] font-semibold text-[var(--label-tertiary)] uppercase tracking-wider mb-1">Transactions</p>
+            <p className="text-[11px] font-semibold text-[var(--label-tertiary)] uppercase tracking-wider mb-1">
+              {isFixedIncome ? 'Deposits' : 'Transactions'}
+            </p>
             <p className="text-[17px] font-semibold text-[var(--label-primary)]">{transactions.length}</p>
             <p className="text-[11px] text-[var(--label-tertiary)]">total</p>
           </Card>
           <Card padding="p-4" hoverable>
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-[11px] font-semibold text-[var(--label-tertiary)] uppercase tracking-wider mb-1">Return</p>
-                <p className={`text-[17px] font-semibold ${gainPercent >= 0 ? 'text-[var(--system-green)]' : 'text-[var(--system-red)]'}`}>
-                  {gainPercent >= 0 ? '+' : ''}{gainPercent.toFixed(1)}%
+                <p className="text-[11px] font-semibold text-[var(--label-tertiary)] uppercase tracking-wider mb-1">
+                  {isFixedIncome ? 'Total Return' : 'Return'}
+                </p>
+                <p className={`text-[17px] font-semibold text-[var(--system-green)]`}>
+                  {isFixedIncome
+                    ? `+${(interestCalc?.interestPercent || 0).toFixed(1)}%`
+                    : `${gainPercent >= 0 ? '+' : ''}${gainPercent.toFixed(1)}%`}
                 </p>
               </div>
-              {summary?.total_invested > 0 && (
+              {(isFixedIncome ? interestCalc?.principal : summary?.total_invested) > 0 && (
                 <div className="w-12">
                   <ProgressBar
-                    value={Math.min(Math.abs(gainPercent), 100)}
+                    value={Math.min(Math.abs(isFixedIncome ? interestCalc?.interestPercent || 0 : gainPercent), 100)}
                     max={100}
-                    color={gainPercent >= 0 ? 'var(--system-green)' : 'var(--system-red)'}
+                    color="var(--system-green)"
                     height={4}
                   />
                 </div>
@@ -260,13 +360,21 @@ export default function TransactionHistory() {
                 <table className="min-w-full">
                   <thead>
                     <tr className="bg-[var(--fill-tertiary)]/50">
-                      <th className="px-5 py-3 text-left text-[11px] font-semibold text-[var(--label-tertiary)] uppercase tracking-wider">Date</th>
-                      <th className="px-5 py-3 text-left text-[11px] font-semibold text-[var(--label-tertiary)] uppercase tracking-wider">Type</th>
-                      <th className="px-5 py-3 text-right text-[11px] font-semibold text-[var(--label-tertiary)] uppercase tracking-wider">Qty</th>
-                      <th className="px-5 py-3 text-right text-[11px] font-semibold text-[var(--label-tertiary)] uppercase tracking-wider">Price</th>
-                      <th className="px-5 py-3 text-right text-[11px] font-semibold text-[var(--label-tertiary)] uppercase tracking-wider">Total</th>
-                      <th className="px-5 py-3 text-right text-[11px] font-semibold text-[var(--label-tertiary)] uppercase tracking-wider">Gain/Loss</th>
-                      <th className="px-5 py-3 text-left text-[11px] font-semibold text-[var(--label-tertiary)] uppercase tracking-wider">Notes</th>
+                      <th className="px-5 py-3 text-left text-[12px] font-semibold text-[var(--label-tertiary)] uppercase tracking-wider">Date</th>
+                      <th className="px-5 py-3 text-left text-[12px] font-semibold text-[var(--label-tertiary)] uppercase tracking-wider">Type</th>
+                      {!isFixedIncome && (
+                        <th className="px-5 py-3 text-right text-[12px] font-semibold text-[var(--label-tertiary)] uppercase tracking-wider">Qty</th>
+                      )}
+                      {!isFixedIncome && (
+                        <th className="px-5 py-3 text-right text-[12px] font-semibold text-[var(--label-tertiary)] uppercase tracking-wider">Price</th>
+                      )}
+                      <th className="px-5 py-3 text-right text-[12px] font-semibold text-[var(--label-tertiary)] uppercase tracking-wider">
+                        {isFixedIncome ? 'Amount' : 'Total'}
+                      </th>
+                      {!isFixedIncome && (
+                        <th className="px-5 py-3 text-right text-[12px] font-semibold text-[var(--label-tertiary)] uppercase tracking-wider">Gain/Loss</th>
+                      )}
+                      <th className="px-5 py-3 text-left text-[12px] font-semibold text-[var(--label-tertiary)] uppercase tracking-wider">Notes</th>
                       <th className="px-5 py-3"></th>
                     </tr>
                   </thead>
@@ -290,30 +398,36 @@ export default function TransactionHistory() {
                                 ? 'bg-[var(--system-green)]/10 text-[var(--system-green)]'
                                 : 'bg-[var(--system-orange)]/10 text-[var(--system-orange)]'
                             }`}>
-                              {txn.type}
+                              {isFixedIncome ? 'DEPOSIT' : txn.type}
                             </span>
                             {txn.is_initial_holding === 1 && (
                               <span className="ml-2 text-[11px] text-[var(--label-tertiary)]">(Initial)</span>
                             )}
                           </td>
-                          <td className="px-5 py-3.5 whitespace-nowrap text-[13px] text-[var(--label-primary)] text-right font-medium">
-                            {formatNumber(txn.quantity)}
-                          </td>
-                          <td className="px-5 py-3.5 whitespace-nowrap text-[13px] text-[var(--label-secondary)] text-right">
-                            {formatPrice(txn.price)}
-                          </td>
+                          {!isFixedIncome && (
+                            <td className="px-5 py-3.5 whitespace-nowrap text-[13px] text-[var(--label-primary)] text-right font-medium">
+                              {formatNumber(txn.quantity)}
+                            </td>
+                          )}
+                          {!isFixedIncome && (
+                            <td className="px-5 py-3.5 whitespace-nowrap text-[13px] text-[var(--label-secondary)] text-right">
+                              {formatPrice(txn.price)}
+                            </td>
+                          )}
                           <td className="px-5 py-3.5 whitespace-nowrap text-[13px] font-semibold text-[var(--label-primary)] text-right">
                             {formatCurrency(txn.total_amount)}
                           </td>
-                          <td className="px-5 py-3.5 whitespace-nowrap text-[13px] text-right">
-                            {txn.type === 'SELL' && txn.realized_gain !== null ? (
-                              <span className={`font-semibold ${txn.realized_gain >= 0 ? 'text-[var(--system-green)]' : 'text-[var(--system-red)]'}`}>
-                                {txn.realized_gain >= 0 ? '+' : ''}{formatCurrency(txn.realized_gain)}
-                              </span>
-                            ) : (
-                              <span className="text-[var(--label-quaternary)]">—</span>
-                            )}
-                          </td>
+                          {!isFixedIncome && (
+                            <td className="px-5 py-3.5 whitespace-nowrap text-[13px] text-right">
+                              {txn.type === 'SELL' && txn.realized_gain !== null ? (
+                                <span className={`font-semibold ${txn.realized_gain >= 0 ? 'text-[var(--system-green)]' : 'text-[var(--system-amber)]'}`}>
+                                  {txn.realized_gain >= 0 ? '+' : ''}{formatCurrency(txn.realized_gain)}
+                                </span>
+                              ) : (
+                                <span className="text-[var(--label-quaternary)]">—</span>
+                              )}
+                            </td>
+                          )}
                           <td className="px-5 py-3.5 text-[13px] text-[var(--label-tertiary)] max-w-[150px] truncate">
                             {txn.notes || <span className="text-[var(--label-quaternary)]">—</span>}
                           </td>
@@ -360,6 +474,24 @@ export default function TransactionHistory() {
           </Card>
         </motion.div>
       </div>
+
+      {/* CSV Import Bottom Sheet */}
+      {!isFixedIncome && (
+        <BottomSheet
+          isOpen={showCSVImport}
+          onClose={() => setShowCSVImport(false)}
+          title="Import Transactions from CSV"
+          maxHeight="80vh"
+        >
+          {asset && (
+            <CSVImport
+              asset={asset}
+              onSuccess={handleCSVImportSuccess}
+              onCancel={() => setShowCSVImport(false)}
+            />
+          )}
+        </BottomSheet>
+      )}
     </div>
   );
 }

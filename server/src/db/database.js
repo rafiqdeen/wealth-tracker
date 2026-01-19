@@ -105,6 +105,21 @@ export function initializeDb() {
     )
   `);
 
+  // Portfolio history for performance tracking
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS portfolio_history (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      date TEXT NOT NULL,
+      total_value REAL NOT NULL,
+      total_invested REAL NOT NULL,
+      day_change REAL DEFAULT 0,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+      UNIQUE(user_id, date)
+    )
+  `);
+
   // Add status column to assets if not exists
   const assetColumns = db.prepare("PRAGMA table_info(assets)").all();
   const hasStatus = assetColumns.some(col => col.name === 'status');
@@ -120,6 +135,7 @@ export function initializeDb() {
     CREATE INDEX IF NOT EXISTS idx_transactions_asset_id ON transactions(asset_id);
     CREATE INDEX IF NOT EXISTS idx_transactions_user_id ON transactions(user_id);
     CREATE INDEX IF NOT EXISTS idx_transactions_date ON transactions(transaction_date);
+    CREATE INDEX IF NOT EXISTS idx_portfolio_history_user_date ON portfolio_history(user_id, date);
   `);
 
   // Migrate existing equity assets to transactions (one-time migration)

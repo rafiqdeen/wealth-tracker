@@ -7,12 +7,20 @@ import { spring, staggerContainer, staggerItem, tapScale } from '../utils/animat
 import { categoryColors, CategoryIcon } from '../constants/theme';
 import { formatCurrency } from '../utils/formatting';
 import StockAutocomplete from '../components/StockAutocomplete';
+import { useToast } from '../context/ToastContext';
 
 export default function AddAsset() {
   const navigate = useNavigate();
+  const toast = useToast();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [step, setStep] = useState(1);
+
+  // Track which auto-filled fields user wants to edit manually
+  const [manualOverride, setManualOverride] = useState({
+    interest_rate: false,
+    maturity_date: false,
+  });
 
   const [formData, setFormData] = useState({
     category: '',
@@ -40,11 +48,57 @@ export default function AddAsset() {
     policy_number: '',
     purchase_date: '',
     notes: '',
+    // FD/RD specific
+    tenure_months: '',
+    monthly_deposit: '',
+    // NPS specific
+    pran_number: '',
   });
+
+  // Default rates for fixed income instruments (government-set or standard)
+  const FIXED_INCOME_DEFAULTS = {
+    PPF: { rate: 7.1, tenure: 15 },    // PPF: 7.1% p.a., 15 years
+    EPF: { rate: 8.25, tenure: null },  // EPF: 8.25% p.a.
+    VPF: { rate: 8.25, tenure: null },  // VPF: same as EPF
+    NPS: { rate: null, tenure: null },  // NPS: market-linked
+    NSC: { rate: 7.7, tenure: 5 },      // NSC: 7.7% p.a., 5 years
+    KVP: { rate: 7.5, tenure: 9.58 },   // KVP: 7.5% p.a., ~115 months
+  };
 
   const handleChange = (e) => {
     const { name, value } = e.target;
-    setFormData((prev) => ({ ...prev, [name]: value }));
+    setFormData((prev) => {
+      const updated = { ...prev, [name]: value };
+
+      // Auto-calculate maturity date for fixed tenure instruments (PPF, NSC, KVP)
+      if (name === 'start_date' && value && prev.category === 'FIXED_INCOME') {
+        const defaults = FIXED_INCOME_DEFAULTS[prev.asset_type];
+        if (defaults?.tenure) {
+          const startDate = new Date(value);
+          startDate.setFullYear(startDate.getFullYear() + Math.floor(defaults.tenure));
+          const remainingMonths = (defaults.tenure % 1) * 12;
+          if (remainingMonths > 0) {
+            startDate.setMonth(startDate.getMonth() + Math.round(remainingMonths));
+          }
+          updated.maturity_date = startDate.toISOString().split('T')[0];
+        }
+        // Also calculate if tenure_months is already set for FD/RD
+        if (['FD', 'RD'].includes(prev.asset_type) && prev.tenure_months) {
+          const startDate = new Date(value);
+          startDate.setMonth(startDate.getMonth() + parseInt(prev.tenure_months));
+          updated.maturity_date = startDate.toISOString().split('T')[0];
+        }
+      }
+
+      // Auto-calculate maturity when tenure_months changes for FD/RD
+      if (name === 'tenure_months' && value && prev.start_date && ['FD', 'RD'].includes(prev.asset_type)) {
+        const startDate = new Date(prev.start_date);
+        startDate.setMonth(startDate.getMonth() + parseInt(value));
+        updated.maturity_date = startDate.toISOString().split('T')[0];
+      }
+
+      return updated;
+    });
   };
 
   const selectCategory = (category) => {
@@ -53,16 +107,23 @@ export default function AddAsset() {
   };
 
   const selectType = (type) => {
-    setFormData((prev) => ({ ...prev, asset_type: type }));
+    const defaults = FIXED_INCOME_DEFAULTS[type];
+    setFormData((prev) => ({
+      ...prev,
+      asset_type: type,
+      interest_rate: defaults?.rate || '',
+    }));
     setStep(3);
   };
 
   const goBack = () => {
     if (step === 2) {
       setFormData((prev) => ({ ...prev, category: '', asset_type: '' }));
+      setManualOverride({ interest_rate: false, maturity_date: false });
       setStep(1);
     } else if (step === 3) {
       setFormData((prev) => ({ ...prev, asset_type: '' }));
+      setManualOverride({ interest_rate: false, maturity_date: false });
       setStep(2);
     }
   };
@@ -74,9 +135,12 @@ export default function AddAsset() {
 
     try {
       await assetService.create(formData);
+      toast.success(`"${formData.name}" added successfully`);
       navigate('/assets');
     } catch (err) {
-      setError(err.response?.data?.error || 'Failed to create asset');
+      const errorMsg = err.response?.data?.error || 'Failed to create asset';
+      setError(errorMsg);
+      toast.error(errorMsg);
     } finally {
       setLoading(false);
     }
@@ -93,7 +157,8 @@ export default function AddAsset() {
     return current_value || purchase_price || 0;
   };
 
-  const inputClass = "w-full px-4 py-3 bg-[var(--fill-tertiary)] border-0 rounded-xl focus:outline-none focus:ring-2 focus:ring-[var(--system-blue)] transition-all text-[var(--label-primary)] placeholder-[var(--label-tertiary)] text-[15px]";
+  const inputClass = "w-full px-4 py-3 bg-[var(--fill-tertiary)] border-0 rounded-xl focus:outline-none focus:ring-2 focus:ring-[var(--system-blue)]/50 transition-all text-[var(--label-primary)] placeholder-[var(--label-tertiary)] text-[15px]";
+  const selectClass = `w-full px-4 py-3 pr-10 bg-[var(--fill-tertiary)] border-0 rounded-xl focus:outline-none focus:ring-2 focus:ring-[var(--system-blue)]/50 transition-all text-[var(--label-primary)] text-[15px] appearance-none cursor-pointer bg-no-repeat bg-[right_12px_center] bg-[length:20px_20px] bg-[url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%238E8E93' stroke-width='2'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' d='M19.5 8.25l-7.5 7.5-7.5-7.5'/%3E%3C/svg%3E")]`;
   const labelClass = "block text-[13px] font-medium text-[var(--label-secondary)] mb-2";
 
   const renderCategoryFields = () => {
@@ -153,7 +218,7 @@ export default function AddAsset() {
                     name="exchange"
                     value={formData.exchange}
                     onChange={handleChange}
-                    className={inputClass}
+                    className={selectClass}
                   >
                     <option value="NSE">NSE</option>
                     <option value="BSE">BSE</option>
@@ -190,31 +255,152 @@ export default function AddAsset() {
           </div>
         );
 
-      case 'FIXED_INCOME':
+      case 'FIXED_INCOME': {
+        const defaults = FIXED_INCOME_DEFAULTS[asset_type];
+        const isGovernmentScheme = ['PPF', 'EPF', 'VPF', 'NSC', 'KVP'].includes(asset_type);
+        const hasFixedTenure = defaults?.tenure != null;
+        const isNPS = asset_type === 'NPS';
+        const isFDorRD = ['FD', 'RD'].includes(asset_type);
+
         return (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+            {/* Principal/Investment Amount */}
             <div>
-              <label className={labelClass}>Principal Amount</label>
+              <label className={labelClass}>
+                {asset_type === 'RD' ? 'Monthly Deposit' : isNPS ? 'Current Value' : 'Principal Amount'}
+              </label>
               <input type="number" name="principal" value={formData.principal} onChange={handleChange} placeholder="0" className={inputClass} required />
             </div>
+
+            {/* Interest Rate - hide for NPS (market-linked), readonly for govt schemes (with edit option) */}
+            {isNPS ? (
+              <div>
+                <label className={labelClass}>Returns</label>
+                <div className={`${inputClass} bg-[var(--system-purple)]/5 flex items-center justify-between`}>
+                  <span className="text-[var(--system-purple)]">Market-linked</span>
+                  <span className="text-[11px] text-[var(--label-tertiary)]">Variable</span>
+                </div>
+              </div>
+            ) : (
+              <div>
+                <label className={labelClass}>
+                  Interest Rate (% p.a.)
+                  {isGovernmentScheme && defaults?.rate && !manualOverride.interest_rate && (
+                    <span className="text-[var(--system-green)] ml-1">• Govt. rate</span>
+                  )}
+                </label>
+                {isGovernmentScheme && defaults?.rate && !manualOverride.interest_rate ? (
+                  <div className={`${inputClass} bg-[var(--system-green)]/5 flex items-center justify-between`}>
+                    <span>{formData.interest_rate}%</span>
+                    <button
+                      type="button"
+                      onClick={() => setManualOverride(prev => ({ ...prev, interest_rate: true }))}
+                      className="text-[11px] text-[var(--system-blue)] hover:underline"
+                    >
+                      Edit
+                    </button>
+                  </div>
+                ) : (
+                  <input type="number" name="interest_rate" value={formData.interest_rate} onChange={handleChange} step="0.01" placeholder="0.00" className={inputClass} />
+                )}
+              </div>
+            )}
+
+            {/* Tenure dropdown for FD/RD */}
+            {isFDorRD && (
+              <div>
+                <label className={labelClass}>Tenure</label>
+                <select name="tenure_months" value={formData.tenure_months} onChange={handleChange} className={selectClass}>
+                  <option value="">Select tenure</option>
+                  <option value="3">3 Months</option>
+                  <option value="6">6 Months</option>
+                  <option value="12">1 Year</option>
+                  <option value="18">18 Months</option>
+                  <option value="24">2 Years</option>
+                  <option value="36">3 Years</option>
+                  <option value="60">5 Years</option>
+                  <option value="84">7 Years</option>
+                  <option value="120">10 Years</option>
+                </select>
+              </div>
+            )}
+
+            {/* PRAN for NPS */}
+            {isNPS && (
+              <div>
+                <label className={labelClass}>PRAN Number</label>
+                <input type="text" name="pran_number" value={formData.pran_number} onChange={handleChange} placeholder="12 digit PRAN" className={inputClass} />
+              </div>
+            )}
+
+            {/* Institution - dropdown for PPF, text for others */}
             <div>
-              <label className={labelClass}>Interest Rate (% p.a.)</label>
-              <input type="number" name="interest_rate" value={formData.interest_rate} onChange={handleChange} step="0.01" placeholder="0.00" className={inputClass} />
+              <label className={labelClass}>{isNPS ? 'Fund Manager' : 'Institution'}</label>
+              {asset_type === 'PPF' ? (
+                <select name="institution" value={formData.institution} onChange={handleChange} className={selectClass}>
+                  <option value="">Select bank/post office</option>
+                  <option value="SBI">State Bank of India</option>
+                  <option value="HDFC Bank">HDFC Bank</option>
+                  <option value="ICICI Bank">ICICI Bank</option>
+                  <option value="Axis Bank">Axis Bank</option>
+                  <option value="Post Office">Post Office</option>
+                  <option value="Other">Other</option>
+                </select>
+              ) : isNPS ? (
+                <select name="institution" value={formData.institution} onChange={handleChange} className={selectClass}>
+                  <option value="">Select fund manager</option>
+                  <option value="SBI Pension Fund">SBI Pension Fund</option>
+                  <option value="LIC Pension Fund">LIC Pension Fund</option>
+                  <option value="UTI Retirement Solutions">UTI Retirement Solutions</option>
+                  <option value="HDFC Pension Fund">HDFC Pension Fund</option>
+                  <option value="ICICI Prudential PF">ICICI Prudential PF</option>
+                  <option value="Kotak Pension Fund">Kotak Pension Fund</option>
+                  <option value="Aditya Birla SL PF">Aditya Birla SL PF</option>
+                </select>
+              ) : (
+                <input type="text" name="institution" value={formData.institution} onChange={handleChange} placeholder="e.g., SBI, HDFC Bank" className={inputClass} />
+              )}
             </div>
-            <div>
-              <label className={labelClass}>Institution</label>
-              <input type="text" name="institution" value={formData.institution} onChange={handleChange} placeholder="e.g., SBI, HDFC Bank" className={inputClass} />
-            </div>
-            <div>
-              <label className={labelClass}>Start Date</label>
-              <input type="date" name="start_date" value={formData.start_date} onChange={handleChange} className={inputClass} />
-            </div>
-            <div className="md:col-span-2">
-              <label className={labelClass}>Maturity Date</label>
-              <input type="date" name="maturity_date" value={formData.maturity_date} onChange={handleChange} className={inputClass} />
-            </div>
+
+            {/* Start Date - not needed for NPS */}
+            {!isNPS && (
+              <div>
+                <label className={labelClass}>Start Date</label>
+                <input type="date" name="start_date" value={formData.start_date} onChange={handleChange} className={inputClass} />
+              </div>
+            )}
+
+            {/* Maturity Date - auto-calculated for fixed tenure, manual for FD/RD/BONDS, not for NPS/EPF/VPF */}
+            {(hasFixedTenure || isFDorRD || asset_type === 'BONDS') && (
+              <div className="md:col-span-2">
+                <label className={labelClass}>
+                  Maturity Date
+                  {hasFixedTenure && !manualOverride.maturity_date && (
+                    <span className="text-[var(--system-blue)] ml-1">• {defaults.tenure} years</span>
+                  )}
+                  {isFDorRD && formData.tenure_months && !manualOverride.maturity_date && (
+                    <span className="text-[var(--system-blue)] ml-1">• Auto-calculated</span>
+                  )}
+                </label>
+                {(hasFixedTenure || (isFDorRD && formData.tenure_months)) && formData.start_date && !manualOverride.maturity_date ? (
+                  <div className={`${inputClass} bg-[var(--system-blue)]/5 flex items-center justify-between`}>
+                    <span>{formData.maturity_date ? new Date(formData.maturity_date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : 'Select start date'}</span>
+                    <button
+                      type="button"
+                      onClick={() => setManualOverride(prev => ({ ...prev, maturity_date: true }))}
+                      className="text-[11px] text-[var(--system-blue)] hover:underline"
+                    >
+                      Edit
+                    </button>
+                  </div>
+                ) : (
+                  <input type="date" name="maturity_date" value={formData.maturity_date} onChange={handleChange} className={inputClass} />
+                )}
+              </div>
+            )}
           </div>
         );
+      }
 
       case 'REAL_ESTATE':
         return (
@@ -249,7 +435,7 @@ export default function AddAsset() {
                 </div>
                 <div>
                   <label className={labelClass}>Purity</label>
-                  <select name="purity" value={formData.purity} onChange={handleChange} className={inputClass}>
+                  <select name="purity" value={formData.purity} onChange={handleChange} className={selectClass}>
                     <option value="">Select purity</option>
                     <option value="24K">24K (99.9%)</option>
                     <option value="22K">22K (91.6%)</option>
@@ -469,7 +655,7 @@ export default function AddAsset() {
                         whileHover={{ scale: 1.02 }}
                         whileTap={{ scale: 0.98 }}
                         onClick={() => selectCategory(key)}
-                        className={`p-4 rounded-2xl border-2 border-transparent transition-all text-left ${colors.bg} hover:border-current`}
+                        className={`p-4 rounded-xl border-2 border-transparent transition-all text-left ${colors.bg} hover:border-current`}
                         style={{ '--tw-border-opacity': 0.5 }}
                       >
                         <div className={`w-10 h-10 rounded-xl ${colors.bg} flex items-center justify-center mb-3`} style={{ color: colors.color }}>
@@ -622,19 +808,21 @@ export default function AddAsset() {
 
                     <div className="mb-6">{renderCategoryFields()}</div>
 
-                    {/* Common fields */}
+                    {/* Common fields - hide Purchase Date for FIXED_INCOME since Start Date is used */}
                     <div className="space-y-5 pt-6 border-t border-[var(--separator)]/30">
+                      {formData.category !== 'FIXED_INCOME' && (
+                        <div>
+                          <label className={labelClass}>Purchase Date</label>
+                          <input type="date" name="purchase_date" value={formData.purchase_date} onChange={handleChange} className={inputClass} />
+                        </div>
+                      )}
                       <div>
-                        <label className={labelClass}>Purchase Date</label>
-                        <input type="date" name="purchase_date" value={formData.purchase_date} onChange={handleChange} className={inputClass} />
-                      </div>
-                      <div>
-                        <label className={labelClass}>Notes</label>
+                        <label className={labelClass}>Notes (optional)</label>
                         <textarea
                           name="notes"
                           value={formData.notes}
                           onChange={handleChange}
-                          rows={3}
+                          rows={2}
                           placeholder="Add any additional notes..."
                           className={`${inputClass} resize-none`}
                         />

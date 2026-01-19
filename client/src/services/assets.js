@@ -21,14 +21,20 @@ export const assetService = {
 
   // Get portfolio summary
   getSummary: () => api.get('/assets/summary/overview'),
+
+  // Get transactions for an asset
+  getTransactions: (assetId) => api.get(`/transactions/asset/${assetId}`),
 };
 
 export const priceService = {
   // Get price for symbol
   getPrice: (symbol, type = 'stock') => api.get(`/prices/${symbol}?type=${type}`),
 
-  // Get bulk prices
-  getBulkPrices: (symbols) => api.post('/prices/bulk', { symbols }),
+  // Get bulk prices (forceRefresh bypasses cache)
+  getBulkPrices: (symbols, forceRefresh = false) => api.post('/prices/bulk', { symbols, forceRefresh }),
+
+  // Clear price cache
+  clearCache: () => api.delete('/prices/cache'),
 
   // Search stocks by company name
   searchStocks: (query) => api.get(`/prices/search/stocks?q=${encodeURIComponent(query)}`),

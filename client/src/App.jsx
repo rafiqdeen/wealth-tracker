@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-route
 import { AnimatePresence, motion } from 'framer-motion';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { ThemeProvider } from './context/ThemeContext';
+import { ToastProvider } from './context/ToastContext';
 import { PageSpinner } from './components/apple';
 import { spring } from './utils/animations';
 import Layout from './components/Layout';
@@ -12,6 +13,7 @@ import Assets from './pages/Assets';
 import AddAsset from './pages/AddAsset';
 import EditAsset from './pages/EditAsset';
 import TransactionHistory from './pages/TransactionHistory';
+import Goals from './pages/Goals';
 
 // Page transition wrapper
 const PageTransition = ({ children }) => {
@@ -86,6 +88,7 @@ function AnimatedRoutes() {
           <Route path="assets/add" element={<AddAsset />} />
           <Route path="assets/edit/:id" element={<EditAsset />} />
           <Route path="assets/:id/transactions" element={<TransactionHistory />} />
+          <Route path="goals" element={<Goals />} />
         </Route>
       </Routes>
     </AnimatePresence>
@@ -96,9 +99,11 @@ function App() {
   return (
     <BrowserRouter>
       <ThemeProvider>
-        <AuthProvider>
-          <AnimatedRoutes />
-        </AuthProvider>
+        <ToastProvider>
+          <AuthProvider>
+            <AnimatedRoutes />
+          </AuthProvider>
+        </ToastProvider>
       </ThemeProvider>
     </BrowserRouter>
   );

@@ -26,3 +26,4 @@ export {
   DashboardSkeleton,
   AssetsSkeleton
 } from './Skeleton';
+export { default as BottomSheet } from './BottomSheet';

@@ -117,7 +117,8 @@ export default function EditAsset() {
     return current_value || purchase_price || 0;
   };
 
-  const inputClass = "w-full px-4 py-3 bg-[var(--fill-tertiary)] border-0 rounded-xl focus:outline-none focus:ring-2 focus:ring-[var(--system-blue)] transition-all text-[var(--label-primary)] placeholder-[var(--label-tertiary)] text-[15px]";
+  const inputClass = "w-full px-4 py-3 bg-[var(--fill-tertiary)] border-0 rounded-xl focus:outline-none focus:ring-2 focus:ring-[var(--system-blue)]/50 transition-all text-[var(--label-primary)] placeholder-[var(--label-tertiary)] text-[15px]";
+  const selectClass = `w-full px-4 py-3 pr-10 bg-[var(--fill-tertiary)] border-0 rounded-xl focus:outline-none focus:ring-2 focus:ring-[var(--system-blue)]/50 transition-all text-[var(--label-primary)] text-[15px] appearance-none cursor-pointer bg-no-repeat bg-[right_12px_center] bg-[length:20px_20px] bg-[url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%238E8E93' stroke-width='2'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' d='M19.5 8.25l-7.5 7.5-7.5-7.5'/%3E%3C/svg%3E")]`;
   const labelClass = "block text-[13px] font-medium text-[var(--label-secondary)] mb-2";
 
   const renderCategoryFields = () => {
@@ -134,7 +135,7 @@ export default function EditAsset() {
             {asset_type !== 'MUTUAL_FUND' && (
               <div>
                 <label className={labelClass}>Exchange</label>
-                <select name="exchange" value={formData.exchange} onChange={handleChange} className={inputClass}>
+                <select name="exchange" value={formData.exchange} onChange={handleChange} className={selectClass}>
                   <option value="NSE">NSE</option>
                   <option value="BSE">BSE</option>
                 </select>
@@ -210,7 +211,7 @@ export default function EditAsset() {
                 </div>
                 <div>
                   <label className={labelClass}>Purity</label>
-                  <select name="purity" value={formData.purity} onChange={handleChange} className={inputClass}>
+                  <select name="purity" value={formData.purity} onChange={handleChange} className={selectClass}>
                     <option value="">Select purity</option>
                     <option value="24K">24K (99.9%)</option>
                     <option value="22K">22K (91.6%)</option>

@@ -1,5 +1,5 @@
 import { motion } from 'framer-motion';
-import { spring, tapScale } from '../../utils/animations';
+import { spring, tapScale, ease } from '../../utils/animations';
 
 export default function Card({
   children,
@@ -7,7 +7,7 @@ export default function Card({
   hoverable = false,
   tappable = false,
   padding = "p-4",
-  glow = false, // New: adds subtle glow on hover
+  glow = false,
   onClick,
   as: Component = "div",
   ...props
@@ -15,19 +15,17 @@ export default function Card({
   const MotionComponent = motion[Component] || motion.div;
   const isInteractive = !!onClick || hoverable;
 
-  // Enhanced hover animation with lift and optional glow
+  // Subtle hover animation - minimal lift
   const hoverAnimation = hoverable ? {
-    y: -2,
-    boxShadow: glow
-      ? '0 8px 30px rgba(0,0,0,0.12), 0 4px 12px rgba(0,0,0,0.08), 0 0 0 1px rgba(0,122,255,0.1)'
-      : '0 8px 30px rgba(0,0,0,0.12), 0 4px 12px rgba(0,0,0,0.08)',
+    y: -1,
+    boxShadow: '0 2px 8px rgba(0,0,0,0.06), 0 4px 12px rgba(0,0,0,0.04)',
   } : undefined;
 
   return (
     <MotionComponent
       whileHover={hoverAnimation}
       whileTap={tappable ? tapScale : undefined}
-      transition={spring.snappy}
+      transition={{ duration: 0.2, ease: ease?.smooth || [0.4, 0, 0.2, 1] }}
       onClick={onClick}
       role={isInteractive && onClick ? "button" : undefined}
       tabIndex={isInteractive && onClick ? 0 : undefined}
@@ -39,10 +37,10 @@ export default function Card({
       } : undefined}
       className={`
         bg-[var(--bg-primary)]
-        rounded-2xl
-        border border-[var(--separator)]/10
-        shadow-[0_1px_2px_rgba(0,0,0,0.04),0_2px_8px_rgba(0,0,0,0.06),0_8px_24px_rgba(0,0,0,0.06)]
-        transition-shadow duration-300
+        rounded-xl
+        border border-[var(--separator)]/8
+        shadow-[0_1px_2px_rgba(0,0,0,0.02),0_1px_4px_rgba(0,0,0,0.03)]
+        transition-shadow duration-200
         ${padding}
         ${onClick ? 'cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--system-blue)] focus-visible:ring-offset-2' : ''}
         ${className}
@@ -54,7 +52,7 @@ export default function Card({
   );
 }
 
-// Glass card with frosted effect
+// Glass card with frosted effect - more subtle
 export function GlassCard({
   children,
   className = "",
@@ -72,11 +70,11 @@ export function GlassCard({
   return (
     <div
       className={`
-        bg-[var(--bg-primary)]/70
+        bg-[var(--bg-primary)]/80
         ${blurClasses[blur]}
-        rounded-2xl
-        border border-white/20
-        shadow-[0_4px_24px_rgba(0,0,0,0.08)]
+        rounded-xl
+        border border-[var(--separator)]/10
+        shadow-[0_1px_4px_rgba(0,0,0,0.04)]
         ${padding}
         ${className}
       `}
@@ -93,7 +91,7 @@ export function InsetCard({ children, className = "", ...props }) {
     <div
       className={`
         bg-[var(--bg-primary)]
-        rounded-xl
+        rounded-lg
         overflow-hidden
         ${className}
       `}
@@ -136,14 +134,14 @@ export function StatCard({
 
   return (
     <Card className={`${className}`} padding="p-5" hoverable>
-      <p className="text-[13px] font-medium text-[var(--label-secondary)] uppercase tracking-wide mb-2">
+      <p className="text-[12px] font-medium text-[var(--label-tertiary)] uppercase tracking-wide mb-2">
         {label}
       </p>
-      <p className="text-[28px] font-light text-[var(--label-primary)] tracking-tight">
+      <p className="text-[26px] font-semibold text-[var(--label-primary)] tracking-tight">
         {value}
       </p>
       {trendValue && (
-        <p className={`text-[13px] font-medium mt-1 ${isPositive ? 'text-[var(--system-green)]' : 'text-[var(--system-red)]'}`}>
+        <p className={`text-[13px] font-medium mt-1 ${isPositive ? 'text-[var(--system-green)]' : 'text-[var(--system-amber)]'}`}>
           {isPositive ? '↑' : '↓'} {trendValue}
         </p>
       )}

@@ -17,17 +17,17 @@ export default function Button({
   ...props
 }) {
   const variants = {
-    filled: "bg-[var(--system-blue)] text-white hover:bg-[#0066d6]",
+    filled: "bg-[var(--system-blue)] text-white hover:brightness-110 active:brightness-90",
     tinted: "bg-[var(--system-blue)]/10 text-[var(--system-blue)] hover:bg-[var(--system-blue)]/15",
     gray: "bg-[var(--fill-primary)] text-[var(--label-primary)] hover:bg-[var(--fill-secondary)]",
     plain: "bg-transparent text-[var(--system-blue)] hover:bg-[var(--system-blue)]/5",
-    destructive: "bg-[var(--system-red)] text-white hover:bg-[#e6352b]",
+    destructive: "bg-[var(--system-red)] text-white hover:brightness-110 active:brightness-90",
     destructiveTinted: "bg-[var(--system-red)]/10 text-[var(--system-red)] hover:bg-[var(--system-red)]/15",
   };
 
   const sizes = {
-    sm: "px-3 py-1.5 text-[15px] rounded-lg",
-    md: "px-4 py-2.5 text-[17px] rounded-[10px]",
+    sm: "px-3 py-1.5 text-[15px] rounded-xl",
+    md: "px-4 py-2.5 text-[17px] rounded-xl",
     lg: "px-6 py-3.5 text-[17px] rounded-xl",
   };
 
@@ -58,7 +58,7 @@ export default function Button({
         font-semibold
         inline-flex items-center justify-center
         transition-colors duration-150
-        focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--system-blue)] focus-visible:ring-offset-2
+        focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--system-blue)]/50
         ${fullWidth ? 'w-full' : ''}
         ${disabled || loading ? 'opacity-40 cursor-not-allowed' : ''}
         ${className}
@@ -106,7 +106,7 @@ export function IconButton({
         rounded-full
         inline-flex items-center justify-center
         transition-colors duration-150
-        focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--system-blue)] focus-visible:ring-offset-2
+        focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--system-blue)]/50
         ${disabled ? 'opacity-40 cursor-not-allowed' : ''}
         ${className}
       `}
