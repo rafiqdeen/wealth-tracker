@@ -37,12 +37,12 @@ export default function Card({
       } : undefined}
       className={`
         bg-[var(--bg-primary)]
-        rounded-xl
-        border border-[var(--separator)]/8
-        shadow-[0_1px_2px_rgba(0,0,0,0.02),0_1px_4px_rgba(0,0,0,0.03)]
+        rounded-2xl
+        border border-[var(--separator-opaque)]/60
+        shadow-[0_1px_3px_rgba(0,0,0,0.02)]
         transition-shadow duration-200
         ${padding}
-        ${onClick ? 'cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--system-blue)] focus-visible:ring-offset-2' : ''}
+        ${onClick ? 'cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--chart-primary)] focus-visible:ring-offset-2' : ''}
         ${className}
       `}
       {...props}

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
@@ -28,122 +28,173 @@ export default function Dashboard() {
   const [xirrDebugInfo, setXirrDebugInfo] = useState(null);
   const [showXirrDebug, setShowXirrDebug] = useState(false);
 
+  // Refs to prevent race conditions
+  const fetchRequestId = useRef(0);
+  const periodRequestId = useRef(0);
+  const isMounted = useRef(true);
+  const snapshotTimeoutRef = useRef(null);
+  const hasRecordedSnapshot = useRef(false);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    isMounted.current = true;
+    return () => {
+      isMounted.current = false;
+      if (snapshotTimeoutRef.current) {
+        clearTimeout(snapshotTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  // Initial data fetch
   useEffect(() => {
     fetchData();
   }, []);
 
-  useEffect(() => {
-    if (selectedPeriod) {
-      fetchCumulativeInvestments(selectedPeriod);
+  // Handle period changes (separate from initial fetch to avoid double-fetching)
+  const handlePeriodChange = useCallback(async (period) => {
+    if (period === selectedPeriod) return;
+
+    setSelectedPeriod(period);
+
+    // Increment request ID to invalidate any pending requests
+    const currentRequestId = ++periodRequestId.current;
+
+    try {
+      const response = await portfolioService.getCumulativeInvestments(period);
+
+      // Only update state if this is still the latest request and component is mounted
+      if (periodRequestId.current === currentRequestId && isMounted.current) {
+        setCumulativeData(response.data.data || []);
+        setInvestmentSummary(response.data.summary || null);
+      }
+    } catch (error) {
+      console.error('Error fetching cumulative investments:', error);
     }
   }, [selectedPeriod]);
 
   const fetchData = async (forceRefresh = false) => {
+    // Increment request ID to track this specific request
+    const currentRequestId = ++fetchRequestId.current;
+
     if (forceRefresh) setRefreshing(true);
     try {
-      const assetsRes = await assetService.getAll();
+      // Step 1: Fetch assets and chart data in parallel
+      const [assetsRes, chartRes] = await Promise.all([
+        assetService.getAll(),
+        portfolioService.getCumulativeInvestments(selectedPeriod)
+      ]);
+
+      // Check if this request is still valid (no newer request started)
+      if (fetchRequestId.current !== currentRequestId || !isMounted.current) {
+        return; // Discard stale response
+      }
+
       const assetList = assetsRes.data.assets;
       setAssets(assetList);
+      setCumulativeData(chartRes.data.data || []);
+      setInvestmentSummary(chartRes.data.summary || null);
 
+      // Step 2: Prepare parallel fetches for prices and transactions
       const equityAssets = assetList.filter(a => a.category === 'EQUITY' && a.symbol);
-      let priceData = {};
+      const fixedIncomeAssets = assetList.filter(a => a.category === 'FIXED_INCOME' && a.interest_rate);
+
+      // Clear cache first if force refresh
+      if (forceRefresh) {
+        await priceService.clearCache();
+      }
+
+      // Price fetch promise
+      let pricePromise = Promise.resolve({ data: { prices: {} } });
       if (equityAssets.length > 0) {
         const symbols = equityAssets.map(a => ({
           symbol: a.asset_type === 'MUTUAL_FUND' ? a.symbol : `${a.symbol}.${a.exchange === 'BSE' ? 'BO' : 'NS'}`,
           type: a.asset_type === 'MUTUAL_FUND' ? 'mf' : 'stock'
         }));
-
-        // Clear cache first if force refresh
-        if (forceRefresh) {
-          await priceService.clearCache();
-        }
-
-        // Fetch prices (forceRefresh bypasses any remaining cache)
-        const priceRes = await priceService.getBulkPrices(symbols, forceRefresh);
-        priceData = priceRes.data.prices || {};
-        setPrices(priceData);
-        setLastUpdated(new Date());
-
-        // Calculate portfolio XIRR
-        calculatePortfolioXIRR(assetList, priceData);
+        pricePromise = priceService.getBulkPrices(symbols, forceRefresh);
       }
 
-      // Fetch transactions for Fixed Income assets to calculate accurate interest
-      const fixedIncomeAssets = assetList.filter(a => a.category === 'FIXED_INCOME' && a.interest_rate);
+      // Fetch ALL transactions in parallel (both equity and fixed income)
+      const allAssetIds = [...equityAssets, ...fixedIncomeAssets].map(a => a.id);
+      const transactionPromises = allAssetIds.map(id =>
+        assetService.getTransactions(id).then(res => ({ id, transactions: res.data.transactions || [] }))
+      );
+
+      // Execute prices and all transactions in parallel
+      const [priceRes, ...transactionResults] = await Promise.all([
+        pricePromise,
+        ...transactionPromises
+      ]);
+
+      // Check again if this request is still valid after second batch of fetches
+      if (fetchRequestId.current !== currentRequestId || !isMounted.current) {
+        return; // Discard stale response
+      }
+
+      // Process price data
+      const priceData = priceRes.data.prices || {};
+      setPrices(priceData);
+      if (equityAssets.length > 0) {
+        setLastUpdated(new Date());
+      }
+
+      // Build transaction map
+      const transactionMap = {};
+      transactionResults.forEach(({ id, transactions }) => {
+        transactionMap[id] = transactions;
+      });
+
+      // Process Fixed Income calculations
       if (fixedIncomeAssets.length > 0) {
-        fetchFixedIncomeCalculations(fixedIncomeAssets);
+        const calcs = {};
+        fixedIncomeAssets.forEach(asset => {
+          const transactions = transactionMap[asset.id] || [];
+          if (transactions.length > 0) {
+            const compoundingFreq = getCompoundingFrequency(asset.asset_type);
+            const calculation = calculateFixedIncomeValue(transactions, asset.interest_rate, new Date(), compoundingFreq);
+            calcs[asset.id] = calculation;
+          }
+        });
+        setFixedIncomeCalcs(calcs);
+      }
+
+      // Process XIRR calculation
+      if (equityAssets.length > 0) {
+        const allTxns = [];
+        equityAssets.forEach(asset => {
+          const transactions = transactionMap[asset.id] || [];
+          allTxns.push(...transactions);
+        });
+
+        if (allTxns.length > 0) {
+          setAllTransactions(allTxns);
+
+          // Calculate current portfolio value for equity
+          let totalCurrentValue = 0;
+          equityAssets.forEach(asset => {
+            if (asset.quantity && asset.symbol) {
+              const priceKey = asset.asset_type === 'MUTUAL_FUND' ? asset.symbol : `${asset.symbol}.${asset.exchange === 'BSE' ? 'BO' : 'NS'}`;
+              const price = priceData[priceKey]?.price || asset.avg_buy_price || 0;
+              totalCurrentValue += asset.quantity * price;
+            }
+          });
+
+          // Calculate XIRR and store debug info
+          const xirr = calculateXIRRFromTransactions(allTxns, totalCurrentValue);
+          setPortfolioXIRR(isFinite(xirr) ? xirr : null);
+
+          // Store debug info for XIRR breakdown
+          const debug = debugXIRR(allTxns, totalCurrentValue);
+          setXirrDebugInfo(debug);
+        } else {
+          setPortfolioXIRR(null);
+        }
       }
     } catch (error) {
       console.error('Error fetching data:', error);
     } finally {
       setLoading(false);
       setRefreshing(false);
-    }
-  };
-
-  const fetchFixedIncomeCalculations = async (fixedIncomeAssets) => {
-    try {
-      const calcs = {};
-      for (const asset of fixedIncomeAssets) {
-        const txnResponse = await assetService.getTransactions(asset.id);
-        const transactions = txnResponse.data.transactions || [];
-        if (transactions.length > 0) {
-          const compoundingFreq = getCompoundingFrequency(asset.asset_type);
-          const calculation = calculateFixedIncomeValue(transactions, asset.interest_rate, new Date(), compoundingFreq);
-          calcs[asset.id] = calculation;
-        }
-      }
-      setFixedIncomeCalcs(calcs);
-    } catch (error) {
-      console.error('Error fetching Fixed Income calculations:', error);
-    }
-  };
-
-  const calculatePortfolioXIRR = async (assetList, priceData) => {
-    try {
-      // Fetch transactions for equity assets to calculate XIRR
-      const equityAssets = assetList.filter(a => a.category === 'EQUITY');
-      if (equityAssets.length === 0) {
-        setPortfolioXIRR(null);
-        return;
-      }
-
-      // Collect all transactions from all equity assets
-      const allTxns = [];
-      for (const asset of equityAssets) {
-        const txnResponse = await assetService.getTransactions(asset.id);
-        const transactions = txnResponse.data.transactions || [];
-        allTxns.push(...transactions);
-      }
-
-      if (allTxns.length === 0) {
-        setPortfolioXIRR(null);
-        return;
-      }
-
-      setAllTransactions(allTxns);
-
-      // Calculate current portfolio value for equity
-      let totalCurrentValue = 0;
-      for (const asset of equityAssets) {
-        if (asset.quantity && asset.symbol) {
-          const priceKey = asset.asset_type === 'MUTUAL_FUND' ? asset.symbol : `${asset.symbol}.${asset.exchange === 'BSE' ? 'BO' : 'NS'}`;
-          const price = priceData[priceKey]?.price || asset.avg_buy_price || 0;
-          totalCurrentValue += asset.quantity * price;
-        }
-      }
-
-      // Calculate XIRR and store debug info
-      const xirr = calculateXIRRFromTransactions(allTxns, totalCurrentValue);
-      setPortfolioXIRR(isFinite(xirr) ? xirr : null);
-
-      // Store debug info for XIRR breakdown
-      const debug = debugXIRR(allTxns, totalCurrentValue);
-      setXirrDebugInfo(debug);
-    } catch (error) {
-      console.error('Error calculating portfolio XIRR:', error);
-      setPortfolioXIRR(null);
-      setXirrDebugInfo(null);
     }
   };
 
@@ -203,25 +254,18 @@ export default function Dashboard() {
     return `${hours}h ago`;
   };
 
-  const fetchCumulativeInvestments = async (period) => {
-    try {
-      const response = await portfolioService.getCumulativeInvestments(period);
-      setCumulativeData(response.data.data || []);
-      setInvestmentSummary(response.data.summary || null);
-    } catch (error) {
-      console.error('Error fetching cumulative investments:', error);
-    }
-  };
+  // Record snapshot with debouncing to prevent multiple calls
+  const recordSnapshot = useCallback(async (totalValue, totalInvested, dayChange) => {
+    // Prevent recording if already recorded in this session or component unmounted
+    if (hasRecordedSnapshot.current || !isMounted.current) return;
 
-  const recordSnapshot = async (totalValue, totalInvested, dayChange) => {
     try {
       await portfolioService.recordSnapshot({ totalValue, totalInvested, dayChange });
-      // Refresh history after recording
-      fetchPortfolioHistory(selectedPeriod);
+      hasRecordedSnapshot.current = true;
     } catch (error) {
       console.error('Error recording snapshot:', error);
     }
-  };
+  }, []);
 
 
   const getAssetValue = (asset) => {
@@ -331,13 +375,17 @@ export default function Dashboard() {
     };
   }).sort((a, b) => b.value - a.value);
 
-  // Category summary for holdings table (split EQUITY into Stocks and Mutual Funds visually)
+  // Category summary for holdings table (split EQUITY into Stocks and Mutual Funds, FIXED_INCOME by type)
   const categorySummary = Object.entries(
     assets.reduce((acc, asset) => {
       // For EQUITY category, split by asset_type (STOCK vs MUTUAL_FUND)
       let groupKey = asset.category;
       if (asset.category === 'EQUITY') {
         groupKey = asset.asset_type === 'MUTUAL_FUND' ? 'EQUITY_MF' : 'EQUITY_STOCKS';
+      }
+      // For FIXED_INCOME, split by asset_type (PPF, FD, RD, NPS, etc.)
+      if (asset.category === 'FIXED_INCOME' && asset.asset_type) {
+        groupKey = `FIXED_INCOME_${asset.asset_type}`;
       }
 
       if (!acc[groupKey]) {
@@ -364,10 +412,21 @@ export default function Dashboard() {
   ).map(([groupKey, data]) => {
     // Labels and colors for visual groups
     const groupConfig = {
-      EQUITY_STOCKS: { label: 'Equity Stocks', color: 'var(--system-blue)' },
-      EQUITY_MF: { label: 'Equity Mutual Funds', color: 'var(--system-purple)' },
+      EQUITY_STOCKS: { label: 'Stocks', color: 'var(--system-blue)' },
+      EQUITY_MF: { label: 'Mutual Funds', color: 'var(--system-purple)' },
       REAL_ESTATE: { label: 'Real Estate', color: categoryColors.REAL_ESTATE?.color },
       FIXED_INCOME: { label: 'Fixed Income', color: categoryColors.FIXED_INCOME?.color },
+      // Fixed Income subtypes
+      FIXED_INCOME_PPF: { label: 'Fixed Income (PPF)', color: categoryColors.FIXED_INCOME?.color },
+      FIXED_INCOME_FD: { label: 'Fixed Income (FD)', color: categoryColors.FIXED_INCOME?.color },
+      FIXED_INCOME_RD: { label: 'Fixed Income (RD)', color: categoryColors.FIXED_INCOME?.color },
+      FIXED_INCOME_NPS: { label: 'Fixed Income (NPS)', color: categoryColors.FIXED_INCOME?.color },
+      FIXED_INCOME_EPF: { label: 'Fixed Income (EPF)', color: categoryColors.FIXED_INCOME?.color },
+      FIXED_INCOME_SSY: { label: 'Fixed Income (SSY)', color: categoryColors.FIXED_INCOME?.color },
+      FIXED_INCOME_NSC: { label: 'Fixed Income (NSC)', color: categoryColors.FIXED_INCOME?.color },
+      FIXED_INCOME_SCSS: { label: 'Fixed Income (SCSS)', color: categoryColors.FIXED_INCOME?.color },
+      FIXED_INCOME_BOND: { label: 'Fixed Income (Bonds)', color: categoryColors.FIXED_INCOME?.color },
+      FIXED_INCOME_OTHER: { label: 'Fixed Income (Other)', color: categoryColors.FIXED_INCOME?.color },
       PHYSICAL: { label: 'Physical Assets', color: categoryColors.PHYSICAL?.color },
       SAVINGS: { label: 'Savings', color: categoryColors.SAVINGS?.color },
       CRYPTO: { label: 'Cryptocurrency', color: categoryColors.CRYPTO?.color },
@@ -375,9 +434,16 @@ export default function Dashboard() {
       OTHER: { label: 'Other', color: categoryColors.OTHER?.color },
     };
 
+    // For unknown Fixed Income types, generate label dynamically
+    let label = groupConfig[groupKey]?.label;
+    if (!label && groupKey.startsWith('FIXED_INCOME_')) {
+      const type = groupKey.replace('FIXED_INCOME_', '');
+      label = `Fixed Income (${type})`;
+    }
+
     return {
       category: groupKey,
-      label: groupConfig[groupKey]?.label || ASSET_CONFIG[groupKey]?.label || groupKey,
+      label: label || ASSET_CONFIG[groupKey]?.label || groupKey,
       color: groupConfig[groupKey]?.color || 'var(--system-gray)',
       assetCount: data.assets.length,
       current: data.current,
@@ -389,392 +455,193 @@ export default function Dashboard() {
     };
   }).sort((a, b) => b.current - a.current);
 
-  // Record snapshot when data is loaded (even if ₹0 to track deletions)
+  // Record snapshot when data is loaded with debouncing
   useEffect(() => {
-    if (!loading) {
-      recordSnapshot(totalValue, totalInvested, dayChange);
+    if (!loading && !hasRecordedSnapshot.current) {
+      // Clear any existing timeout
+      if (snapshotTimeoutRef.current) {
+        clearTimeout(snapshotTimeoutRef.current);
+      }
+
+      // Debounce the snapshot recording to avoid rapid successive calls
+      snapshotTimeoutRef.current = setTimeout(() => {
+        if (isMounted.current) {
+          recordSnapshot(totalValue, totalInvested, dayChange);
+        }
+      }, 500);
     }
-  }, [loading, totalValue, totalInvested]);
+
+    return () => {
+      if (snapshotTimeoutRef.current) {
+        clearTimeout(snapshotTimeoutRef.current);
+      }
+    };
+  }, [loading, totalValue, totalInvested, dayChange, recordSnapshot]);
 
   // Format chart data for cumulative investment line chart
-  const chartData = cumulativeData.map((item) => {
-    const dateObj = new Date(item.date);
-    const monthLabel = dateObj.toLocaleString('en-IN', { month: 'short' });
-    const yearLabel = dateObj.getFullYear().toString().slice(-2);
+  // Scale proportionally so the chart ends at totalInvested while maintaining shape
+  const chartData = (() => {
+    if (cumulativeData.length === 0) return [];
 
-    return {
-      date: item.date,
-      displayDate: `${monthLabel} '${yearLabel}`,
-      cumulative: item.cumulative,
-    };
-  });
+    // Get the last cumulative value from API data
+    const lastApiValue = cumulativeData[cumulativeData.length - 1]?.cumulative || 0;
+
+    // Calculate scale factor to match totalInvested
+    const scaleFactor = lastApiValue > 0 && totalInvested > 0
+      ? totalInvested / lastApiValue
+      : 1;
+
+    return cumulativeData.map((item) => {
+      const dateObj = new Date(item.date);
+      const monthLabel = dateObj.toLocaleString('en-IN', { month: 'short' });
+      const yearLabel = dateObj.getFullYear().toString().slice(-2);
+
+      return {
+        date: item.date,
+        displayDate: `${monthLabel} '${yearLabel}`,
+        cumulative: Math.round(item.cumulative * scaleFactor),
+      };
+    });
+  })();
 
   const periods = ['1W', '1M', '3M', '6M', '1Y', 'ALL'];
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-[var(--bg-secondary)]">
-        <div className="max-w-7xl mx-auto px-4 py-4">
-          <DashboardSkeleton />
-        </div>
+      <div className="p-5 md:p-6">
+        <DashboardSkeleton />
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-[var(--bg-secondary)]">
-      <div className="max-w-7xl mx-auto px-4 py-4">
-        <motion.div
-          variants={staggerContainer}
-          initial="initial"
-          animate="animate"
-          className="space-y-4"
-        >
-          {/* Portfolio Header with Last Updated */}
-          <motion.div variants={staggerItem} className="flex items-center justify-between">
-            <div>
-              <h1 className="text-[28px] font-semibold text-[var(--label-primary)]">Dashboard</h1>
-              <div className="flex items-center gap-2 mt-0.5">
-                {lastUpdated ? (
-                  <>
-                    <div className="w-1.5 h-1.5 rounded-full bg-[var(--system-green)] animate-pulse" />
-                    <span className="text-[13px] text-[var(--label-tertiary)]">
-                      Updated {getTimeAgo(lastUpdated)}
+    <div className="p-5 md:p-6">
+      <motion.div
+        variants={staggerContainer}
+        initial="initial"
+        animate="animate"
+        className="space-y-5"
+      >
+          {/* Main Dashboard Grid - Desktop: 2 columns, Mobile: stacked */}
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
+
+            {/* Left Column - Portfolio Summary + Holdings + Allocation */}
+            <motion.div variants={staggerItem} className="lg:col-span-3 space-y-4">
+              {/* Portfolio Summary Card - Apple Stocks Style */}
+              <Card padding="p-5" className="relative overflow-hidden">
+                <div className="absolute top-0 right-0 w-32 h-32 bg-[var(--chart-primary)]/5 rounded-full -mr-12 -mt-12" />
+                <div className="relative">
+                  {/* Header */}
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-[12px] font-medium text-[var(--label-tertiary)] uppercase tracking-wide">Portfolio Value</span>
+                    <button
+                      onClick={handleRefresh}
+                      disabled={refreshing}
+                      className="p-1.5 rounded-lg text-[var(--label-tertiary)] hover:bg-[var(--fill-tertiary)] transition-colors disabled:opacity-50"
+                      title="Sync prices"
+                    >
+                      <svg className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" />
+                      </svg>
+                    </button>
+                  </div>
+
+                  {/* Hero Value */}
+                  <p className="text-[32px] font-bold text-[var(--label-primary)] tracking-tight leading-none">
+                    {formatCompact(totalValue)}
+                  </p>
+
+                  {/* Returns Badge */}
+                  <div className="flex items-center gap-2 mt-2 mb-4">
+                    <span className={`text-[13px] font-semibold ${totalPnL >= 0 ? 'text-[#059669]' : 'text-[#DC2626]'}`}>
+                      {totalPnL >= 0 ? '+' : ''}{formatCompact(totalPnL)} ({totalPnL >= 0 ? '+' : ''}{totalPnLPercent.toFixed(1)}%)
                     </span>
-                  </>
-                ) : (
-                  <span className="text-[13px] text-[var(--label-tertiary)]">Loading prices...</span>
-                )}
-              </div>
-            </div>
-            <div className="flex items-center gap-2">
-              {/* Export Button */}
-              <button
-                onClick={handleExportPDF}
-                disabled={assets.length === 0}
-                className="flex items-center gap-2 px-3 py-2 rounded-xl bg-[var(--fill-tertiary)] hover:bg-[var(--fill-secondary)] text-[var(--label-secondary)] transition-colors disabled:opacity-50"
-                title="Export Report"
-              >
-                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
-                </svg>
-                <span className="text-[14px] font-medium hidden sm:inline">Export</span>
-              </button>
+                    {lastUpdated && (
+                      <span className="text-[11px] text-[var(--label-quaternary)]">
+                        • {getTimeAgo(lastUpdated)}
+                      </span>
+                    )}
+                  </div>
 
-              {/* Refresh Button */}
-              <button
-                onClick={handleRefresh}
-                disabled={refreshing}
-                className="flex items-center gap-2 px-3 py-2 rounded-xl bg-[var(--fill-tertiary)] hover:bg-[var(--fill-secondary)] text-[var(--label-secondary)] transition-colors disabled:opacity-50"
-              >
-                <svg
-                  className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`}
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                  strokeWidth={1.5}
-                >
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" />
-                </svg>
-                <span className="text-[14px] font-medium hidden sm:inline">
-                  {refreshing ? 'Refreshing...' : 'Refresh'}
-                </span>
-              </button>
-            </div>
-          </motion.div>
+                  {/* Divider */}
+                  <div className="h-px bg-[var(--separator-opaque)] mb-4" />
 
-          {/* KPI Cards Row */}
-          <motion.div variants={staggerItem} className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-            {/* Current Value */}
-            <Card padding="p-4" className="col-span-2 lg:col-span-1">
-              <p className="text-[12px] font-medium text-[var(--label-tertiary)] uppercase tracking-wide mb-1">Current Value</p>
-              <p className="text-[28px] font-semibold text-[var(--label-primary)] tracking-tight leading-none">
-                {formatCompact(totalValue)}
-              </p>
-            </Card>
-
-            {/* Invested */}
-            <Card padding="p-4">
-              <p className="text-[12px] font-medium text-[var(--label-tertiary)] uppercase tracking-wide mb-1">Invested</p>
-              <p className="text-[20px] font-semibold text-[var(--label-primary)] tracking-tight leading-none">
-                {formatCompact(totalInvested)}
-              </p>
-            </Card>
-
-            {/* Total Returns */}
-            <Card padding="p-4">
-              <p className="text-[12px] font-medium text-[var(--label-tertiary)] uppercase tracking-wide mb-1">Total Returns</p>
-              <p className={`text-[20px] font-semibold tracking-tight leading-none ${totalPnL >= 0 ? 'text-[var(--system-green)]' : 'text-[var(--system-amber)]'}`}>
-                {totalPnL >= 0 ? '+' : ''}{formatCompact(totalPnL)}
-              </p>
-              <p className={`text-[12px] font-medium mt-0.5 ${totalPnL >= 0 ? 'text-[var(--system-green)]' : 'text-[var(--system-amber)]'}`}>
-                {totalPnL >= 0 ? '+' : ''}{totalPnLPercent.toFixed(2)}%
-              </p>
-            </Card>
-
-            {/* XIRR - Annualized Return */}
-            <Card
-              padding="p-4"
-              className={portfolioXIRR !== null ? 'cursor-pointer hover:bg-[var(--fill-tertiary)]/30 transition-colors' : ''}
-              onClick={() => portfolioXIRR !== null && setShowXirrDebug(true)}
-            >
-              <div className="flex items-center gap-1.5 mb-1">
-                <p className="text-[12px] font-medium text-[var(--label-tertiary)] uppercase tracking-wide">XIRR</p>
-                <div className="group relative">
-                  <svg className="w-3.5 h-3.5 text-[var(--label-quaternary)] cursor-help" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M9.879 7.519c1.171-1.025 3.071-1.025 4.242 0 1.172 1.025 1.172 2.687 0 3.712-.203.179-.43.326-.67.442-.745.361-1.45.999-1.45 1.827v.75M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9 5.25h.008v.008H12v-.008z" />
-                  </svg>
-                  <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 bg-[var(--bg-primary)] shadow-lg rounded-lg text-[12px] text-[var(--label-secondary)] w-48 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50 border border-[var(--separator)]/30">
-                    Annualized return considering actual investment dates and cash flows. Click to see breakdown.
+                  {/* Metrics Row */}
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-[11px] text-[var(--label-tertiary)] uppercase tracking-wide mb-0.5">Invested</p>
+                      <p className="text-[17px] font-semibold text-[var(--label-primary)] tracking-tight">
+                        {formatCompact(totalInvested)}
+                      </p>
+                    </div>
+                    <div className="h-8 w-px bg-[var(--separator-opaque)]" />
+                    <div className="text-right">
+                      <p className="text-[11px] text-[var(--label-tertiary)] uppercase tracking-wide mb-0.5">Returns</p>
+                      <p className={`text-[17px] font-semibold tracking-tight ${totalPnL >= 0 ? 'text-[#059669]' : 'text-[#DC2626]'}`}>
+                        {totalPnL >= 0 ? '+' : ''}{formatCompact(totalPnL)}
+                      </p>
+                    </div>
                   </div>
                 </div>
-              </div>
-              {portfolioXIRR !== null ? (
-                <>
-                  <p className={`text-[20px] font-semibold tracking-tight leading-none ${portfolioXIRR >= 0 ? 'text-[var(--system-blue)]' : 'text-[var(--system-amber)]'}`}>
-                    {portfolioXIRR >= 0 ? '+' : ''}{portfolioXIRR.toFixed(2)}%
-                  </p>
-                  <p className="text-[11px] text-[var(--label-tertiary)] mt-0.5">p.a. (equity) · tap for details</p>
-                </>
-              ) : (
-                <p className="text-[20px] font-semibold text-[var(--label-quaternary)]">—</p>
-              )}
-            </Card>
+              </Card>
 
-          </motion.div>
-
-          {/* Portfolio Chart Section */}
-          <motion.div variants={staggerItem}>
-            <Card padding="p-0" className="overflow-hidden">
-              <div className="p-5 pb-0">
-                {/* Chart Header */}
-                <div className="flex items-center justify-between mb-3">
-                  <div>
-                    <h2 className="text-[17px] font-semibold text-[var(--label-primary)]">Investment Journey</h2>
-                    <p className="text-[12px] text-[var(--label-tertiary)]">Cumulative amount invested over time</p>
+              {/* XIRR Card */}
+              <Card
+                padding="p-4"
+                className={portfolioXIRR !== null ? 'cursor-pointer hover:bg-[var(--fill-tertiary)]/50 transition-colors group' : ''}
+                onClick={() => portfolioXIRR !== null && setShowXirrDebug(true)}
+              >
+                <div className="flex items-center gap-3">
+                  {/* Icon */}
+                  <div className="w-10 h-10 rounded-xl bg-[var(--chart-primary)]/10 flex items-center justify-center shrink-0">
+                    <svg className="w-5 h-5 text-[var(--chart-primary)]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 18L9 11.25l4.306 4.307a11.95 11.95 0 015.814-5.519l2.74-1.22m0 0l-5.94-2.28m5.94 2.28l-2.28 5.941" />
+                    </svg>
                   </div>
-                  {investmentSummary && investmentSummary.totalInvested > 0 && (
-                    <div className="text-right">
-                      <p className="text-[14px] font-semibold text-[var(--system-blue)]">{formatCompact(investmentSummary.totalInvested)}</p>
-                      <p className="text-[11px] text-[var(--label-tertiary)]">total invested</p>
+
+                  {/* Content */}
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[11px] font-medium text-[var(--label-tertiary)] uppercase tracking-wide mb-0.5">XIRR</p>
+                    {portfolioXIRR !== null ? (
+                      <p className={`text-[20px] font-bold tracking-tight leading-none ${portfolioXIRR >= 0 ? 'text-[var(--chart-primary)]' : 'text-[#DC2626]'}`}>
+                        {portfolioXIRR >= 0 ? '+' : ''}{portfolioXIRR.toFixed(1)}%
+                        <span className="text-[12px] font-medium text-[var(--label-tertiary)] ml-1">p.a.</span>
+                      </p>
+                    ) : (
+                      <p className="text-[20px] font-bold text-[var(--label-quaternary)]">—</p>
+                    )}
+                  </div>
+
+                  {/* Chevron - indicates tappable */}
+                  {portfolioXIRR !== null && (
+                    <div className="flex items-center gap-1 text-[var(--label-quaternary)] group-hover:text-[var(--label-tertiary)] transition-colors">
+                      <span className="text-[11px] hidden sm:inline">Details</span>
+                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
+                      </svg>
                     </div>
                   )}
                 </div>
-                {/* Period Selector */}
-                {assets.length > 0 && (
-                  <div className="flex gap-1 mb-2">
-                    {periods.map((period) => (
-                      <button
-                        key={period}
-                        onClick={() => setSelectedPeriod(period)}
-                        className={`px-3 py-1.5 rounded-lg text-[13px] font-medium transition-colors ${
-                          selectedPeriod === period
-                            ? 'bg-[var(--system-blue)] text-white'
-                            : 'text-[var(--label-secondary)] hover:bg-[var(--fill-tertiary)]'
-                        }`}
-                      >
-                        {period}
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              {/* Area Chart - Cumulative Investments */}
-              {chartData.length > 0 ? (
-                <div className="h-[260px] mt-2 pr-2">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <AreaChart data={chartData} margin={{ top: 10, right: 10, left: 10, bottom: 5 }}>
-                      <defs>
-                        <linearGradient id="cumulativeGradient" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="0%" stopColor="var(--system-blue)" stopOpacity={0.2} />
-                          <stop offset="100%" stopColor="var(--system-blue)" stopOpacity={0} />
-                        </linearGradient>
-                      </defs>
-                      <CartesianGrid strokeDasharray="3 3" stroke="var(--separator)" opacity={0.3} vertical={false} />
-                      <XAxis
-                        dataKey="displayDate"
-                        axisLine={false}
-                        tickLine={false}
-                        tick={{ fontSize: 11, fill: 'var(--label-tertiary)' }}
-                        dy={5}
-                        interval={chartData.length > 12 ? Math.floor(chartData.length / 6) : 0}
-                      />
-                      <YAxis
-                        axisLine={false}
-                        tickLine={false}
-                        tick={{ fontSize: 11, fill: 'var(--label-tertiary)' }}
-                        tickFormatter={(value) => {
-                          if (value >= 10000000) return `₹${(value / 10000000).toFixed(1)}Cr`;
-                          if (value >= 100000) return `₹${(value / 100000).toFixed(1)}L`;
-                          if (value >= 1000) return `₹${(value / 1000).toFixed(0)}K`;
-                          return `₹${value}`;
-                        }}
-                        width={55}
-                      />
-                      <Tooltip
-                        content={({ active, payload }) => {
-                          if (!active || !payload || payload.length === 0) return null;
-                          const data = payload[0]?.payload;
-                          const cumulative = data?.cumulative || 0;
-                          const rawDate = data?.date;
-
-                          // Format the full date for tooltip
-                          const dateLabel = rawDate
-                            ? new Date(rawDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
-                            : '';
-
-                          return (
-                            <div style={{
-                              background: 'var(--bg-primary)',
-                              border: '1px solid var(--separator)',
-                              borderRadius: '12px',
-                              boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
-                              padding: '12px 16px',
-                              minWidth: '140px'
-                            }}>
-                              <div style={{ fontWeight: 600, marginBottom: 8, color: 'var(--label-primary)', fontSize: 13 }}>{dateLabel}</div>
-                              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                                <span style={{ color: 'var(--label-secondary)', fontSize: 12 }}>Total Invested</span>
-                                <span style={{ fontWeight: 600, color: 'var(--system-blue)', fontSize: 13 }}>{formatCompact(cumulative)}</span>
-                              </div>
-                            </div>
-                          );
-                        }}
-                      />
-                      <Area
-                        type="stepAfter"
-                        dataKey="cumulative"
-                        stroke="var(--system-blue)"
-                        strokeWidth={2}
-                        fill="url(#cumulativeGradient)"
-                        dot={false}
-                        activeDot={{ r: 5, fill: 'var(--system-blue)' }}
-                      />
-                    </AreaChart>
-                  </ResponsiveContainer>
-                </div>
-              ) : (
-                <div className="h-[120px] flex flex-col items-center justify-center text-center mt-2">
-                  <p className="text-[14px] text-[var(--label-tertiary)]">No investment data yet</p>
-                  <p className="text-[12px] text-[var(--label-quaternary)] mt-1">Add assets with transactions to see your journey</p>
-                </div>
-              )}
-            </Card>
-          </motion.div>
-
-          {/* Holdings & Allocation Row */}
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-            {/* Holdings Table - Category Summary */}
-            <motion.div variants={staggerItem} className="lg:col-span-2">
-              <Card padding="p-0">
-                <div className="flex items-center justify-between p-4 border-b border-[var(--separator)]/30">
-                  <div>
-                    <h2 className="text-[17px] font-semibold text-[var(--label-primary)]">Holdings</h2>
-                    <p className="text-[13px] text-[var(--label-tertiary)]">{holdings.length} assets in {categoryBreakdown.length} categories</p>
-                  </div>
-                  <Link to="/assets" className="text-[15px] font-medium text-[var(--system-blue)]">
-                    View Details
-                  </Link>
-                </div>
-
-                {categoryBreakdown.length > 0 ? (
-                  <div className="overflow-x-auto">
-                    <table className="w-full">
-                      <thead>
-                        <tr className="bg-[var(--fill-tertiary)]/50 text-[11px] font-semibold text-[var(--label-tertiary)] uppercase tracking-wider">
-                          <th className="text-left px-4 py-2.5">Category</th>
-                          <th className="text-right px-4 py-2.5 hidden sm:table-cell">Assets</th>
-                          <th className="text-right px-4 py-2.5 hidden lg:table-cell">Invested</th>
-                          <th className="text-right px-4 py-2.5">Current</th>
-                          <th className="text-right px-4 py-2.5">P&L</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-[var(--separator)]/20">
-                        {categorySummary.map((cat) => (
-                          <Link
-                            key={cat.category}
-                            to="/assets"
-                            className="contents"
-                          >
-                            <tr className="hover:bg-[var(--fill-tertiary)]/30 transition-colors cursor-pointer">
-                              <td className="px-4 py-3">
-                                <div className="flex items-center gap-3">
-                                  <div
-                                    className="w-8 h-8 rounded-lg flex items-center justify-center"
-                                    style={{ backgroundColor: cat.color }}
-                                  >
-                                    <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                                      {cat.category === 'EQUITY_STOCKS' ? (
-                                        <path strokeLinecap="round" strokeLinejoin="round" d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 013 19.875v-6.75zM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V8.625zM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V4.125z" />
-                                      ) : cat.category === 'EQUITY_MF' ? (
-                                        <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 3v11.25A2.25 2.25 0 006 16.5h2.25M3.75 3h-1.5m1.5 0h16.5m0 0h1.5m-1.5 0v11.25A2.25 2.25 0 0118 16.5h-2.25m-7.5 0h7.5m-7.5 0l-1 3m8.5-3l1 3m0 0l.5 1.5m-.5-1.5h-9.5m0 0l-.5 1.5m.75-9l3-3 2.148 2.148A12.061 12.061 0 0116.5 7.605" />
-                                      ) : cat.category === 'REAL_ESTATE' ? (
-                                        <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 12l8.954-8.955c.44-.439 1.152-.439 1.591 0L21.75 12M4.5 9.75v10.125c0 .621.504 1.125 1.125 1.125H9.75v-4.875c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21h4.125c.621 0 1.125-.504 1.125-1.125V9.75M8.25 21h8.25" />
-                                      ) : cat.category === 'FIXED_INCOME' ? (
-                                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v12m-3-2.818l.879.659c1.171.879 3.07.879 4.242 0 1.172-.879 1.172-2.303 0-3.182C13.536 12.219 12.768 12 12 12c-.725 0-1.45-.22-2.003-.659-1.106-.879-1.106-2.303 0-3.182s2.9-.879 4.006 0l.415.33M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                      ) : (
-                                        <path strokeLinecap="round" strokeLinejoin="round" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
-                                      )}
-                                    </svg>
-                                  </div>
-                                  <div className="min-w-0">
-                                    <p className="text-[14px] font-medium text-[var(--label-primary)]">
-                                      {cat.label}
-                                    </p>
-                                  </div>
-                                </div>
-                              </td>
-                              <td className="text-right px-4 py-3 hidden sm:table-cell">
-                                <span className="text-[14px] text-[var(--label-secondary)]">
-                                  {cat.assetCount}
-                                </span>
-                              </td>
-                              <td className="text-right px-4 py-3 hidden lg:table-cell">
-                                <span className="text-[14px] text-[var(--label-secondary)]">
-                                  {formatCompact(cat.invested)}
-                                </span>
-                              </td>
-                              <td className="text-right px-4 py-3">
-                                <p className="text-[14px] font-semibold text-[var(--label-primary)]">
-                                  {formatCompact(cat.current)}
-                                </p>
-                              </td>
-                              <td className="text-right px-4 py-3">
-                                <p className={`text-[14px] font-semibold ${cat.pnl >= 0 ? 'text-[var(--system-green)]' : 'text-[var(--system-amber)]'}`}>
-                                  {cat.pnl >= 0 ? '+' : ''}{formatCompact(cat.pnl)}
-                                </p>
-                                <p className={`text-[11px] ${cat.pnlPercent >= 0 ? 'text-[var(--system-green)]' : 'text-[var(--system-amber)]'}`}>
-                                  {cat.pnlPercent >= 0 ? '+' : ''}{cat.pnlPercent.toFixed(1)}%
-                                </p>
-                              </td>
-                            </tr>
-                          </Link>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                ) : (
-                  <div className="p-8 text-center">
-                    <p className="text-[15px] text-[var(--label-tertiary)] mb-4">No holdings yet</p>
-                    <Link to="/assets/add">
-                      <Button variant="filled" size="sm">Add Asset</Button>
-                    </Link>
-                  </div>
-                )}
               </Card>
-            </motion.div>
 
-            {/* Allocation - Horizontal Stacked Bar */}
-            <motion.div variants={staggerItem}>
-              <Card padding="p-4">
-                <h2 className="text-[17px] font-semibold text-[var(--label-primary)] mb-4">Allocation</h2>
+              {/* Allocation */}
+              <Card padding="p-0">
+                <div className="flex items-center gap-3 py-3 px-4 border-b border-[var(--separator-opaque)]">
+                  <div className="w-8 h-8 rounded-lg bg-[var(--system-green)]/10 flex items-center justify-center">
+                    <svg className="w-4 h-4 text-[var(--system-green)]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 6a7.5 7.5 0 107.5 7.5h-7.5V6z" />
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 10.5H21A7.5 7.5 0 0013.5 3v7.5z" />
+                    </svg>
+                  </div>
+                  <span className="text-[14px] font-semibold text-[var(--label-primary)]">Allocation</span>
+                </div>
+                <div className="p-4">
 
                 {categoryBreakdown.length > 0 ? (
                   <>
                     {/* Horizontal Stacked Bar */}
                     <div className="mb-4">
-                      <div className="h-4 rounded-full overflow-hidden flex bg-[var(--fill-tertiary)]">
+                      <div className="h-3 rounded-full overflow-hidden flex bg-[var(--fill-tertiary)]">
                         {categoryBreakdown.map((cat, index) => (
                           <motion.div
                             key={cat.name}
@@ -782,58 +649,326 @@ export default function Dashboard() {
                             animate={{ width: `${cat.percent}%` }}
                             transition={{ duration: 0.6, delay: index * 0.05, ease: [0.4, 0, 0.2, 1] }}
                             style={{ backgroundColor: cat.color }}
-                            className="h-full first:rounded-l-full last:rounded-r-full"
+                            className="h-full"
                             title={`${cat.name}: ${cat.percent.toFixed(1)}%`}
                           />
                         ))}
                       </div>
                     </div>
 
-                    {/* Legend with values */}
-                    <div className="space-y-3">
+                    {/* Legend */}
+                    <div className="space-y-2.5">
                       {categoryBreakdown.map((cat) => (
-                        <div key={cat.name} className="group">
-                          <div className="flex items-center justify-between mb-1">
-                            <div className="flex items-center gap-2.5">
-                              <div
-                                className="w-3 h-3 rounded-sm"
-                                style={{ backgroundColor: cat.color }}
-                              />
-                              <span className="text-[13px] text-[var(--label-primary)]">{cat.name}</span>
-                            </div>
-                            <span className="text-[13px] font-semibold text-[var(--label-primary)]">
-                              {cat.percent.toFixed(1)}%
-                            </span>
+                        <div key={cat.name} className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <div className="w-2.5 h-2.5 rounded-sm" style={{ backgroundColor: cat.color }} />
+                            <span className="text-[12px] text-[var(--label-secondary)]">{cat.name}</span>
                           </div>
-                          <div className="flex items-center justify-between pl-5.5 ml-[22px]">
-                            <span className="text-[12px] text-[var(--label-tertiary)]">
-                              {formatCompact(cat.value)}
-                            </span>
-                            {/* Individual progress bar */}
-                            <div className="w-16 h-1.5 rounded-full bg-[var(--fill-tertiary)] overflow-hidden">
-                              <motion.div
-                                initial={{ width: 0 }}
-                                animate={{ width: `${cat.percent}%` }}
-                                transition={{ duration: 0.5, ease: [0.4, 0, 0.2, 1] }}
-                                style={{ backgroundColor: cat.color }}
-                                className="h-full rounded-full"
-                              />
-                            </div>
-                          </div>
+                          <span className="text-[12px] font-semibold text-[var(--label-primary)]">
+                            {cat.percent.toFixed(1)}%
+                          </span>
                         </div>
                       ))}
                     </div>
 
                     {/* Total */}
-                    <div className="mt-4 pt-3 border-t border-[var(--separator)]/30">
+                    <div className="mt-4 pt-3 border-t border-[var(--separator-opaque)]">
                       <div className="flex items-center justify-between">
-                        <span className="text-[13px] font-medium text-[var(--label-secondary)]">Total Portfolio</span>
-                        <span className="text-[15px] font-semibold text-[var(--label-primary)]">{formatCompact(totalValue)}</span>
+                        <span className="text-[12px] font-medium text-[var(--label-tertiary)]">Total</span>
+                        <span className="text-[14px] font-bold text-[var(--label-primary)]">{formatCompact(totalValue)}</span>
                       </div>
                     </div>
                   </>
                 ) : (
-                  <p className="text-[15px] text-[var(--label-tertiary)] text-center py-8">No data</p>
+                  <div className="py-6 text-center">
+                    <p className="text-[13px] text-[var(--label-tertiary)]">No allocation data</p>
+                  </div>
+                )}
+                </div>
+              </Card>
+            </motion.div>
+
+            {/* Right Column - Chart + Category Performance */}
+            <motion.div variants={staggerItem} className="lg:col-span-9 space-y-4">
+              <Card padding="p-0" className="overflow-hidden">
+                {/* Header */}
+                <div className="flex items-center justify-between py-3 px-4 border-b border-[var(--separator-opaque)]">
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-lg bg-[var(--chart-primary)]/10 flex items-center justify-center">
+                      <svg className="w-4 h-4 text-[var(--chart-primary)]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 18L9 11.25l4.306 4.307a11.95 11.95 0 015.814-5.519l2.74-1.22m0 0l-5.94-2.28m5.94 2.28l-2.28 5.941" />
+                      </svg>
+                    </div>
+                    <span className="text-[14px] font-semibold text-[var(--label-primary)]">Investment Journey</span>
+                  </div>
+                  {/* Export Button */}
+                  <button
+                    onClick={handleExportPDF}
+                    disabled={assets.length === 0}
+                    className="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-[var(--separator-opaque)] text-[var(--label-secondary)] hover:bg-[var(--fill-tertiary)] transition-colors disabled:opacity-50 text-[13px] font-medium"
+                  >
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
+                    </svg>
+                    Export
+                  </button>
+                </div>
+
+                {/* Content */}
+                <div className="p-5 pb-0">
+                  {/* Amount + Badge + Legend - All on one line */}
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="flex items-center gap-3">
+                      <p className="text-[28px] font-semibold text-[var(--label-primary)] tracking-tight leading-none">
+                        {formatCurrency(totalInvested)}
+                      </p>
+                      {totalPnLPercent !== 0 && (
+                        <span className={`text-[12px] font-semibold px-2 py-0.5 rounded ${totalPnL >= 0 ? 'bg-[#059669]/10 text-[#059669]' : 'bg-[#DC2626]/10 text-[#DC2626]'}`}>
+                          {totalPnL >= 0 ? '+' : ''}{totalPnLPercent.toFixed(1)}%
+                        </span>
+                      )}
+                    </div>
+                    {/* Legend */}
+                    <div className="hidden md:flex items-center gap-4">
+                      <div className="flex items-center gap-1.5">
+                        <div className="w-2 h-2 rounded-full bg-[var(--chart-primary)]" />
+                        <span className="text-[11px] text-[var(--label-tertiary)]">Invested</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Period Selector */}
+                  {assets.length > 0 && (
+                    <div className="flex gap-1 p-1 bg-[var(--fill-tertiary)]/50 rounded-lg w-fit">
+                      {periods.map((period) => (
+                        <button
+                          key={period}
+                          onClick={() => handlePeriodChange(period)}
+                          className={`px-3 py-1.5 rounded-md text-[12px] font-medium transition-all ${
+                            selectedPeriod === period
+                              ? 'bg-[var(--bg-primary)] text-[var(--label-primary)] shadow-sm'
+                              : 'text-[var(--label-tertiary)] hover:text-[var(--label-secondary)]'
+                          }`}
+                        >
+                          {period}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Area Chart */}
+                {chartData.length > 0 ? (
+                  <div className="h-[300px] mt-4 pr-2">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <AreaChart data={chartData} margin={{ top: 10, right: 10, left: 10, bottom: 5 }}>
+                        <defs>
+                          <linearGradient id="cumulativeGradient" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="0%" stopColor="var(--chart-primary)" stopOpacity={0.15} />
+                            <stop offset="100%" stopColor="var(--chart-primary)" stopOpacity={0} />
+                          </linearGradient>
+                        </defs>
+                        <CartesianGrid strokeDasharray="3 3" stroke="var(--separator-opaque)" opacity={0.5} vertical={false} />
+                        <XAxis
+                          dataKey="displayDate"
+                          axisLine={false}
+                          tickLine={false}
+                          tick={{ fontSize: 11, fill: 'var(--label-tertiary)' }}
+                          dy={5}
+                          interval={chartData.length > 12 ? Math.floor(chartData.length / 6) : 0}
+                        />
+                        <YAxis
+                          axisLine={false}
+                          tickLine={false}
+                          tick={{ fontSize: 11, fill: 'var(--label-tertiary)' }}
+                          tickFormatter={(value) => {
+                            if (value >= 10000000) return `₹${(value / 10000000).toFixed(1)}Cr`;
+                            if (value >= 100000) return `₹${(value / 100000).toFixed(1)}L`;
+                            if (value >= 1000) return `₹${(value / 1000).toFixed(0)}K`;
+                            return `₹${value}`;
+                          }}
+                          width={55}
+                        />
+                        <Tooltip
+                          content={({ active, payload }) => {
+                            if (!active || !payload || payload.length === 0) return null;
+                            const data = payload[0]?.payload;
+                            const cumulative = data?.cumulative || 0;
+                            const rawDate = data?.date;
+                            const dateLabel = rawDate
+                              ? new Date(rawDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
+                              : '';
+
+                            return (
+                              <div style={{
+                                background: 'var(--bg-primary)',
+                                border: '1px solid var(--separator-opaque)',
+                                borderRadius: '12px',
+                                boxShadow: '0 4px 16px rgba(0,0,0,0.08)',
+                                padding: '12px 16px',
+                                minWidth: '140px'
+                              }}>
+                                <div style={{ fontWeight: 600, marginBottom: 8, color: 'var(--label-primary)', fontSize: 13 }}>{dateLabel}</div>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16 }}>
+                                  <span style={{ color: 'var(--label-secondary)', fontSize: 12 }}>Invested</span>
+                                  <span style={{ fontWeight: 600, color: 'var(--chart-primary)', fontSize: 13 }}>{formatCompact(cumulative)}</span>
+                                </div>
+                              </div>
+                            );
+                          }}
+                        />
+                        <Area
+                          type="monotone"
+                          dataKey="cumulative"
+                          stroke="var(--chart-primary)"
+                          strokeWidth={2.5}
+                          fill="url(#cumulativeGradient)"
+                          dot={false}
+                          activeDot={{ r: 5, fill: 'var(--chart-primary)', strokeWidth: 2, stroke: 'var(--bg-primary)' }}
+                        />
+                      </AreaChart>
+                    </ResponsiveContainer>
+                  </div>
+                ) : (
+                  <div className="h-[200px] flex flex-col items-center justify-center text-center">
+                    <div className="w-12 h-12 bg-[var(--fill-tertiary)] rounded-xl flex items-center justify-center mb-3">
+                      <svg className="w-6 h-6 text-[var(--label-tertiary)]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 013 19.875v-6.75zM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V8.625zM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V4.125z" />
+                      </svg>
+                    </div>
+                    <p className="text-[14px] text-[var(--label-tertiary)]">No investment data yet</p>
+                    <p className="text-[12px] text-[var(--label-quaternary)] mt-1">Add assets with transactions to see your journey</p>
+                  </div>
+                )}
+              </Card>
+
+              {/* Holdings Table */}
+              <Card padding="p-0" className="hidden lg:block">
+                <div className="flex items-center justify-between py-3 px-4 border-b border-[var(--separator-opaque)]">
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-lg bg-[var(--system-purple)]/10 flex items-center justify-center">
+                      <svg className="w-4 h-4 text-[var(--system-purple)]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+                      </svg>
+                    </div>
+                    <span className="text-[14px] font-semibold text-[var(--label-primary)]">Holdings</span>
+                    <span className="text-[12px] text-[var(--label-tertiary)]">({holdings.length} assets)</span>
+                  </div>
+                  <Link to="/assets" className="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-[var(--separator-opaque)] text-[var(--label-secondary)] hover:bg-[var(--fill-tertiary)] transition-colors text-[13px] font-medium">
+                    View All
+                  </Link>
+                </div>
+
+                {categoryBreakdown.length > 0 ? (
+                  <div className="overflow-x-auto">
+                    <table className="w-full">
+                      <thead>
+                        <tr className="text-[11px] font-medium text-[var(--label-tertiary)] uppercase tracking-wider border-b border-[var(--separator-opaque)]/50">
+                          <th className="text-left px-4 py-3 font-medium">Category</th>
+                          <th className="text-right px-4 py-3 font-medium">Assets</th>
+                          <th className="text-right px-4 py-3 font-medium">Invested</th>
+                          <th className="text-right px-4 py-3 font-medium">Current</th>
+                          <th className="text-right px-4 py-3 font-medium">P&L</th>
+                          <th className="text-right px-4 py-3 font-medium">Weight</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-[var(--separator-opaque)]/50">
+                        {categorySummary.map((cat) => (
+                          <tr key={cat.category} className="hover:bg-[var(--fill-tertiary)]/30 transition-colors">
+                            <td className="px-4 py-3">
+                              <div className="flex items-center gap-3">
+                                <div
+                                  className="w-8 h-8 rounded-lg flex items-center justify-center"
+                                  style={{ backgroundColor: cat.color }}
+                                >
+                                  <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                                    {cat.category === 'EQUITY_STOCKS' ? (
+                                      // Trending up arrow
+                                      <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 18L9 11.25l4.306 4.307a11.95 11.95 0 015.814-5.519l2.74-1.22m0 0l-5.94-2.28m5.94 2.28l-2.28 5.941" />
+                                    ) : cat.category === 'EQUITY_MF' ? (
+                                      // Pie chart for diversified funds
+                                      <>
+                                        <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 6a7.5 7.5 0 107.5 7.5h-7.5V6z" />
+                                        <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 10.5H21A7.5 7.5 0 0013.5 3v7.5z" />
+                                      </>
+                                    ) : cat.category.startsWith('FIXED_INCOME') ? (
+                                      // Bank building (for all Fixed Income types)
+                                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 21v-8.25M15.75 21v-8.25M8.25 21v-8.25M3 9l9-6 9 6m-1.5 12V10.332A48.36 48.36 0 0012 9.75c-2.551 0-5.056.2-7.5.582V21M3 21h18M12 6.75h.008v.008H12V6.75z" />
+                                    ) : cat.category === 'REAL_ESTATE' ? (
+                                      // Home/Building
+                                      <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 21v-4.875c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21m0 0h4.5V3.545M12.75 21h7.5V10.75M2.25 21h1.5m18 0h-18M2.25 9l4.5-1.636M18.75 3l-1.5.545m0 6.205l3 1m1.5.5l-1.5-.5M6.75 7.364V3h-3v18m3-13.636l10.5-3.819" />
+                                    ) : cat.category === 'PHYSICAL' ? (
+                                      // Gold/Gem
+                                      <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 002.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 00-2.456 2.456zM16.894 20.567L16.5 21.75l-.394-1.183a2.25 2.25 0 00-1.423-1.423L13.5 18.75l1.183-.394a2.25 2.25 0 001.423-1.423l.394-1.183.394 1.183a2.25 2.25 0 001.423 1.423l1.183.394-1.183.394a2.25 2.25 0 00-1.423 1.423z" />
+                                    ) : cat.category === 'SAVINGS' ? (
+                                      // Wallet
+                                      <path strokeLinecap="round" strokeLinejoin="round" d="M21 12a2.25 2.25 0 00-2.25-2.25H15a3 3 0 11-6 0H5.25A2.25 2.25 0 003 12m18 0v6a2.25 2.25 0 01-2.25 2.25H5.25A2.25 2.25 0 013 18v-6m18 0V9M3 12V9m18 0a2.25 2.25 0 00-2.25-2.25H5.25A2.25 2.25 0 003 9m18 0V6a2.25 2.25 0 00-2.25-2.25H5.25A2.25 2.25 0 003 6v3" />
+                                    ) : cat.category === 'CRYPTO' ? (
+                                      // Currency/Crypto
+                                      <path strokeLinecap="round" strokeLinejoin="round" d="M20.25 6.375c0 2.278-3.694 4.125-8.25 4.125S3.75 8.653 3.75 6.375m16.5 0c0-2.278-3.694-4.125-8.25-4.125S3.75 4.097 3.75 6.375m16.5 0v11.25c0 2.278-3.694 4.125-8.25 4.125s-8.25-1.847-8.25-4.125V6.375m16.5 0v3.75m-16.5-3.75v3.75m16.5 0v3.75C20.25 16.153 16.556 18 12 18s-8.25-1.847-8.25-4.125v-3.75m16.5 0c0 2.278-3.694 4.125-8.25 4.125s-8.25-1.847-8.25-4.125" />
+                                    ) : cat.category === 'INSURANCE' ? (
+                                      // Shield
+                                      <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z" />
+                                    ) : (
+                                      // Briefcase for OTHER
+                                      <path strokeLinecap="round" strokeLinejoin="round" d="M20.25 14.15v4.25c0 1.094-.787 2.036-1.872 2.18-2.087.277-4.216.42-6.378.42s-4.291-.143-6.378-.42c-1.085-.144-1.872-1.086-1.872-2.18v-4.25m16.5 0a2.18 2.18 0 00.75-1.661V8.706c0-1.081-.768-2.015-1.837-2.175a48.114 48.114 0 00-3.413-.387m4.5 8.006c-.194.165-.42.295-.673.38A23.978 23.978 0 0112 15.75c-2.648 0-5.195-.429-7.577-1.22a2.016 2.016 0 01-.673-.38m0 0A2.18 2.18 0 013 12.489V8.706c0-1.081.768-2.015 1.837-2.175a48.111 48.111 0 013.413-.387m7.5 0V5.25A2.25 2.25 0 0013.5 3h-3a2.25 2.25 0 00-2.25 2.25v.894m7.5 0a48.667 48.667 0 00-7.5 0M12 12.75h.008v.008H12v-.008z" />
+                                    )}
+                                  </svg>
+                                </div>
+                                <span className="text-[14px] font-medium text-[var(--label-primary)]">{cat.label}</span>
+                              </div>
+                            </td>
+                            <td className="text-right px-4 py-3">
+                              <span className="text-[14px] text-[var(--label-secondary)]">{cat.assetCount}</span>
+                            </td>
+                            <td className="text-right px-4 py-3">
+                              <span className="text-[14px] text-[var(--label-secondary)]">{formatCompact(cat.invested)}</span>
+                            </td>
+                            <td className="text-right px-4 py-3">
+                              <span className="text-[14px] font-semibold text-[var(--label-primary)]">{formatCompact(cat.current)}</span>
+                            </td>
+                            <td className="text-right px-4 py-3">
+                              <p className={`text-[14px] font-semibold ${cat.pnl >= 0 ? 'text-[#059669]' : 'text-[#DC2626]'}`}>
+                                {cat.pnl >= 0 ? '+' : ''}{formatCompact(cat.pnl)}
+                              </p>
+                              <p className={`text-[11px] ${cat.pnlPercent >= 0 ? 'text-[#059669]' : 'text-[#DC2626]'}`}>
+                                {cat.pnlPercent >= 0 ? '+' : ''}{cat.pnlPercent.toFixed(1)}%
+                              </p>
+                            </td>
+                            <td className="text-right px-4 py-3">
+                              <div className="flex items-center justify-end gap-2">
+                                <div className="w-16 h-1.5 rounded-full bg-[var(--fill-tertiary)] overflow-hidden">
+                                  <div
+                                    className="h-full rounded-full"
+                                    style={{
+                                      backgroundColor: cat.color,
+                                      width: `${totalValue > 0 ? (cat.current / totalValue) * 100 : 0}%`
+                                    }}
+                                  />
+                                </div>
+                                <span className="text-[13px] font-medium text-[var(--label-primary)] w-12 text-right">
+                                  {totalValue > 0 ? ((cat.current / totalValue) * 100).toFixed(1) : 0}%
+                                </span>
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  <div className="p-8 text-center">
+                    <div className="w-12 h-12 bg-[var(--fill-tertiary)] rounded-xl flex items-center justify-center mx-auto mb-3">
+                      <svg className="w-6 h-6 text-[var(--label-tertiary)]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+                      </svg>
+                    </div>
+                    <p className="text-[14px] text-[var(--label-secondary)] mb-1">No holdings yet</p>
+                    <p className="text-[12px] text-[var(--label-tertiary)] mb-4">Add your first asset to start tracking</p>
+                    <Link to="/assets/add">
+                      <Button variant="filled" size="sm">Add Asset</Button>
+                    </Link>
+                  </div>
                 )}
               </Card>
             </motion.div>
@@ -843,8 +978,8 @@ export default function Dashboard() {
           {assets.length === 0 && (
             <motion.div variants={staggerItem}>
               <Card padding="p-12" className="text-center">
-                <div className="w-16 h-16 bg-[var(--fill-tertiary)] rounded-2xl flex items-center justify-center mx-auto mb-4">
-                  <svg className="w-8 h-8 text-[var(--label-tertiary)]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <div className="w-16 h-16 bg-[var(--chart-primary)]/10 rounded-2xl flex items-center justify-center mx-auto mb-4">
+                  <svg className="w-8 h-8 text-[var(--chart-primary)]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
                   </svg>
                 </div>
@@ -859,20 +994,6 @@ export default function Dashboard() {
             </motion.div>
           )}
         </motion.div>
-
-        {/* Floating Add Button */}
-        <Link to="/assets/add">
-          <motion.div
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
-            transition={spring.snappy}
-            className="fixed bottom-6 right-6 w-14 h-14 bg-[var(--system-blue)] text-white rounded-full shadow-lg shadow-[var(--system-blue)]/30 flex items-center justify-center z-50"
-          >
-            <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
-            </svg>
-          </motion.div>
-        </Link>
 
         {/* XIRR Debug Modal */}
         <AnimatePresence>
@@ -894,8 +1015,8 @@ export default function Dashboard() {
                 className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-lg bg-[var(--bg-primary)] rounded-2xl shadow-2xl z-[101] overflow-hidden max-h-[85vh] flex flex-col"
               >
                 {/* Header */}
-                <div className="flex items-center justify-between px-5 py-4 border-b border-[var(--separator)]/30 shrink-0">
-                  <h2 className="text-[17px] font-semibold text-[var(--label-primary)]">XIRR Calculation Breakdown</h2>
+                <div className="flex items-center justify-between px-5 py-4 border-b border-[var(--separator-opaque)] shrink-0">
+                  <h2 className="text-[17px] font-semibold text-[var(--label-primary)]">XIRR Breakdown</h2>
                   <button
                     onClick={() => setShowXirrDebug(false)}
                     className="p-2 -mr-2 text-[var(--label-tertiary)] hover:text-[var(--label-secondary)] hover:bg-[var(--fill-tertiary)] rounded-lg transition-colors"
@@ -924,13 +1045,13 @@ export default function Dashboard() {
                     </div>
                     <div className="p-3 bg-[var(--fill-tertiary)]/50 rounded-xl">
                       <p className="text-[11px] text-[var(--label-tertiary)] uppercase mb-1">Absolute Return</p>
-                      <p className={`text-[17px] font-semibold ${xirrDebugInfo.absoluteReturn >= 0 ? 'text-[var(--system-green)]' : 'text-[var(--system-amber)]'}`}>
+                      <p className={`text-[17px] font-semibold ${xirrDebugInfo.absoluteReturn >= 0 ? 'text-[#059669]' : 'text-[#DC2626]'}`}>
                         {xirrDebugInfo.absoluteReturn >= 0 ? '+' : ''}{xirrDebugInfo.absoluteReturn.toFixed(2)}%
                       </p>
                     </div>
-                    <div className="p-3 bg-[var(--system-blue)]/10 rounded-xl">
-                      <p className="text-[11px] text-[var(--system-blue)] uppercase mb-1">XIRR (Annualized)</p>
-                      <p className={`text-[17px] font-semibold ${xirrDebugInfo.xirr >= 0 ? 'text-[var(--system-blue)]' : 'text-[var(--system-amber)]'}`}>
+                    <div className="p-3 bg-[var(--chart-primary)]/10 rounded-xl">
+                      <p className="text-[11px] text-[var(--chart-primary)] uppercase mb-1">XIRR (Annualized)</p>
+                      <p className={`text-[17px] font-semibold ${xirrDebugInfo.xirr >= 0 ? 'text-[var(--chart-primary)]' : 'text-[#DC2626]'}`}>
                         {xirrDebugInfo.xirr >= 0 ? '+' : ''}{xirrDebugInfo.xirr.toFixed(2)}%
                       </p>
                     </div>
@@ -964,7 +1085,7 @@ export default function Dashboard() {
                             <p className="text-[13px] text-[var(--label-primary)]">{cf.date}</p>
                             <p className="text-[11px] text-[var(--label-tertiary)]">{cf.type}</p>
                           </div>
-                          <p className={`text-[14px] font-medium ${cf.amount >= 0 ? 'text-[var(--system-green)]' : 'text-[var(--system-amber)]'}`}>
+                          <p className={`text-[14px] font-medium ${cf.amount >= 0 ? 'text-[#059669]' : 'text-[#DC2626]'}`}>
                             {cf.amount >= 0 ? '+' : ''}{formatCurrency(cf.amount)}
                           </p>
                         </div>
@@ -979,16 +1100,15 @@ export default function Dashboard() {
                 </div>
 
                 {/* Footer */}
-                <div className="px-5 py-3 bg-[var(--fill-tertiary)]/50 border-t border-[var(--separator)]/30 shrink-0">
-                  <p className="text-[12px] text-[var(--label-tertiary)] text-center">
-                    XIRR accounts for timing of each investment. Differences with Zerodha may be due to dividends not tracked here.
+                <div className="px-5 py-3 bg-[var(--fill-tertiary)]/50 border-t border-[var(--separator-opaque)] shrink-0">
+                  <p className="text-[11px] text-[var(--label-tertiary)] text-center">
+                    XIRR accounts for timing of investments. Differences with brokers may be due to dividends.
                   </p>
                 </div>
               </motion.div>
             </>
           )}
         </AnimatePresence>
-      </div>
     </div>
   );
 }

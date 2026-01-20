@@ -1,66 +1,85 @@
 @import "tailwindcss";
 
 :root {
-  /* Apple System Font - SF Pro Display */
-  --font-system: "SF Pro Display", "SF Pro Text", -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  /* System Font - Match reference design */
+  --font-system: "Inter", -apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, sans-serif;
 
-  /* Private Bank Digital - Primary Colors */
-  --system-blue: #1E3A5F;        /* Deep Navy - Primary brand */
-  --system-green: #059669;       /* Vibrant Emerald - Positive/Gains (rewarding) */
-  --system-red: #DC2626;         /* Muted Red - Destructive actions only */
-  --system-amber: #92400E;       /* Muted Amber - Losses (less anxiety-inducing) */
-  --system-orange: #B45309;
-  --system-yellow: #A16207;
-  --system-purple: #6B21A8;
-  --system-pink: #9D174D;
-  --system-teal: #0F766E;
-  --system-indigo: #4338CA;
+  /* Primary Colors - Finance Dashboard */
+  --system-blue: #1A1D29;        /* Deep Navy - Primary brand, buttons */
+  --system-blue-light: #4F7DF3;  /* Bright Blue - Charts, links, accents */
+  --system-blue-muted: #E8EEFB;  /* Light Blue - Chart fills, backgrounds */
+  --system-green: #22C55E;       /* Green - Positive/Gains */
+  --system-red: #EF4444;         /* Red - Destructive actions */
+  --system-amber: #F59E0B;       /* Amber - Warnings */
+  --system-orange: #F97316;
+  --system-yellow: #EAB308;
+  --system-purple: #8B5CF6;
+  --system-pink: #EC4899;
+  --system-teal: #14B8A6;
+  --system-indigo: #6366F1;
 
-  /* Refined Gray Palette - Warmer tones */
-  --system-gray: #6B7280;
-  --system-gray-2: #9CA3AF;
-  --system-gray-3: #D1D5DB;
-  --system-gray-4: #E5E7EB;
-  --system-gray-5: #F3F4F6;
-  --system-gray-6: #F9FAFB;
+  /* Gray Palette */
+  --system-gray: #6B7280;        /* Gray 500 */
+  --system-gray-2: #9CA3AF;      /* Gray 400 */
+  --system-gray-3: #D1D5DB;      /* Gray 300 */
+  --system-gray-4: #E5E7EB;      /* Gray 200 */
+  --system-gray-5: #F3F4F6;      /* Gray 100 */
+  --system-gray-6: #F9FAFB;      /* Gray 50 */
 
-  /* Labels - WCAG AA compliant contrast */
-  --label-primary: #111827;      /* Softer than pure black */
-  --label-secondary: #374151;
-  --label-tertiary: rgba(55, 65, 81, 0.7);
-  --label-quaternary: rgba(55, 65, 81, 0.4);
+  /* Labels */
+  --label-primary: #1A1D29;      /* Dark - Primary text */
+  --label-secondary: #4B5563;    /* Gray 600 - Secondary text */
+  --label-tertiary: #6B7280;     /* Gray 500 - Tertiary text */
+  --label-quaternary: #9CA3AF;   /* Gray 400 - Muted text */
 
-  /* Backgrounds - Warmer whites */
-  --bg-primary: #FFFFFF;
-  --bg-secondary: #FAFAFA;       /* Warm white */
-  --bg-tertiary: #FFFFFF;
+  /* Backgrounds - Key to matching the design */
+  --bg-page: #E8EDF5;            /* Light blue-gray page background */
+  --bg-primary: #FFFFFF;         /* White - Cards/main container */
+  --bg-secondary: #F8FAFC;       /* Very light - subtle sections */
+  --bg-tertiary: #F1F5F9;        /* Light gray - hover states */
 
   /* Fill Colors */
-  --fill-primary: rgba(107, 114, 128, 0.2);
-  --fill-secondary: rgba(107, 114, 128, 0.14);
-  --fill-tertiary: rgba(107, 114, 128, 0.08);
+  --fill-primary: rgba(26, 29, 41, 0.08);
+  --fill-secondary: rgba(26, 29, 41, 0.05);
+  --fill-tertiary: rgba(26, 29, 41, 0.03);
 
   /* Separator */
-  --separator: rgba(55, 65, 81, 0.2);
+  --separator: rgba(26, 29, 41, 0.08);
   --separator-opaque: #E5E7EB;
 
-  /* Category Colors - Muted palette */
-  --category-equity: #1E3A5F;
-  --category-fixed: #047857;
-  --category-realestate: #6B21A8;
-  --category-physical: #B45309;
-  --category-savings: #0F766E;
-  --category-crypto: #4338CA;
-  --category-insurance: #9D174D;
+  /* Chart Colors - Match reference stacked bars */
+  --chart-primary: #4F7DF3;      /* Bright Blue - Main bars */
+  --chart-secondary: #C7D7FE;    /* Light Blue - Secondary bars */
+  --chart-tertiary: #E8EEFB;     /* Very Light Blue - Fills */
+  --chart-positive: #22C55E;     /* Green - Positive values */
+  --chart-negative: #EF4444;     /* Red - Negative values */
+
+  /* Category Colors */
+  --category-equity: #4F7DF3;    /* Blue */
+  --category-mf: #8B5CF6;        /* Purple */
+  --category-fixed: #22C55E;     /* Green */
+  --category-realestate: #F59E0B;/* Amber */
+  --category-physical: #F97316;  /* Orange */
+  --category-savings: #14B8A6;   /* Teal */
+  --category-crypto: #6366F1;    /* Indigo */
+  --category-insurance: #EC4899; /* Pink */
+
+  /* Sidebar */
+  --sidebar-bg: #FFFFFF;
+  --sidebar-active: #1A1D29;
+  --sidebar-icon: #9CA3AF;
+  --sidebar-icon-active: #FFFFFF;
 }
 
-/* Dark Mode - Private Bank Digital (class-based for manual toggle) */
+/* Dark Mode */
 :root.dark {
-  /* Dark Mode Colors - Lifted for dark backgrounds */
-  --system-blue: #60A5FA;         /* Lifted Deep Navy */
-  --system-green: #34D399;        /* Lifted Vibrant Emerald */
-  --system-red: #F87171;          /* Lifted Red for destructive */
-  --system-amber: #FBBF24;        /* Lifted Amber for losses */
+  /* Primary Colors - Dark Mode */
+  --system-blue: #E2E8F0;
+  --system-blue-light: #60A5FA;
+  --system-blue-muted: #1E3A5F;
+  --system-green: #4ADE80;
+  --system-red: #F87171;
+  --system-amber: #FBBF24;
   --system-orange: #FB923C;
   --system-yellow: #FACC15;
   --system-purple: #A78BFA;
@@ -68,45 +87,57 @@
   --system-teal: #2DD4BF;
   --system-indigo: #818CF8;
 
-  /* Dark Gray Palette - Refined for depth */
-  --system-gray: #9CA3AF;
-  --system-gray-2: #6B7280;
-  --system-gray-3: #4B5563;
-  --system-gray-4: #374151;
-  --system-gray-5: #1F2937;
-  --system-gray-6: #111827;
+  /* Gray Palette - Dark */
+  --system-gray: #94A3B8;
+  --system-gray-2: #64748B;
+  --system-gray-3: #475569;
+  --system-gray-4: #334155;
+  --system-gray-5: #1E293B;
+  --system-gray-6: #0F172A;
 
-  /* Labels - Dark - Enhanced contrast */
-  --label-primary: #F9FAFB;
-  --label-secondary: rgba(249, 250, 251, 0.85);
-  --label-tertiary: rgba(249, 250, 251, 0.55);
-  --label-quaternary: rgba(249, 250, 251, 0.25);
+  /* Labels - Dark */
+  --label-primary: #F8FAFC;
+  --label-secondary: #CBD5E1;
+  --label-tertiary: #94A3B8;
+  --label-quaternary: #64748B;
 
   /* Backgrounds - Dark */
-  --bg-primary: #111827;
-  --bg-secondary: #030712;
-  --bg-tertiary: #1F2937;
+  --bg-page: #0C0E14;
+  --bg-primary: #1A1D29;
+  --bg-secondary: #12141C;
+  --bg-tertiary: #252836;
 
   /* Fill Colors - Dark */
-  --fill-primary: rgba(156, 163, 175, 0.30);
-  --fill-secondary: rgba(156, 163, 175, 0.22);
-  --fill-tertiary: rgba(156, 163, 175, 0.14);
+  --fill-primary: rgba(248, 250, 252, 0.12);
+  --fill-secondary: rgba(248, 250, 252, 0.08);
+  --fill-tertiary: rgba(248, 250, 252, 0.04);
 
   /* Separator - Dark */
-  --separator: rgba(75, 85, 99, 0.50);
-  --separator-opaque: #374151;
+  --separator: rgba(248, 250, 252, 0.08);
+  --separator-opaque: #2D3242;
 
-  /* Category Colors - Dark mode lifted */
+  /* Chart Colors - Dark */
+  --chart-primary: #60A5FA;
+  --chart-secondary: #3B82F6;
+  --chart-tertiary: #1E3A5F;
+  --chart-positive: #4ADE80;
+  --chart-negative: #F87171;
+
+  /* Category Colors - Dark */
   --category-equity: #60A5FA;
-  --category-fixed: #34D399;
-  --category-realestate: #A78BFA;
+  --category-mf: #A78BFA;
+  --category-fixed: #4ADE80;
+  --category-realestate: #FBBF24;
   --category-physical: #FB923C;
   --category-savings: #2DD4BF;
   --category-crypto: #818CF8;
   --category-insurance: #F472B6;
 
-  /* Card shadows for dark mode */
-  --card-shadow: 0 2px 8px rgba(0, 0, 0, 0.4), 0 0 1px rgba(255, 255, 255, 0.05);
+  /* Sidebar - Dark */
+  --sidebar-bg: #1A1D29;
+  --sidebar-active: #4F7DF3;
+  --sidebar-icon: #6B7280;
+  --sidebar-icon-active: #FFFFFF;
 }
 
 /* High Contrast Mode - Vivid colors for accessibility */
@@ -141,9 +172,11 @@ body {
   margin: 0;
   min-height: 100vh;
   font-family: var(--font-system);
+  font-size: 14px;
+  line-height: 1.5;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  background-color: var(--bg-secondary);
+  background-color: var(--bg-page);
   color: var(--label-primary);
 }
 
@@ -179,6 +212,13 @@ body {
 :focus-visible {
   outline: 2px solid var(--system-blue);
   outline-offset: 2px;
+}
+
+/* Remove focus outline for search inputs */
+input[type="text"].bg-transparent:focus,
+input[type="text"].bg-transparent:focus-visible {
+  outline: none !important;
+  box-shadow: none !important;
 }
 
 /* Input autofill styling */
