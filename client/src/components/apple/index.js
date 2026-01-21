@@ -27,3 +27,4 @@ export {
   AssetsSkeleton
 } from './Skeleton';
 export { default as BottomSheet } from './BottomSheet';
+export { default as Modal, CompactModal, ConfirmDialog } from './Modal';

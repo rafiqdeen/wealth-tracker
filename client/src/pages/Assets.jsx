@@ -1,8 +1,9 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { assetService, priceService, ASSET_CONFIG } from '../services/assets';
-import { Card, SearchInput, AssetsSkeleton, BottomSheet } from '../components/apple';
+import { Card, SearchInput, AssetsSkeleton, Modal } from '../components/apple';
 import QuickAddTransaction from '../components/QuickAddTransaction';
 import { spring, staggerContainer, staggerItem } from '../utils/animations';
 import { categoryColors } from '../constants/theme';
@@ -29,8 +30,10 @@ export default function Assets() {
   const [sortBy, setSortBy] = useState('value'); // value, returns, name, recent
   const [transactionDates, setTransactionDates] = useState({}); // First purchase dates
   const [openMenuId, setOpenMenuId] = useState(null); // Track which kebab menu is open
+  const [menuPosition, setMenuPosition] = useState({ top: 0, right: 0 }); // Position for portal dropdown
   const assetRefs = useRef({});
   const menuRef = useRef(null);
+  const menuButtonRefs = useRef({}); // Track kebab button positions
 
   // Handle highlight from search
   const highlightParam = searchParams.get('highlight');
@@ -423,7 +426,7 @@ export default function Assets() {
     return totalCurrentValue > 0 ? (value / totalCurrentValue) * 100 : 0;
   };
 
-  // Category allocation for pie chart in filter panel
+  // Category allocation for filter panel
   const categoryAllocation = Object.entries(
     filteredAssets.reduce((acc, asset) => {
       let groupKey = asset.category;
@@ -497,59 +500,82 @@ export default function Assets() {
   };
 
   return (
-    <div className="p-4 md:p-6 h-full overflow-auto">
-      {/* Split Mini Cards - Portfolio Summary (4 cards, 2 lines each) */}
+    <div className="p-4 md:px-12 md:py-6 h-full overflow-auto">
+      {/* Page Header */}
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={spring.gentle}
+          className="mb-5"
+        >
+          <h1 className="text-[22px] font-bold text-[var(--label-primary)] mb-1">Assets</h1>
+          <p className="text-[14px] text-[var(--label-secondary)]">
+            Manage and track your investment portfolio
+          </p>
+        </motion.div>
+
+      {/* Portfolio Summary Cards */}
       <motion.div
         initial={{ opacity: 0, y: -10 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={spring.gentle}
+        transition={{ ...spring.gentle, delay: 0.03 }}
         className="mb-4 grid grid-cols-2 lg:grid-cols-4 gap-3"
       >
         {/* Card 1: Portfolio Value */}
-        <Card padding="px-4 py-3">
-          <p className="text-[11px] text-[var(--label-tertiary)] uppercase tracking-wide font-medium">Portfolio Value</p>
-          <p className="text-[22px] font-bold text-[var(--label-primary)] tracking-tight tabular-nums mt-1">
-            {formatCurrency(totalCurrentValue)}
-            <span className="text-[12px] font-medium text-[var(--label-tertiary)] ml-2">{filteredAssets.length} assets</span>
-          </p>
+        <Card padding="p-0" className="overflow-hidden">
+          <div className="px-4 py-3 bg-gradient-to-r from-[var(--chart-primary)]/8 via-[var(--chart-primary)]/4 to-transparent">
+            <p className="text-[11px] text-[var(--label-tertiary)] uppercase tracking-wide font-medium">Portfolio Value</p>
+            <p className="text-[22px] font-bold text-[var(--label-primary)] tracking-tight tabular-nums mt-1">
+              {formatCurrency(totalCurrentValue)}
+            </p>
+            <p className="text-[12px] font-medium text-[var(--label-tertiary)] mt-0.5">{filteredAssets.length} assets</p>
+          </div>
         </Card>
 
         {/* Card 2: Invested */}
-        <Card padding="px-4 py-3">
-          <p className="text-[11px] text-[var(--label-tertiary)] uppercase tracking-wide font-medium">Invested</p>
-          <p className="text-[22px] font-bold text-[var(--label-primary)] tracking-tight tabular-nums mt-1">
-            {formatCurrency(totalInvestedValue)}
-          </p>
+        <Card padding="p-0" className="overflow-hidden">
+          <div className="px-4 py-3 bg-gradient-to-r from-[var(--system-gray)]/8 via-[var(--system-gray)]/4 to-transparent">
+            <p className="text-[11px] text-[var(--label-tertiary)] uppercase tracking-wide font-medium">Invested</p>
+            <p className="text-[22px] font-bold text-[var(--label-primary)] tracking-tight tabular-nums mt-1">
+              {formatCurrency(totalInvestedValue)}
+            </p>
+            <p className="text-[12px] font-medium text-[var(--label-tertiary)] mt-0.5">Cost basis</p>
+          </div>
         </Card>
 
         {/* Card 3: Total Returns */}
-        <Card padding="px-4 py-3">
-          <p className="text-[11px] text-[var(--label-tertiary)] uppercase tracking-wide font-medium">Total Returns</p>
-          <p className="mt-1">
-            <span className={`text-[22px] font-bold tabular-nums ${totalGainLoss >= 0 ? 'text-[#059669]' : 'text-[#DC2626]'}`}>
+        <Card padding="p-0" className="overflow-hidden">
+          <div className={`px-4 py-3 bg-gradient-to-r ${totalGainLoss >= 0 ? 'from-[#059669]/10 via-[#059669]/5' : 'from-[#DC2626]/10 via-[#DC2626]/5'} to-transparent`}>
+            <p className="text-[11px] text-[var(--label-tertiary)] uppercase tracking-wide font-medium">Total Returns</p>
+            <p className={`text-[22px] font-bold tabular-nums mt-1 ${totalGainLoss >= 0 ? 'text-[#059669]' : 'text-[#DC2626]'}`}>
               {totalGainLoss >= 0 ? '+' : ''}{formatCurrency(Math.abs(totalGainLoss))}
-            </span>
-            <span className={`text-[13px] font-semibold ml-2 ${totalGainPercent >= 0 ? 'text-[#059669]' : 'text-[#DC2626]'}`}>
-              {totalGainPercent >= 0 ? '+' : ''}{totalGainPercent.toFixed(1)}%
-            </span>
-          </p>
+            </p>
+            <p className={`text-[12px] font-semibold mt-0.5 ${totalGainPercent >= 0 ? 'text-[#059669]' : 'text-[#DC2626]'}`}>
+              {totalGainPercent >= 0 ? '+' : ''}{totalGainPercent.toFixed(2)}% all time
+            </p>
+          </div>
         </Card>
 
         {/* Card 4: Today's Change */}
-        <Card padding="px-4 py-3" className={totalDayChange !== 0 ? (totalDayChange >= 0 ? 'bg-[#059669]/5' : 'bg-[#DC2626]/5') : ''}>
-          <p className="text-[11px] text-[var(--label-tertiary)] uppercase tracking-wide font-medium">Today</p>
-          {totalDayChange !== 0 ? (
-            <p className="mt-1">
-              <span className={`text-[22px] font-bold tabular-nums ${totalDayChange >= 0 ? 'text-[#059669]' : 'text-[#DC2626]'}`}>
-                {totalDayChange >= 0 ? '+' : '-'}{formatCurrency(Math.abs(totalDayChange))}
-              </span>
-              <span className={`text-[13px] font-semibold ml-2 ${totalDayChangePercent >= 0 ? 'text-[#059669]' : 'text-[#DC2626]'}`}>
-                {totalDayChangePercent >= 0 ? '+' : ''}{totalDayChangePercent.toFixed(2)}%
-              </span>
-            </p>
-          ) : (
-            <p className="text-[22px] font-bold text-[var(--label-quaternary)] tabular-nums mt-1">—</p>
-          )}
+        <Card padding="p-0" className="overflow-hidden">
+          <div className={`px-4 py-3 bg-gradient-to-r ${totalDayChange !== 0 ? (totalDayChange >= 0 ? 'from-[#059669]/10 via-[#059669]/5' : 'from-[#DC2626]/10 via-[#DC2626]/5') : 'from-[var(--system-gray)]/8 via-[var(--system-gray)]/4'} to-transparent`}>
+            <p className="text-[11px] text-[var(--label-tertiary)] uppercase tracking-wide font-medium">Today</p>
+            {totalDayChange !== 0 ? (
+              <>
+                <p className={`text-[22px] font-bold tabular-nums mt-1 ${totalDayChange >= 0 ? 'text-[#059669]' : 'text-[#DC2626]'}`}>
+                  {totalDayChange >= 0 ? '+' : '-'}{formatCurrency(Math.abs(totalDayChange))}
+                </p>
+                <p className={`text-[12px] font-semibold mt-0.5 ${totalDayChangePercent >= 0 ? 'text-[#059669]' : 'text-[#DC2626]'}`}>
+                  {totalDayChangePercent >= 0 ? '+' : ''}{totalDayChangePercent.toFixed(2)}% today
+                </p>
+              </>
+            ) : (
+              <>
+                <p className="text-[22px] font-bold text-[var(--label-quaternary)] tabular-nums mt-1">—</p>
+                <p className="text-[12px] font-medium text-[var(--label-tertiary)] mt-0.5">Market closed</p>
+              </>
+            )}
+          </div>
         </Card>
       </motion.div>
 
@@ -623,14 +649,14 @@ export default function Assets() {
         </Card>
       </motion.div>
 
-      {/* Main Content Area - Responsive Hybrid Layout */}
-      <div className="flex gap-4">
-        {/* Left Side - Asset Categories (Full width on < xl, 75% on xl+) */}
+      {/* Main Content Area */}
+      <div>
+        {/* Asset Categories */}
         <motion.div
           variants={staggerContainer}
           initial="initial"
           animate="animate"
-          className="flex-1 xl:flex-[3] space-y-3 min-w-0"
+          className="space-y-3"
         >
         {Object.entries(groupedAssets).map(([category, categoryAssets], categoryIndex) => {
           const config = visualGroupConfig[category] || categoryColors[category] || {};
@@ -653,18 +679,22 @@ export default function Assets() {
               transition={{ ...spring.gentle, delay: categoryIndex * 0.03 }}
             >
               <Card padding="p-0" className="overflow-hidden">
-                {/* Category Header - Compact with Inline Allocation */}
+                {/* Category Header - Gradient Background */}
                 <button
                   onClick={() => toggleCategory(category)}
-                  className="w-full flex items-center gap-4 px-4 py-3.5 bg-[var(--bg-primary)] hover:bg-[var(--fill-tertiary)]/60 transition-colors"
+                  className="w-full flex items-center gap-4 px-4 py-3.5 transition-all hover:brightness-[0.98]"
+                  style={{
+                    background: `linear-gradient(to right, color-mix(in srgb, ${groupColor} 12%, transparent), color-mix(in srgb, ${groupColor} 6%, transparent), transparent)`
+                  }}
                 >
-                  {/* Expand Icon */}
+                  {/* Expand Icon - More Prominent */}
                   <motion.div
                     animate={{ rotate: isExpanded ? 90 : 0 }}
                     transition={spring.snappy}
-                    className="text-[var(--label-secondary)]"
+                    className="w-6 h-6 rounded-md bg-[var(--bg-primary)]/60 flex items-center justify-center"
+                    style={{ color: groupColor }}
                   >
-                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
                       <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
                     </svg>
                   </motion.div>
@@ -672,22 +702,22 @@ export default function Assets() {
                   {/* Category Icon + Name */}
                   <div className="flex items-center gap-3">
                     <div
-                      className="w-8 h-8 rounded-lg flex items-center justify-center"
+                      className="w-9 h-9 rounded-xl flex items-center justify-center shadow-sm"
                       style={{ backgroundColor: groupColor }}
                     >
-                      <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                      <svg className="w-4.5 h-4.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                         {getCategoryIcon(category)}
                       </svg>
                     </div>
                     <div className="text-left">
                       <p className="text-[15px] font-semibold text-[var(--label-primary)]">{groupLabel}</p>
-                      <p className="text-[13px] text-[var(--label-secondary)]">{categoryAssets.length} {categoryAssets.length === 1 ? 'asset' : 'assets'}</p>
+                      <p className="text-[12px] text-[var(--label-secondary)]">{categoryAssets.length} {categoryAssets.length === 1 ? 'asset' : 'assets'}</p>
                     </div>
                   </div>
 
                   {/* Allocation Bar - Inline (narrower) */}
                   <div className="hidden md:flex items-center gap-3 mx-4 flex-1 max-w-md">
-                    <div className="flex-1 h-2 bg-[var(--fill-tertiary)] rounded-full overflow-hidden">
+                    <div className="flex-1 h-1.5 bg-[var(--bg-primary)]/50 rounded-full overflow-hidden">
                       <motion.div
                         initial={{ width: 0 }}
                         animate={{ width: `${categoryWeight}%` }}
@@ -703,7 +733,7 @@ export default function Assets() {
 
                   {/* Value + Returns + Day Change - All in one line */}
                   <div className="flex items-center gap-3 ml-auto">
-                    <p className="text-[16px] font-bold text-[var(--label-primary)] tabular-nums">{formatCompact(categoryTotal)}</p>
+                    <p className="text-[17px] font-bold text-[var(--label-primary)] tabular-nums">{formatCompact(categoryTotal)}</p>
                     <span className={`text-[14px] font-semibold tabular-nums ${categoryGain >= 0 ? 'text-[#059669]' : 'text-[#DC2626]'}`}>
                       {categoryGain >= 0 ? '+' : ''}{categoryGainPercent.toFixed(1)}%
                     </span>
@@ -727,16 +757,16 @@ export default function Assets() {
                       animate={{ height: 'auto', opacity: 1 }}
                       exit={{ height: 0, opacity: 0 }}
                       transition={spring.gentle}
-                      className="overflow-hidden"
+                      style={{ overflow: 'visible' }}
                     >
                       {/* Table Header */}
-                      <div className="hidden md:grid grid-cols-12 gap-3 px-4 py-2.5 bg-[var(--bg-tertiary)] border-y border-[var(--separator-opaque)] text-[12px] font-semibold text-[var(--label-secondary)] uppercase tracking-wide">
+                      <div className="hidden md:grid grid-cols-12 gap-3 px-4 py-2 bg-[var(--fill-tertiary)]/40 border-y border-[var(--separator-opaque)] text-[10px] font-semibold text-[var(--label-tertiary)] uppercase tracking-wider shadow-[0_1px_2px_rgba(0,0,0,0.02)]">
                         <div className="col-span-4">Asset</div>
                         <div className="col-span-2 text-right">Qty / Avg</div>
                         <div className="col-span-2 text-right">Current</div>
                         <div className="col-span-2 text-right">P&L</div>
                         <div className="col-span-1 text-right">Today</div>
-                        <div className="col-span-1 text-right"></div>
+                        <div className="col-span-1 text-right">Actions</div>
                       </div>
 
                       {/* Asset Rows */}
@@ -766,16 +796,19 @@ export default function Assets() {
                               {/* Main Row - Click to Expand */}
                               <div
                                 onClick={(e) => toggleAsset(asset.id, e)}
-                                className="grid grid-cols-12 gap-3 px-4 py-3.5 cursor-pointer hover:bg-[var(--fill-tertiary)]/60 transition-colors items-center"
+                                className="group grid grid-cols-12 gap-3 px-4 py-3 cursor-pointer hover:bg-[var(--fill-tertiary)]/50 transition-all items-center border-l-2 border-transparent hover:border-l-2"
+                                style={{ '--hover-border-color': groupColor }}
+                                onMouseEnter={(e) => e.currentTarget.style.borderLeftColor = groupColor}
+                                onMouseLeave={(e) => e.currentTarget.style.borderLeftColor = 'transparent'}
                               >
                                 {/* Asset Name + Symbol */}
                                 <div className="col-span-12 md:col-span-4 flex items-center gap-2.5">
                                   <motion.div
                                     animate={{ rotate: isRowExpanded ? 90 : 0 }}
                                     transition={spring.snappy}
-                                    className="text-[var(--label-tertiary)] hidden md:block"
+                                    className="hidden md:flex w-5 h-5 rounded items-center justify-center text-[var(--label-tertiary)] group-hover:text-[var(--label-secondary)] group-hover:bg-[var(--fill-tertiary)] transition-all"
                                   >
-                                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
                                       <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
                                     </svg>
                                   </motion.div>
@@ -848,48 +881,70 @@ export default function Assets() {
                                   )}
                                 </div>
 
-                                {/* Actions - Primary + Kebab */}
+                                {/* Actions - Icon Only */}
                                 <div className="hidden md:flex col-span-1 items-center justify-end gap-1">
-                                  {/* Primary Action: Add Transaction */}
-                                  <button
+                                  {/* Add Transaction */}
+                                  <motion.button
+                                    whileHover={{ scale: 1.08 }}
+                                    whileTap={{ scale: 0.95 }}
                                     onClick={(e) => {
                                       e.stopPropagation();
                                       openAddTransaction(asset, e);
                                     }}
-                                    className="w-7 h-7 flex items-center justify-center rounded-lg bg-[var(--chart-primary)]/10 text-[var(--chart-primary)] hover:bg-[var(--chart-primary)]/20 transition-colors"
-                                    title="Add Transaction"
+                                    className="group relative w-8 h-8 flex items-center justify-center rounded-xl bg-[var(--chart-primary)] text-white hover:bg-[var(--chart-primary)]/90 transition-all shadow-sm hover:shadow-md"
                                   >
-                                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                    <svg className="w-[18px] h-[18px]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                                       <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
                                     </svg>
-                                  </button>
+                                    <span className="absolute -top-9 left-1/2 -translate-x-1/2 px-2.5 py-1.5 text-[11px] font-medium text-white bg-[var(--label-primary)] rounded-lg opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-10 shadow-lg">
+                                      Add Transaction
+                                    </span>
+                                  </motion.button>
 
-                                  {/* Kebab Menu */}
-                                  <div className="relative" ref={openMenuId === asset.id ? menuRef : null}>
-                                    <button
+                                  {/* More Options Menu */}
+                                  <div className="relative">
+                                    <motion.button
+                                      ref={el => menuButtonRefs.current[asset.id] = el}
+                                      whileHover={{ scale: 1.08 }}
+                                      whileTap={{ scale: 0.95 }}
                                       onClick={(e) => {
                                         e.stopPropagation();
-                                        setOpenMenuId(openMenuId === asset.id ? null : asset.id);
+                                        if (openMenuId === asset.id) {
+                                          setOpenMenuId(null);
+                                        } else {
+                                          const rect = e.currentTarget.getBoundingClientRect();
+                                          setMenuPosition({
+                                            top: rect.bottom + 8,
+                                            right: window.innerWidth - rect.right,
+                                          });
+                                          setOpenMenuId(asset.id);
+                                        }
                                       }}
-                                      className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-[var(--fill-tertiary)] transition-colors text-[var(--label-tertiary)]"
-                                      title="More actions"
+                                      className="group relative w-8 h-8 flex items-center justify-center rounded-xl bg-[var(--fill-tertiary)] hover:bg-[var(--fill-secondary)] transition-all text-[var(--label-secondary)] hover:text-[var(--label-primary)]"
                                     >
-                                      <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
-                                        <circle cx="12" cy="6" r="1.5" />
-                                        <circle cx="12" cy="12" r="1.5" />
-                                        <circle cx="12" cy="18" r="1.5" />
+                                      <svg className="w-[18px] h-[18px]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                        <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 12a.75.75 0 1 1-1.5 0 .75.75 0 0 1 1.5 0ZM12.75 12a.75.75 0 1 1-1.5 0 .75.75 0 0 1 1.5 0ZM18.75 12a.75.75 0 1 1-1.5 0 .75.75 0 0 1 1.5 0Z" />
                                       </svg>
-                                    </button>
+                                      <span className="absolute -top-9 left-1/2 -translate-x-1/2 px-2.5 py-1.5 text-[11px] font-medium text-white bg-[var(--label-primary)] rounded-lg opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-10 shadow-lg">
+                                        More
+                                      </span>
+                                    </motion.button>
 
-                                    {/* Dropdown Menu */}
-                                    <AnimatePresence>
-                                      {openMenuId === asset.id && (
+                                    {/* Portal Dropdown Menu - Renders outside container */}
+                                    {openMenuId === asset.id && createPortal(
+                                      <AnimatePresence>
                                         <motion.div
-                                          initial={{ opacity: 0, scale: 0.95, y: -5 }}
+                                          ref={menuRef}
+                                          initial={{ opacity: 0, scale: 0.95, y: -8 }}
                                           animate={{ opacity: 1, scale: 1, y: 0 }}
-                                          exit={{ opacity: 0, scale: 0.95, y: -5 }}
-                                          transition={{ duration: 0.15 }}
-                                          className="absolute right-0 top-full mt-1 z-50 bg-[var(--bg-primary)] rounded-xl shadow-lg border border-[var(--separator-opaque)] py-1 min-w-[140px]"
+                                          exit={{ opacity: 0, scale: 0.95, y: -8 }}
+                                          transition={{ type: 'spring', stiffness: 400, damping: 25 }}
+                                          style={{
+                                            position: 'fixed',
+                                            top: menuPosition.top,
+                                            right: menuPosition.right,
+                                          }}
+                                          className="z-[9999] bg-[var(--bg-primary)] rounded-xl shadow-2xl border border-[var(--separator-opaque)] py-1.5 min-w-[160px] overflow-hidden"
                                         >
                                           {(asset.category === 'EQUITY' || asset.category === 'FIXED_INCOME') && (
                                             <Link
@@ -898,11 +953,13 @@ export default function Assets() {
                                                 e.stopPropagation();
                                                 setOpenMenuId(null);
                                               }}
-                                              className="flex items-center gap-2.5 px-3 py-2 text-[13px] text-[var(--label-primary)] hover:bg-[var(--fill-tertiary)] transition-colors"
+                                              className="flex items-center gap-3 px-3.5 py-2.5 text-[13px] font-medium text-[var(--label-primary)] hover:bg-[var(--fill-tertiary)] transition-colors"
                                             >
-                                              <svg className="w-4 h-4 text-[var(--label-tertiary)]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                                                <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                              </svg>
+                                              <div className="w-7 h-7 rounded-lg bg-[var(--fill-tertiary)] flex items-center justify-center">
+                                                <svg className="w-4 h-4 text-[var(--label-secondary)]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                                                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                                </svg>
+                                              </div>
                                               History
                                             </Link>
                                           )}
@@ -912,29 +969,38 @@ export default function Assets() {
                                               e.stopPropagation();
                                               setOpenMenuId(null);
                                             }}
-                                            className="flex items-center gap-2.5 px-3 py-2 text-[13px] text-[var(--label-primary)] hover:bg-[var(--fill-tertiary)] transition-colors"
+                                            className="flex items-center gap-3 px-3.5 py-2.5 text-[13px] font-medium text-[var(--label-primary)] hover:bg-[var(--fill-tertiary)] transition-colors"
                                           >
-                                            <svg className="w-4 h-4 text-[var(--label-tertiary)]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                                              <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125" />
-                                            </svg>
+                                            <div className="w-7 h-7 rounded-lg bg-[var(--fill-tertiary)] flex items-center justify-center">
+                                              <svg className="w-4 h-4 text-[var(--label-secondary)]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                                                <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125" />
+                                              </svg>
+                                            </div>
                                             Edit
                                           </Link>
+
+                                          {/* Divider before destructive action */}
+                                          <div className="my-1.5 mx-3 h-px bg-[var(--separator-opaque)]" />
+
                                           <button
                                             onClick={(e) => {
                                               e.stopPropagation();
                                               setOpenMenuId(null);
                                               handleDelete(asset.id, asset.name, e);
                                             }}
-                                            className="w-full flex items-center gap-2.5 px-3 py-2 text-[13px] text-[var(--system-red)] hover:bg-[var(--system-red)]/10 transition-colors"
+                                            className="w-full flex items-center gap-3 px-3.5 py-2.5 text-[13px] font-medium text-[var(--system-red)] hover:bg-[var(--system-red)]/10 transition-colors"
                                           >
-                                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                                              <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
-                                            </svg>
+                                            <div className="w-7 h-7 rounded-lg bg-[var(--system-red)]/10 flex items-center justify-center">
+                                              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                                                <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
+                                              </svg>
+                                            </div>
                                             Delete
                                           </button>
                                         </motion.div>
-                                      )}
-                                    </AnimatePresence>
+                                      </AnimatePresence>,
+                                      document.body
+                                    )}
                                   </div>
                                 </div>
                               </div>
@@ -1084,147 +1150,17 @@ export default function Assets() {
           </motion.div>
         )}
       </motion.div>
-
-        {/* Right Side - Stats Panel (Hidden on < xl, 25% on xl+) */}
-        <motion.div
-          initial={{ opacity: 0, x: 20 }}
-          animate={{ opacity: 1, x: 0 }}
-          transition={spring.gentle}
-          className="hidden xl:block xl:flex-1 space-y-4 shrink-0"
-        >
-          {/* Quick Stats Card */}
-          <Card padding="p-0">
-            <div className="px-4 py-3 border-b border-[var(--separator-opaque)]">
-              <div className="flex items-center gap-2">
-                <div className="w-6 h-6 rounded-lg bg-[var(--chart-primary)]/10 flex items-center justify-center">
-                  <svg className="w-3.5 h-3.5 text-[var(--chart-primary)]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 013 19.875v-6.75zM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V8.625zM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V4.125z" />
-                  </svg>
-                </div>
-                <span className="text-[14px] font-semibold text-[var(--label-primary)]">Quick Stats</span>
-              </div>
-            </div>
-            <div className="p-4 space-y-3">
-              <div className="flex justify-between items-center">
-                <span className="text-[12px] text-[var(--label-tertiary)]">Total Assets</span>
-                <span className="text-[14px] font-semibold text-[var(--label-primary)] tabular-nums">{filteredAssets.length}</span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-[12px] text-[var(--label-tertiary)]">Today's Change</span>
-                <span className={`text-[14px] font-semibold tabular-nums ${totalDayChange >= 0 ? 'text-[var(--chart-positive)]' : 'text-[var(--chart-negative)]'}`}>
-                  {totalDayChange >= 0 ? '+' : ''}{formatCompact(totalDayChange)}
-                </span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-[12px] text-[var(--label-tertiary)]">Invested</span>
-                <span className="text-[14px] font-semibold text-[var(--label-primary)] tabular-nums">{formatCompact(totalInvestedValue)}</span>
-              </div>
-
-              {/* Top Gainer */}
-              {topGainer && getDayChange(topGainer).percent > 0 && (
-                <div className="pt-3 border-t border-[var(--separator-opaque)]">
-                  <p className="text-[11px] text-[var(--label-tertiary)] uppercase tracking-wide mb-1.5">Top Gainer</p>
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="text-[13px] font-medium text-[var(--label-primary)] truncate">{topGainer.name}</span>
-                    <span className="text-[12px] font-semibold text-[var(--chart-positive)] tabular-nums shrink-0">
-                      +{getDayChange(topGainer).percent.toFixed(2)}%
-                    </span>
-                  </div>
-                </div>
-              )}
-
-              {/* Top Loser */}
-              {topLoser && getDayChange(topLoser).percent < 0 && (
-                <div className={`${topGainer && getDayChange(topGainer).percent > 0 ? '' : 'pt-3 border-t border-[var(--separator-opaque)]'}`}>
-                  <p className="text-[11px] text-[var(--label-tertiary)] uppercase tracking-wide mb-1.5">Top Loser</p>
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="text-[13px] font-medium text-[var(--label-primary)] truncate">{topLoser.name}</span>
-                    <span className="text-[12px] font-semibold text-[var(--chart-negative)] tabular-nums shrink-0">
-                      {getDayChange(topLoser).percent.toFixed(2)}%
-                    </span>
-                  </div>
-                </div>
-              )}
-            </div>
-          </Card>
-
-          {/* Allocation Card */}
-          <Card padding="p-0">
-            <div className="px-4 py-3 border-b border-[var(--separator-opaque)]">
-              <div className="flex items-center gap-2">
-                <div className="w-6 h-6 rounded-lg bg-[var(--system-green)]/10 flex items-center justify-center">
-                  <svg className="w-3.5 h-3.5 text-[var(--system-green)]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 6a7.5 7.5 0 107.5 7.5h-7.5V6z" />
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 10.5H21A7.5 7.5 0 0013.5 3v7.5z" />
-                  </svg>
-                </div>
-                <span className="text-[14px] font-semibold text-[var(--label-primary)]">Allocation</span>
-              </div>
-            </div>
-            <div className="p-4">
-              {categoryAllocation.length > 0 ? (
-                <>
-                  {/* Horizontal Stacked Bar */}
-                  <div className="mb-4">
-                    <div className="h-2.5 rounded-full overflow-hidden flex bg-[var(--fill-tertiary)]">
-                      {categoryAllocation.map((cat, index) => (
-                        <motion.div
-                          key={cat.key}
-                          initial={{ width: 0 }}
-                          animate={{ width: `${cat.percent}%` }}
-                          transition={{ duration: 0.6, delay: index * 0.05, ease: [0.4, 0, 0.2, 1] }}
-                          style={{ backgroundColor: cat.color }}
-                          className="h-full"
-                          title={`${cat.label}: ${cat.percent.toFixed(1)}%`}
-                        />
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Legend */}
-                  <div className="space-y-2">
-                    {categoryAllocation.map((cat) => (
-                      <div key={cat.key} className="flex items-center justify-between">
-                        <div className="flex items-center gap-2 min-w-0">
-                          <div className="w-2.5 h-2.5 rounded-sm shrink-0" style={{ backgroundColor: cat.color }} />
-                          <span className="text-[12px] text-[var(--label-secondary)] truncate">{cat.label}</span>
-                        </div>
-                        <div className="flex items-center gap-2 shrink-0">
-                          <span className="text-[11px] text-[var(--label-tertiary)] tabular-nums">{formatCompact(cat.value)}</span>
-                          <span className="text-[12px] font-semibold text-[var(--label-primary)] w-11 text-right tabular-nums">
-                            {cat.percent.toFixed(1)}%
-                          </span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-
-                  {/* Total */}
-                  <div className="mt-4 pt-3 border-t border-[var(--separator-opaque)]">
-                    <div className="flex items-center justify-between">
-                      <span className="text-[12px] font-medium text-[var(--label-tertiary)]">Total</span>
-                      <span className="text-[14px] font-bold text-[var(--label-primary)] tabular-nums">{formatCompact(totalCurrentValue)}</span>
-                    </div>
-                  </div>
-                </>
-              ) : (
-                <div className="py-4 text-center">
-                  <p className="text-[13px] text-[var(--label-tertiary)]">No allocation data</p>
-                </div>
-              )}
-            </div>
-          </Card>
-        </motion.div>
       </div>
 
-      {/* Quick Add Transaction Bottom Sheet */}
-      <BottomSheet
+      {/* Quick Add Transaction Modal */}
+      <Modal
         isOpen={showAddTransaction}
         onClose={() => {
           setShowAddTransaction(false);
           setSelectedAssetForTxn(null);
         }}
         title="Add Transaction"
+        size="sm"
       >
         {selectedAssetForTxn && (
           <QuickAddTransaction
@@ -1236,7 +1172,7 @@ export default function Assets() {
             }}
           />
         )}
-      </BottomSheet>
+      </Modal>
     </div>
   );
 }

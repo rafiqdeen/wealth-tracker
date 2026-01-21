@@ -14,6 +14,7 @@ import AddAsset from './pages/AddAsset';
 import EditAsset from './pages/EditAsset';
 import TransactionHistory from './pages/TransactionHistory';
 import Goals from './pages/Goals';
+import Insights from './pages/Insights';
 
 // Page transition wrapper
 const PageTransition = ({ children }) => {
@@ -88,6 +89,7 @@ function AnimatedRoutes() {
           <Route path="assets/add" element={<AddAsset />} />
           <Route path="assets/edit/:id" element={<EditAsset />} />
           <Route path="assets/:id/transactions" element={<TransactionHistory />} />
+          <Route path="insights" element={<Insights />} />
           <Route path="goals" element={<Goals />} />
         </Route>
       </Routes>

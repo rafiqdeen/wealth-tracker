@@ -181,8 +181,8 @@ export default function Goals() {
   const labelClass = "block text-[13px] font-medium text-[var(--label-secondary)] mb-2";
 
   return (
-    <div className="min-h-screen bg-[var(--bg-secondary)]">
-      <div className="max-w-6xl mx-auto px-4 py-6">
+    <div className="h-full overflow-auto">
+      <div className="p-4 md:px-12 md:py-6">
         {/* Header */}
         <motion.div
           initial={{ opacity: 0, y: -10 }}

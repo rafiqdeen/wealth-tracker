@@ -508,14 +508,14 @@ export default function Dashboard() {
 
   if (loading) {
     return (
-      <div className="p-5 md:p-6">
+      <div className="p-4 md:px-12 md:py-6">
         <DashboardSkeleton />
       </div>
     );
   }
 
   return (
-    <div className="p-5 md:p-6">
+    <div className="p-4 md:px-12 md:py-6">
       <motion.div
         variants={staggerContainer}
         initial="initial"
@@ -527,33 +527,32 @@ export default function Dashboard() {
 
             {/* Left Column - Portfolio Summary + Holdings + Allocation */}
             <motion.div variants={staggerItem} className="lg:col-span-3 space-y-4">
-              {/* Portfolio Summary Card - Apple Stocks Style */}
-              <Card padding="p-5" className="relative overflow-hidden">
-                <div className="absolute top-0 right-0 w-32 h-32 bg-[var(--chart-primary)]/5 rounded-full -mr-12 -mt-12" />
-                <div className="relative">
+              {/* Portfolio Summary Card - Gradient Style */}
+              <Card padding="p-0" className="overflow-hidden">
+                <div className="p-5 bg-gradient-to-br from-[var(--chart-primary)]/10 via-[var(--chart-primary)]/5 to-transparent">
                   {/* Header */}
                   <div className="flex items-center justify-between mb-1">
-                    <span className="text-[12px] font-medium text-[var(--label-tertiary)] uppercase tracking-wide">Portfolio Value</span>
+                    <span className="text-[11px] font-medium text-[var(--label-tertiary)] uppercase tracking-wide">Portfolio Value</span>
                     <button
                       onClick={handleRefresh}
                       disabled={refreshing}
-                      className="p-1.5 rounded-lg text-[var(--label-tertiary)] hover:bg-[var(--fill-tertiary)] transition-colors disabled:opacity-50"
+                      className="p-1.5 rounded-lg text-[var(--label-tertiary)] hover:bg-[var(--bg-primary)]/50 transition-colors disabled:opacity-50"
                       title="Sync prices"
                     >
-                      <svg className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                      <svg className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                         <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" />
                       </svg>
                     </button>
                   </div>
 
                   {/* Hero Value */}
-                  <p className="text-[32px] font-bold text-[var(--label-primary)] tracking-tight leading-none">
+                  <p className="text-[34px] font-bold text-[var(--label-primary)] tracking-tight leading-none">
                     {formatCompact(totalValue)}
                   </p>
 
                   {/* Returns Badge */}
                   <div className="flex items-center gap-2 mt-2 mb-4">
-                    <span className={`text-[13px] font-semibold ${totalPnL >= 0 ? 'text-[#059669]' : 'text-[#DC2626]'}`}>
+                    <span className={`text-[14px] font-semibold ${totalPnL >= 0 ? 'text-[#059669]' : 'text-[#DC2626]'}`}>
                       {totalPnL >= 0 ? '+' : ''}{formatCompact(totalPnL)} ({totalPnL >= 0 ? '+' : ''}{totalPnLPercent.toFixed(1)}%)
                     </span>
                     {lastUpdated && (
@@ -564,20 +563,20 @@ export default function Dashboard() {
                   </div>
 
                   {/* Divider */}
-                  <div className="h-px bg-[var(--separator-opaque)] mb-4" />
+                  <div className="h-px bg-[var(--separator-opaque)]/50 mb-4" />
 
                   {/* Metrics Row */}
                   <div className="flex items-center justify-between">
                     <div>
                       <p className="text-[11px] text-[var(--label-tertiary)] uppercase tracking-wide mb-0.5">Invested</p>
-                      <p className="text-[17px] font-semibold text-[var(--label-primary)] tracking-tight">
+                      <p className="text-[18px] font-bold text-[var(--label-primary)] tracking-tight">
                         {formatCompact(totalInvested)}
                       </p>
                     </div>
-                    <div className="h-8 w-px bg-[var(--separator-opaque)]" />
+                    <div className="h-8 w-px bg-[var(--separator-opaque)]/50" />
                     <div className="text-right">
                       <p className="text-[11px] text-[var(--label-tertiary)] uppercase tracking-wide mb-0.5">Returns</p>
-                      <p className={`text-[17px] font-semibold tracking-tight ${totalPnL >= 0 ? 'text-[#059669]' : 'text-[#DC2626]'}`}>
+                      <p className={`text-[18px] font-bold tracking-tight ${totalPnL >= 0 ? 'text-[#059669]' : 'text-[#DC2626]'}`}>
                         {totalPnL >= 0 ? '+' : ''}{formatCompact(totalPnL)}
                       </p>
                     </div>
@@ -587,14 +586,30 @@ export default function Dashboard() {
 
               {/* XIRR Card */}
               <Card
-                padding="p-4"
-                className={portfolioXIRR !== null ? 'cursor-pointer hover:bg-[var(--fill-tertiary)]/50 transition-colors group' : ''}
+                padding="p-0"
+                className={`overflow-hidden ${portfolioXIRR !== null ? 'cursor-pointer group' : ''}`}
                 onClick={() => portfolioXIRR !== null && setShowXirrDebug(true)}
               >
-                <div className="flex items-center gap-3">
+                <div className={`p-4 flex items-center gap-3 transition-all ${portfolioXIRR !== null ? 'hover:brightness-[0.98]' : ''}`}
+                  style={{
+                    background: portfolioXIRR !== null
+                      ? portfolioXIRR >= 0
+                        ? 'linear-gradient(to right, rgba(5, 150, 105, 0.08), rgba(5, 150, 105, 0.03), transparent)'
+                        : 'linear-gradient(to right, rgba(220, 38, 38, 0.08), rgba(220, 38, 38, 0.03), transparent)'
+                      : undefined
+                  }}
+                >
                   {/* Icon */}
-                  <div className="w-10 h-10 rounded-xl bg-[var(--chart-primary)]/10 flex items-center justify-center shrink-0">
-                    <svg className="w-5 h-5 text-[var(--chart-primary)]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
+                    portfolioXIRR !== null
+                      ? portfolioXIRR >= 0 ? 'bg-[#059669]/15' : 'bg-[#DC2626]/15'
+                      : 'bg-[var(--fill-tertiary)]'
+                  }`}>
+                    <svg className={`w-5 h-5 ${
+                      portfolioXIRR !== null
+                        ? portfolioXIRR >= 0 ? 'text-[#059669]' : 'text-[#DC2626]'
+                        : 'text-[var(--label-tertiary)]'
+                    }`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                       <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 18L9 11.25l4.306 4.307a11.95 11.95 0 015.814-5.519l2.74-1.22m0 0l-5.94-2.28m5.94 2.28l-2.28 5.941" />
                     </svg>
                   </div>
@@ -603,20 +618,20 @@ export default function Dashboard() {
                   <div className="flex-1 min-w-0">
                     <p className="text-[11px] font-medium text-[var(--label-tertiary)] uppercase tracking-wide mb-0.5">XIRR</p>
                     {portfolioXIRR !== null ? (
-                      <p className={`text-[20px] font-bold tracking-tight leading-none ${portfolioXIRR >= 0 ? 'text-[var(--chart-primary)]' : 'text-[#DC2626]'}`}>
+                      <p className={`text-[22px] font-bold tracking-tight leading-none ${portfolioXIRR >= 0 ? 'text-[#059669]' : 'text-[#DC2626]'}`}>
                         {portfolioXIRR >= 0 ? '+' : ''}{portfolioXIRR.toFixed(1)}%
                         <span className="text-[12px] font-medium text-[var(--label-tertiary)] ml-1">p.a.</span>
                       </p>
                     ) : (
-                      <p className="text-[20px] font-bold text-[var(--label-quaternary)]">—</p>
+                      <p className="text-[22px] font-bold text-[var(--label-quaternary)]">—</p>
                     )}
                   </div>
 
                   {/* Chevron - indicates tappable */}
                   {portfolioXIRR !== null && (
-                    <div className="flex items-center gap-1 text-[var(--label-quaternary)] group-hover:text-[var(--label-tertiary)] transition-colors">
+                    <div className="flex items-center gap-1 text-[var(--label-quaternary)] group-hover:text-[var(--label-secondary)] transition-colors">
                       <span className="text-[11px] hidden sm:inline">Details</span>
-                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
                         <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
                       </svg>
                     </div>
@@ -625,15 +640,15 @@ export default function Dashboard() {
               </Card>
 
               {/* Allocation */}
-              <Card padding="p-0">
-                <div className="flex items-center gap-3 py-3 px-4 border-b border-[var(--separator-opaque)]">
-                  <div className="w-8 h-8 rounded-lg bg-[var(--system-green)]/10 flex items-center justify-center">
-                    <svg className="w-4 h-4 text-[var(--system-green)]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+              <Card padding="p-0" className="overflow-hidden">
+                <div className="flex items-center gap-3 py-3.5 px-4 bg-gradient-to-r from-[var(--system-green)]/10 via-[var(--system-green)]/5 to-transparent">
+                  <div className="w-9 h-9 rounded-xl bg-[var(--system-green)] flex items-center justify-center shadow-sm">
+                    <svg className="w-[18px] h-[18px] text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                       <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 6a7.5 7.5 0 107.5 7.5h-7.5V6z" />
                       <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 10.5H21A7.5 7.5 0 0013.5 3v7.5z" />
                     </svg>
                   </div>
-                  <span className="text-[14px] font-semibold text-[var(--label-primary)]">Allocation</span>
+                  <span className="text-[15px] font-semibold text-[var(--label-primary)]">Allocation</span>
                 </div>
                 <div className="p-4">
 
@@ -692,22 +707,22 @@ export default function Dashboard() {
             <motion.div variants={staggerItem} className="lg:col-span-9 space-y-4">
               <Card padding="p-0" className="overflow-hidden">
                 {/* Header */}
-                <div className="flex items-center justify-between py-3 px-4 border-b border-[var(--separator-opaque)]">
+                <div className="flex items-center justify-between py-3.5 px-5 bg-gradient-to-r from-[var(--chart-primary)]/10 via-[var(--chart-primary)]/5 to-transparent">
                   <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-lg bg-[var(--chart-primary)]/10 flex items-center justify-center">
-                      <svg className="w-4 h-4 text-[var(--chart-primary)]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                    <div className="w-9 h-9 rounded-xl bg-[var(--chart-primary)] flex items-center justify-center shadow-sm">
+                      <svg className="w-[18px] h-[18px] text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                         <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 18L9 11.25l4.306 4.307a11.95 11.95 0 015.814-5.519l2.74-1.22m0 0l-5.94-2.28m5.94 2.28l-2.28 5.941" />
                       </svg>
                     </div>
-                    <span className="text-[14px] font-semibold text-[var(--label-primary)]">Investment Journey</span>
+                    <span className="text-[15px] font-semibold text-[var(--label-primary)]">Investment Journey</span>
                   </div>
                   {/* Export Button */}
                   <button
                     onClick={handleExportPDF}
                     disabled={assets.length === 0}
-                    className="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-[var(--separator-opaque)] text-[var(--label-secondary)] hover:bg-[var(--fill-tertiary)] transition-colors disabled:opacity-50 text-[13px] font-medium"
+                    className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-[var(--bg-primary)]/60 text-[var(--label-secondary)] hover:bg-[var(--bg-primary)] transition-colors disabled:opacity-50 text-[13px] font-medium"
                   >
-                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                       <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
                     </svg>
                     Export
@@ -843,18 +858,18 @@ export default function Dashboard() {
               </Card>
 
               {/* Holdings Table */}
-              <Card padding="p-0" className="hidden lg:block">
-                <div className="flex items-center justify-between py-3 px-4 border-b border-[var(--separator-opaque)]">
+              <Card padding="p-0" className="hidden lg:block overflow-hidden">
+                <div className="flex items-center justify-between py-3.5 px-4 bg-gradient-to-r from-[var(--system-purple)]/10 via-[var(--system-purple)]/5 to-transparent">
                   <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-lg bg-[var(--system-purple)]/10 flex items-center justify-center">
-                      <svg className="w-4 h-4 text-[var(--system-purple)]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                    <div className="w-9 h-9 rounded-xl bg-[var(--system-purple)] flex items-center justify-center shadow-sm">
+                      <svg className="w-[18px] h-[18px] text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                         <path strokeLinecap="round" strokeLinejoin="round" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
                       </svg>
                     </div>
-                    <span className="text-[14px] font-semibold text-[var(--label-primary)]">Holdings</span>
+                    <span className="text-[15px] font-semibold text-[var(--label-primary)]">Holdings</span>
                     <span className="text-[12px] text-[var(--label-tertiary)]">({holdings.length} assets)</span>
                   </div>
-                  <Link to="/assets" className="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-[var(--separator-opaque)] text-[var(--label-secondary)] hover:bg-[var(--fill-tertiary)] transition-colors text-[13px] font-medium">
+                  <Link to="/assets" className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-[var(--bg-primary)]/60 text-[var(--label-secondary)] hover:bg-[var(--bg-primary)] transition-colors text-[13px] font-medium">
                     View All
                   </Link>
                 </div>
