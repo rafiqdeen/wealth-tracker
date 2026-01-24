@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
+import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, PieChart, Pie, Cell } from 'recharts';
 import { assetService, priceService, ASSET_CONFIG } from '../services/assets';
 import { portfolioService } from '../services/portfolio';
 import { Card, Button, DashboardSkeleton, AnimatedNumber } from '../components/apple';
@@ -219,6 +219,15 @@ export default function Dashboard() {
         const calc = fixedIncomeCalcs[asset.id];
         currentValue = calc?.currentValue || asset.principal || 0;
         invested = calc?.principal || asset.principal || 0;
+      } else if (asset.category === 'REAL_ESTATE' && asset.appreciation_rate && asset.purchase_price && asset.purchase_date) {
+        // Calculate appreciated value for Real Estate
+        const purchasePrice = parseFloat(asset.purchase_price);
+        const rate = parseFloat(asset.appreciation_rate) / 100;
+        const purchaseDate = new Date(asset.purchase_date);
+        const today = new Date();
+        const years = (today - purchaseDate) / (365.25 * 24 * 60 * 60 * 1000);
+        currentValue = Math.round(purchasePrice * Math.pow(1 + rate, Math.max(0, years)));
+        invested = purchasePrice;
       } else {
         currentValue = asset.current_value || asset.balance || 0;
         invested = asset.purchase_price || asset.principal || asset.balance || 0;
@@ -268,6 +277,20 @@ export default function Dashboard() {
   }, []);
 
 
+  // Calculate appreciated value for Real Estate
+  const getAppreciatedValue = (asset) => {
+    if (asset.category !== 'REAL_ESTATE' || !asset.appreciation_rate || !asset.purchase_price || !asset.purchase_date) {
+      return null;
+    }
+    const purchasePrice = parseFloat(asset.purchase_price);
+    const rate = parseFloat(asset.appreciation_rate) / 100;
+    const purchaseDate = new Date(asset.purchase_date);
+    const today = new Date();
+    const years = (today - purchaseDate) / (365.25 * 24 * 60 * 60 * 1000);
+    if (years < 0) return purchasePrice;
+    return Math.round(purchasePrice * Math.pow(1 + rate, years));
+  };
+
   const getAssetValue = (asset) => {
     if (asset.category === 'EQUITY' && asset.quantity && asset.symbol) {
       const priceKey = asset.asset_type === 'MUTUAL_FUND' ? asset.symbol : `${asset.symbol}.${asset.exchange === 'BSE' ? 'BO' : 'NS'}`;
@@ -281,6 +304,11 @@ export default function Dashboard() {
       if (calc) return calc.currentValue;
       // Fallback to principal if no transactions fetched yet
       if (asset.principal) return asset.principal;
+    }
+    // For Real Estate, calculate appreciated value dynamically
+    if (asset.category === 'REAL_ESTATE') {
+      const appreciated = getAppreciatedValue(asset);
+      if (appreciated) return appreciated;
     }
     if (asset.quantity && asset.avg_buy_price) return asset.quantity * asset.avg_buy_price;
     if (asset.principal) return asset.principal;
@@ -639,7 +667,7 @@ export default function Dashboard() {
                 </div>
               </Card>
 
-              {/* Allocation */}
+              {/* Allocation - Donut Chart */}
               <Card padding="p-0" className="overflow-hidden">
                 <div className="flex items-center gap-3 py-3.5 px-4 bg-gradient-to-r from-[var(--system-green)]/10 via-[var(--system-green)]/5 to-transparent">
                   <div className="w-9 h-9 rounded-xl bg-[var(--system-green)] flex items-center justify-center shadow-sm">
@@ -651,54 +679,84 @@ export default function Dashboard() {
                   <span className="text-[15px] font-semibold text-[var(--label-primary)]">Allocation</span>
                 </div>
                 <div className="p-4">
+                  {categoryBreakdown.length > 0 ? (
+                    <>
+                      {/* Donut Chart */}
+                      <div className="relative flex justify-center">
+                        <div className="w-[200px] h-[200px]">
+                          <ResponsiveContainer width="100%" height="100%">
+                            <PieChart>
+                              <Pie
+                                data={categoryBreakdown}
+                                cx="50%"
+                                cy="50%"
+                                innerRadius={62}
+                                outerRadius={90}
+                                paddingAngle={2}
+                                dataKey="value"
+                                stroke="none"
+                                animationBegin={0}
+                                animationDuration={800}
+                              >
+                                {categoryBreakdown.map((entry, index) => (
+                                  <Cell
+                                    key={`cell-${index}`}
+                                    fill={entry.color}
+                                    className="transition-all duration-200 hover:opacity-80"
+                                    style={{ filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.1))' }}
+                                  />
+                                ))}
+                              </Pie>
+                              <Tooltip
+                                position={{ x: 0, y: -10 }}
+                                wrapperStyle={{ top: 0, left: '50%', transform: 'translateX(-50%)', pointerEvents: 'none' }}
+                                content={({ active, payload }) => {
+                                  if (active && payload && payload.length) {
+                                    const data = payload[0].payload;
+                                    return (
+                                      <div className="bg-[var(--bg-primary)] border border-[var(--separator-opaque)] rounded-xl px-3 py-2 shadow-lg whitespace-nowrap">
+                                        <div className="flex items-center gap-2">
+                                          <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: data.color }} />
+                                          <p className="text-[12px] font-semibold text-[var(--label-primary)]">{data.name}</p>
+                                        </div>
+                                        <p className="text-[11px] text-[var(--label-secondary)] ml-[18px]">{formatCompact(data.value)} · {data.percent.toFixed(1)}%</p>
+                                      </div>
+                                    );
+                                  }
+                                  return null;
+                                }}
+                              />
+                            </PieChart>
+                          </ResponsiveContainer>
+                          {/* Center Text */}
+                          <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+                            <span className="text-[10px] font-medium text-[var(--label-tertiary)] uppercase tracking-wide">Total</span>
+                            <span className="text-[18px] font-bold text-[var(--label-primary)]">{formatCompact(totalValue)}</span>
+                          </div>
+                        </div>
+                      </div>
 
-                {categoryBreakdown.length > 0 ? (
-                  <>
-                    {/* Horizontal Stacked Bar */}
-                    <div className="mb-4">
-                      <div className="h-3 rounded-full overflow-hidden flex bg-[var(--fill-tertiary)]">
-                        {categoryBreakdown.map((cat, index) => (
-                          <motion.div
-                            key={cat.name}
-                            initial={{ width: 0 }}
-                            animate={{ width: `${cat.percent}%` }}
-                            transition={{ duration: 0.6, delay: index * 0.05, ease: [0.4, 0, 0.2, 1] }}
-                            style={{ backgroundColor: cat.color }}
-                            className="h-full"
-                            title={`${cat.name}: ${cat.percent.toFixed(1)}%`}
-                          />
+                      {/* Legend */}
+                      <div className="mt-4 grid grid-cols-2 gap-x-4 gap-y-2">
+                        {categoryBreakdown.map((cat) => (
+                          <div key={cat.name} className="flex items-center gap-2 group cursor-default">
+                            <div
+                              className="w-2.5 h-2.5 rounded-full flex-shrink-0 ring-2 ring-transparent group-hover:ring-[var(--label-tertiary)]/20 transition-all"
+                              style={{ backgroundColor: cat.color }}
+                            />
+                            <span className="text-[11px] text-[var(--label-secondary)] truncate flex-1">{cat.name}</span>
+                            <span className="text-[11px] font-semibold text-[var(--label-primary)]">
+                              {cat.percent.toFixed(1)}%
+                            </span>
+                          </div>
                         ))}
                       </div>
+                    </>
+                  ) : (
+                    <div className="py-6 text-center">
+                      <p className="text-[13px] text-[var(--label-tertiary)]">No allocation data</p>
                     </div>
-
-                    {/* Legend */}
-                    <div className="space-y-2.5">
-                      {categoryBreakdown.map((cat) => (
-                        <div key={cat.name} className="flex items-center justify-between">
-                          <div className="flex items-center gap-2">
-                            <div className="w-2.5 h-2.5 rounded-sm" style={{ backgroundColor: cat.color }} />
-                            <span className="text-[12px] text-[var(--label-secondary)]">{cat.name}</span>
-                          </div>
-                          <span className="text-[12px] font-semibold text-[var(--label-primary)]">
-                            {cat.percent.toFixed(1)}%
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-
-                    {/* Total */}
-                    <div className="mt-4 pt-3 border-t border-[var(--separator-opaque)]">
-                      <div className="flex items-center justify-between">
-                        <span className="text-[12px] font-medium text-[var(--label-tertiary)]">Total</span>
-                        <span className="text-[14px] font-bold text-[var(--label-primary)]">{formatCompact(totalValue)}</span>
-                      </div>
-                    </div>
-                  </>
-                ) : (
-                  <div className="py-6 text-center">
-                    <p className="text-[13px] text-[var(--label-tertiary)]">No allocation data</p>
-                  </div>
-                )}
+                  )}
                 </div>
               </Card>
             </motion.div>

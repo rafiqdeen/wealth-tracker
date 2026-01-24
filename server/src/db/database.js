@@ -84,6 +84,25 @@ export function initializeDb() {
     )
   `);
 
+  // Metal prices table (gold, silver)
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS metal_prices (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      metal TEXT NOT NULL,
+      price_per_gram REAL NOT NULL,
+      price_per_gram_24k REAL NOT NULL,
+      currency TEXT DEFAULT 'INR',
+      fetched_at DATETIME NOT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(metal, fetched_at)
+    )
+  `);
+
+  // Create index for metal prices
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_metal_prices_metal_date ON metal_prices(metal, fetched_at);
+  `);
+
   // Transactions table for buy/sell tracking
   db.exec(`
     CREATE TABLE IF NOT EXISTS transactions (
@@ -125,6 +144,12 @@ export function initializeDb() {
   const hasStatus = assetColumns.some(col => col.name === 'status');
   if (!hasStatus) {
     db.exec(`ALTER TABLE assets ADD COLUMN status TEXT DEFAULT 'ACTIVE'`);
+  }
+
+  // Add appreciation_rate column for Real Estate auto-valuation
+  const hasAppreciationRate = assetColumns.some(col => col.name === 'appreciation_rate');
+  if (!hasAppreciationRate) {
+    db.exec(`ALTER TABLE assets ADD COLUMN appreciation_rate REAL`);
   }
 
   // Create indexes for better performance

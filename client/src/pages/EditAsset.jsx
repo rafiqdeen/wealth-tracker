@@ -32,6 +32,8 @@ export default function EditAsset() {
     current_value: '',
     location: '',
     area_sqft: '',
+    appreciation_rate: '',
+    real_estate_calc_mode: 'rate',
     balance: '',
     weight_grams: '',
     purity: '',
@@ -70,6 +72,8 @@ export default function EditAsset() {
         current_value: roundPrice(asset.current_value),
         location: asset.location || '',
         area_sqft: asset.area_sqft || '',
+        appreciation_rate: asset.appreciation_rate || '',
+        real_estate_calc_mode: asset.appreciation_rate ? 'rate' : (asset.current_value ? 'value' : 'rate'),
         balance: asset.balance || '',
         weight_grams: asset.weight_grams || '',
         purity: asset.purity || '',
@@ -97,7 +101,30 @@ export default function EditAsset() {
     setSaving(true);
 
     try {
-      await assetService.update(id, formData);
+      let dataToSubmit = { ...formData };
+
+      // Calculate appreciated value and rate for Real Estate based on mode
+      if (formData.category === 'REAL_ESTATE' && formData.purchase_price && formData.purchase_date) {
+        const purchasePrice = parseFloat(formData.purchase_price);
+        const purchaseDate = new Date(formData.purchase_date);
+        const today = new Date();
+        const years = (today - purchaseDate) / (365.25 * 24 * 60 * 60 * 1000);
+        const calcMode = formData.real_estate_calc_mode || 'rate';
+
+        if (calcMode === 'rate' && formData.appreciation_rate) {
+          // Mode: Enter rate → Calculate value
+          const rate = parseFloat(formData.appreciation_rate) / 100;
+          dataToSubmit.current_value = Math.round(purchasePrice * Math.pow(1 + rate, Math.max(0, years)));
+        } else if (calcMode === 'value' && formData.current_value) {
+          // Mode: Enter value → Calculate rate
+          const currentValue = parseFloat(formData.current_value);
+          if (years > 0 && purchasePrice > 0) {
+            dataToSubmit.appreciation_rate = Math.round((Math.pow(currentValue / purchasePrice, 1 / years) - 1) * 1000) / 10;
+          }
+        }
+      }
+
+      await assetService.update(id, dataToSubmit);
       navigate('/assets');
     } catch (err) {
       setError(err.response?.data?.error || 'Failed to update asset');
@@ -114,6 +141,23 @@ export default function EditAsset() {
     }
     if (category === 'FIXED_INCOME') return principal || 0;
     if (category === 'SAVINGS') return balance || 0;
+
+    // For Real Estate, calculate appreciated value if in rate mode
+    if (category === 'REAL_ESTATE') {
+      const calcMode = formData.real_estate_calc_mode || 'rate';
+      if (calcMode === 'rate' && purchase_price && formData.purchase_date && formData.appreciation_rate) {
+        const purchasePrice = parseFloat(purchase_price);
+        const rate = parseFloat(formData.appreciation_rate) / 100;
+        const purchaseDate = new Date(formData.purchase_date);
+        const today = new Date();
+        const years = (today - purchaseDate) / (365.25 * 24 * 60 * 60 * 1000);
+        if (years > 0) {
+          return Math.round(purchasePrice * Math.pow(1 + rate, years));
+        }
+        return purchasePrice;
+      }
+    }
+
     return current_value || purchase_price || 0;
   };
 
@@ -179,25 +223,132 @@ export default function EditAsset() {
         );
 
       case 'REAL_ESTATE':
+        // Calculate values based on mode
+        const calcMode = formData.real_estate_calc_mode || 'rate';
+
+        // Calculate appreciated value (when mode is 'rate')
+        const appreciatedValue = (() => {
+          if (calcMode !== 'rate' || !formData.purchase_price || !formData.purchase_date || !formData.appreciation_rate) return null;
+          const purchasePrice = parseFloat(formData.purchase_price);
+          const rate = parseFloat(formData.appreciation_rate) / 100;
+          const purchaseDate = new Date(formData.purchase_date);
+          const today = new Date();
+          const years = (today - purchaseDate) / (365.25 * 24 * 60 * 60 * 1000);
+          if (years <= 0) return purchasePrice;
+          return Math.round(purchasePrice * Math.pow(1 + rate, years));
+        })();
+
+        // Calculate appreciation rate (when mode is 'value')
+        const calculatedRate = (() => {
+          if (calcMode !== 'value' || !formData.purchase_price || !formData.purchase_date || !formData.current_value) return null;
+          const purchasePrice = parseFloat(formData.purchase_price);
+          const currentValue = parseFloat(formData.current_value);
+          const purchaseDate = new Date(formData.purchase_date);
+          const today = new Date();
+          const years = (today - purchaseDate) / (365.25 * 24 * 60 * 60 * 1000);
+          if (years <= 0 || purchasePrice <= 0) return null;
+          const rate = (Math.pow(currentValue / purchasePrice, 1 / years) - 1) * 100;
+          return Math.round(rate * 10) / 10;
+        })();
+
         return (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-            <div>
-              <label className={labelClass}>Purchase Price</label>
-              <input type="number" name="purchase_price" value={formData.purchase_price} onChange={handleChange} placeholder="0" className={inputClass} />
+          <>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-5 mb-5">
+              <div>
+                <label className={labelClass}>Purchase Price</label>
+                <input type="number" name="purchase_price" value={formData.purchase_price} onChange={handleChange} placeholder="0" className={inputClass} />
+              </div>
+              <div>
+                <label className={labelClass}>Purchase Date</label>
+                <input type="date" name="purchase_date" value={formData.purchase_date} onChange={handleChange} className={inputClass} />
+              </div>
             </div>
-            <div>
-              <label className={labelClass}>Current Value</label>
-              <input type="number" name="current_value" value={formData.current_value} onChange={handleChange} placeholder="0" className={inputClass} />
+
+            {/* Calculation Mode Toggle */}
+            <div className="mb-5">
+              <div className="flex items-center justify-between mb-3">
+                <span className="text-[13px] font-medium text-[var(--label-secondary)]">Calculate By</span>
+                <div className="flex items-center bg-[var(--fill-tertiary)] rounded-lg p-0.5">
+                  <button
+                    type="button"
+                    onClick={() => setFormData(prev => ({ ...prev, real_estate_calc_mode: 'rate', current_value: '' }))}
+                    className={`px-3 py-1.5 text-[12px] font-medium rounded-md transition-all ${
+                      calcMode === 'rate'
+                        ? 'bg-[var(--bg-primary)] text-[var(--label-primary)] shadow-sm'
+                        : 'text-[var(--label-secondary)] hover:text-[var(--label-primary)]'
+                    }`}
+                  >
+                    Enter Rate
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setFormData(prev => ({ ...prev, real_estate_calc_mode: 'value', appreciation_rate: '' }))}
+                    className={`px-3 py-1.5 text-[12px] font-medium rounded-md transition-all ${
+                      calcMode === 'value'
+                        ? 'bg-[var(--bg-primary)] text-[var(--label-primary)] shadow-sm'
+                        : 'text-[var(--label-secondary)] hover:text-[var(--label-primary)]'
+                    }`}
+                  >
+                    Enter Value
+                  </button>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                <div>
+                  <label className={labelClass}>
+                    Appreciation Rate
+                    {calcMode === 'value' && calculatedRate !== null && <span className="text-[var(--system-green)] ml-1">(Auto)</span>}
+                  </label>
+                  <div className="relative">
+                    <input
+                      type="number"
+                      name="appreciation_rate"
+                      value={calcMode === 'value' && calculatedRate !== null ? calculatedRate : formData.appreciation_rate}
+                      onChange={handleChange}
+                      placeholder="6"
+                      step="0.1"
+                      readOnly={calcMode === 'value'}
+                      className={`${inputClass} pr-16 ${calcMode === 'value' ? 'bg-[var(--system-green)]/5' : ''}`}
+                    />
+                    <span className="absolute right-4 top-1/2 -translate-y-1/2 text-[var(--label-tertiary)] text-[13px]">% p.a.</span>
+                  </div>
+                  {calcMode === 'rate' && (
+                    <p className="text-[11px] text-[var(--label-tertiary)] mt-1">Typical: 5-8% for residential</p>
+                  )}
+                </div>
+                <div>
+                  <label className={labelClass}>
+                    Current Value
+                    {calcMode === 'rate' && appreciatedValue && <span className="text-[var(--system-green)] ml-1">(Auto)</span>}
+                  </label>
+                  <input
+                    type="number"
+                    name="current_value"
+                    value={calcMode === 'rate' && appreciatedValue ? appreciatedValue : formData.current_value}
+                    onChange={handleChange}
+                    placeholder="0"
+                    readOnly={calcMode === 'rate'}
+                    className={`${inputClass} ${calcMode === 'rate' ? 'bg-[var(--system-green)]/5' : ''}`}
+                  />
+                  {calcMode === 'value' && (
+                    <p className="text-[11px] text-[var(--label-tertiary)] mt-1">Enter estimated market value</p>
+                  )}
+                </div>
+              </div>
             </div>
-            <div>
-              <label className={labelClass}>Location</label>
-              <input type="text" name="location" value={formData.location} onChange={handleChange} placeholder="City, State" className={inputClass} />
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+              <div>
+                <label className={labelClass}>Location</label>
+                <input type="text" name="location" value={formData.location} onChange={handleChange} placeholder="City, State" className={inputClass} />
+              </div>
+              <div>
+                <label className={labelClass}>Area (sq.ft)</label>
+                <input type="number" name="area_sqft" value={formData.area_sqft} onChange={handleChange} placeholder="0" className={inputClass} />
+              </div>
             </div>
-            <div>
-              <label className={labelClass}>Area (sq.ft)</label>
-              <input type="number" name="area_sqft" value={formData.area_sqft} onChange={handleChange} placeholder="0" className={inputClass} />
-            </div>
-          </div>
+          </>
         );
 
       case 'PHYSICAL':
