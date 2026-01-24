@@ -110,8 +110,8 @@ router.get('/search/stocks', authenticateToken, async (req, res) => {
   try {
     const { q } = req.query;
 
-    if (!q || q.length < 2) {
-      return res.status(400).json({ error: 'Search query must be at least 2 characters' });
+    if (!q || q.length < 3) {
+      return res.status(400).json({ error: 'Search query must be at least 3 characters' });
     }
 
     const url = `https://query1.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(q)}&quotesCount=15&newsCount=0&listsCount=0&enableFuzzyQuery=false&quotesQueryId=tss_match_phrase_query`;

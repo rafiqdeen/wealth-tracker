@@ -35,7 +35,7 @@ export default function StockAutocomplete({
   }, [value]);
 
   const searchAssets = async (searchQuery) => {
-    if (!searchQuery || searchQuery.length < 2) {
+    if (!searchQuery || searchQuery.length < 3) {
       setResults([]);
       return;
     }
@@ -158,7 +158,7 @@ export default function StockAutocomplete({
           </motion.ul>
         )}
 
-        {showDropdown && query.length >= 2 && !loading && results.length === 0 && (
+        {showDropdown && query.length >= 3 && !loading && results.length === 0 && (
           <motion.div
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
@@ -176,6 +176,23 @@ export default function StockAutocomplete({
                 <p className="font-medium text-[var(--label-primary)]">No results found</p>
                 <p className="text-[13px]">Try a different search term</p>
               </div>
+            </div>
+          </motion.div>
+        )}
+
+        {query.length > 0 && query.length < 3 && (
+          <motion.div
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            transition={spring.snappy}
+            className="absolute z-50 mt-2 w-full bg-[var(--bg-primary)] rounded-xl shadow-lg shadow-black/10 p-3 text-[14px] text-[var(--label-tertiary)] border border-[var(--separator)]/30"
+          >
+            <div className="flex items-center gap-2">
+              <svg className="w-4 h-4 text-[var(--label-quaternary)]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
+              </svg>
+              <span>Type at least 3 characters to search</span>
             </div>
           </motion.div>
         )}

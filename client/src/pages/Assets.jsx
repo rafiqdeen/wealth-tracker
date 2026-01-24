@@ -8,7 +8,7 @@ import QuickAddTransaction from '../components/QuickAddTransaction';
 import { spring, staggerContainer, staggerItem } from '../utils/animations';
 import { categoryColors } from '../constants/theme';
 import { formatCurrency, formatCompact } from '../utils/formatting';
-import { calculateFixedIncomeValue, getCompoundingFrequency } from '../utils/interest';
+import { calculateFixedIncomeValue, getCompoundingFrequency, calculateXIRRFromTransactions } from '../utils/interest';
 import { useToast } from '../context/ToastContext';
 
 export default function Assets() {
@@ -123,12 +123,15 @@ export default function Assets() {
           const txnResponse = await assetService.getTransactions(asset.id);
           const transactions = txnResponse.data.transactions || [];
           if (transactions.length > 0) {
-            // Sort by date ascending and get the first one
-            const sorted = [...transactions].sort((a, b) => new Date(a.date) - new Date(b.date));
+            // Sort by date ascending and get the first one (field is transaction_date, not date)
+            const sorted = [...transactions].sort((a, b) =>
+              new Date(a.transaction_date || a.date) - new Date(b.transaction_date || b.date)
+            );
             dates[asset.id] = {
-              firstDate: sorted[0].date,
-              lastDate: sorted[sorted.length - 1].date,
-              count: transactions.length
+              firstDate: sorted[0].transaction_date || sorted[0].date,
+              lastDate: sorted[sorted.length - 1].transaction_date || sorted[sorted.length - 1].date,
+              count: transactions.length,
+              transactions: transactions // Store transactions for XIRR calculation
             };
           }
         })
@@ -524,7 +527,7 @@ export default function Assets() {
         {/* Card 1: Portfolio Value */}
         <Card padding="p-0" className="overflow-hidden">
           <div className="px-4 py-3 bg-gradient-to-r from-[var(--chart-primary)]/8 via-[var(--chart-primary)]/4 to-transparent">
-            <p className="text-[11px] text-[var(--label-tertiary)] uppercase tracking-wide font-medium">Portfolio Value</p>
+            <p className="text-[11px] text-[var(--label-secondary)] uppercase tracking-wide font-medium">Portfolio Value</p>
             <p className="text-[22px] font-bold text-[var(--label-primary)] tracking-tight tabular-nums mt-1">
               {formatCurrency(totalCurrentValue)}
             </p>
@@ -535,7 +538,7 @@ export default function Assets() {
         {/* Card 2: Invested */}
         <Card padding="p-0" className="overflow-hidden">
           <div className="px-4 py-3 bg-gradient-to-r from-[var(--system-gray)]/8 via-[var(--system-gray)]/4 to-transparent">
-            <p className="text-[11px] text-[var(--label-tertiary)] uppercase tracking-wide font-medium">Invested</p>
+            <p className="text-[11px] text-[var(--label-secondary)] uppercase tracking-wide font-medium">Invested</p>
             <p className="text-[22px] font-bold text-[var(--label-primary)] tracking-tight tabular-nums mt-1">
               {formatCurrency(totalInvestedValue)}
             </p>
@@ -546,7 +549,7 @@ export default function Assets() {
         {/* Card 3: Total Returns */}
         <Card padding="p-0" className="overflow-hidden">
           <div className={`px-4 py-3 bg-gradient-to-r ${totalGainLoss >= 0 ? 'from-[#059669]/10 via-[#059669]/5' : 'from-[#DC2626]/10 via-[#DC2626]/5'} to-transparent`}>
-            <p className="text-[11px] text-[var(--label-tertiary)] uppercase tracking-wide font-medium">Total Returns</p>
+            <p className="text-[11px] text-[var(--label-secondary)] uppercase tracking-wide font-medium">Total Returns</p>
             <p className={`text-[22px] font-bold tabular-nums mt-1 ${totalGainLoss >= 0 ? 'text-[#059669]' : 'text-[#DC2626]'}`}>
               {totalGainLoss >= 0 ? '+' : ''}{formatCurrency(Math.abs(totalGainLoss))}
             </p>
@@ -559,7 +562,7 @@ export default function Assets() {
         {/* Card 4: Today's Change */}
         <Card padding="p-0" className="overflow-hidden">
           <div className={`px-4 py-3 bg-gradient-to-r ${totalDayChange !== 0 ? (totalDayChange >= 0 ? 'from-[#059669]/10 via-[#059669]/5' : 'from-[#DC2626]/10 via-[#DC2626]/5') : 'from-[var(--system-gray)]/8 via-[var(--system-gray)]/4'} to-transparent`}>
-            <p className="text-[11px] text-[var(--label-tertiary)] uppercase tracking-wide font-medium">Today</p>
+            <p className="text-[11px] text-[var(--label-secondary)] uppercase tracking-wide font-medium">Today</p>
             {totalDayChange !== 0 ? (
               <>
                 <p className={`text-[22px] font-bold tabular-nums mt-1 ${totalDayChange >= 0 ? 'text-[#059669]' : 'text-[#DC2626]'}`}>
@@ -1018,23 +1021,39 @@ export default function Assets() {
                                     <div className="px-4 pb-4 pt-1">
                                       <div className="bg-[var(--bg-secondary)] rounded-xl p-4">
                                         {/* Stats Grid */}
-                                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+                                        <div className={`grid grid-cols-2 gap-4 mb-4 ${asset.asset_type === 'MUTUAL_FUND' ? 'md:grid-cols-5' : 'md:grid-cols-4'}`}>
                                           <div>
-                                            <p className="text-[10px] text-[var(--label-tertiary)] uppercase tracking-wide mb-0.5">Invested</p>
+                                            <p className="text-[11px] text-[var(--label-secondary)] uppercase tracking-wide font-medium mb-0.5">Invested</p>
                                             <p className="text-[14px] font-medium text-[var(--label-primary)] tabular-nums">{formatCurrency(investedValue)}</p>
                                           </div>
                                           <div>
-                                            <p className="text-[10px] text-[var(--label-tertiary)] uppercase tracking-wide mb-0.5">Current</p>
+                                            <p className="text-[11px] text-[var(--label-secondary)] uppercase tracking-wide font-medium mb-0.5">Current</p>
                                             <p className="text-[14px] font-medium text-[var(--label-primary)] tabular-nums">{formatCurrency(currentValue)}</p>
                                           </div>
                                           <div>
-                                            <p className="text-[10px] text-[var(--label-tertiary)] uppercase tracking-wide mb-0.5">Returns</p>
+                                            <p className="text-[11px] text-[var(--label-secondary)] uppercase tracking-wide font-medium mb-0.5">Returns</p>
                                             <p className={`text-[14px] font-medium tabular-nums ${gainLoss >= 0 ? 'text-[var(--chart-positive)]' : 'text-[var(--chart-negative)]'}`}>
                                               {gainLoss >= 0 ? '+' : ''}{formatCurrency(gainLoss)} ({gainPercent.toFixed(2)}%)
                                             </p>
                                           </div>
+                                          {/* XIRR for Mutual Funds */}
+                                          {asset.asset_type === 'MUTUAL_FUND' && transactionDates[asset.id]?.transactions && currentValue > 0 && (() => {
+                                            const xirr = calculateXIRRFromTransactions(transactionDates[asset.id].transactions, currentValue);
+                                            if (xirr && !isNaN(xirr)) {
+                                              const xirrPositive = xirr >= 0;
+                                              return (
+                                                <div>
+                                                  <p className="text-[11px] text-[var(--label-secondary)] uppercase tracking-wide font-medium mb-0.5">XIRR</p>
+                                                  <p className={`text-[14px] font-medium tabular-nums ${xirrPositive ? 'text-[var(--chart-positive)]' : 'text-[var(--chart-negative)]'}`}>
+                                                    {xirrPositive ? '+' : ''}{xirr.toFixed(2)}%
+                                                  </p>
+                                                </div>
+                                              );
+                                            }
+                                            return null;
+                                          })()}
                                           <div>
-                                            <p className="text-[10px] text-[var(--label-tertiary)] uppercase tracking-wide mb-0.5">Weight</p>
+                                            <p className="text-[11px] text-[var(--label-secondary)] uppercase tracking-wide font-medium mb-0.5">Weight</p>
                                             <p className="text-[14px] font-medium text-[var(--label-primary)] tabular-nums">{portfolioWeight.toFixed(2)}%</p>
                                           </div>
                                         </div>
@@ -1049,10 +1068,14 @@ export default function Assets() {
                                         )}
 
                                         {transactionDates[asset.id] && (
-                                          <div className="flex items-center gap-4 py-2 border-t border-[var(--separator)]/30 text-[12px] text-[var(--label-tertiary)]">
+                                          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 py-2 border-t border-[var(--separator)]/30 text-[12px] text-[var(--label-tertiary)]">
                                             <span>{transactionDates[asset.id].count} transactions</span>
-                                            <span>•</span>
-                                            <span>Since {new Date(transactionDates[asset.id].firstDate).toLocaleDateString('en-IN', { month: 'short', year: 'numeric' })}</span>
+                                            {transactionDates[asset.id].firstDate && (
+                                              <>
+                                                <span>•</span>
+                                                <span>Since {new Date(transactionDates[asset.id].firstDate).toLocaleDateString('en-IN', { month: 'short', year: 'numeric' })}</span>
+                                              </>
+                                            )}
                                           </div>
                                         )}
 

@@ -207,6 +207,87 @@ router.get('/:id', (req, res) => {
   }
 });
 
+// Update transaction
+router.put('/:id', (req, res) => {
+  try {
+    const { quantity, price, notes } = req.body;
+
+    // Get transaction first to verify ownership
+    const transaction = db.prepare(`
+      SELECT * FROM transactions WHERE id = ? AND user_id = ?
+    `).get(req.params.id, req.user.id);
+
+    if (!transaction) {
+      return res.status(404).json({ error: 'Transaction not found' });
+    }
+
+    // Build update query dynamically based on provided fields
+    const updates = [];
+    const values = [];
+
+    if (quantity !== undefined && quantity > 0) {
+      updates.push('quantity = ?');
+      values.push(quantity);
+    }
+
+    if (price !== undefined && price > 0) {
+      updates.push('price = ?');
+      values.push(price);
+    }
+
+    if (notes !== undefined) {
+      updates.push('notes = ?');
+      values.push(notes || null);
+    }
+
+    if (updates.length === 0) {
+      return res.status(400).json({ error: 'No valid fields to update' });
+    }
+
+    // Calculate new total_amount if quantity or price changed
+    const newQuantity = quantity !== undefined ? quantity : transaction.quantity;
+    const newPrice = price !== undefined ? price : transaction.price;
+    const newTotalAmount = newQuantity * newPrice;
+
+    updates.push('total_amount = ?');
+    values.push(newTotalAmount);
+
+    updates.push('updated_at = CURRENT_TIMESTAMP');
+
+    // Add transaction id to values
+    values.push(req.params.id);
+
+    // Execute update
+    db.prepare(`
+      UPDATE transactions SET ${updates.join(', ')} WHERE id = ?
+    `).run(...values);
+
+    // Recalculate realized gain for SELL transactions
+    if (transaction.type === 'SELL') {
+      const avgBuyPrice = getCurrentAvgBuyPrice(transaction.asset_id);
+      const costBasis = avgBuyPrice * newQuantity;
+      const realizedGain = newTotalAmount - costBasis;
+
+      db.prepare('UPDATE transactions SET realized_gain = ? WHERE id = ?')
+        .run(realizedGain, req.params.id);
+    }
+
+    // Recalculate asset values
+    recalculateAsset(transaction.asset_id);
+
+    // Get updated transaction
+    const updatedTransaction = db.prepare('SELECT * FROM transactions WHERE id = ?').get(req.params.id);
+
+    res.json({
+      message: 'Transaction updated successfully',
+      transaction: updatedTransaction
+    });
+  } catch (error) {
+    console.error('Error updating transaction:', error);
+    res.status(500).json({ error: 'Failed to update transaction' });
+  }
+});
+
 // Delete transaction
 router.delete('/:id', (req, res) => {
   try {

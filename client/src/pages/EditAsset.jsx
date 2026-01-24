@@ -324,8 +324,8 @@ export default function EditAsset() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-[var(--bg-secondary)]">
-        <div className="max-w-4xl mx-auto px-4 py-6">
+      <div className="h-full overflow-auto bg-[var(--bg-secondary)]">
+        <div className="max-w-4xl mx-auto p-4 md:px-12 md:py-6">
           <div className="mb-8">
             <Skeleton width="60px" height="1rem" rounded="sm" className="mb-4" />
             <Skeleton width="150px" height="2rem" rounded="md" className="mb-2" />
@@ -347,8 +347,8 @@ export default function EditAsset() {
   const colors = categoryColors[formData.category] || categoryColors.OTHER;
 
   return (
-    <div className="min-h-screen bg-[var(--bg-secondary)]">
-      <div className="max-w-4xl mx-auto px-4 py-6">
+    <div className="h-full overflow-auto bg-[var(--bg-secondary)]">
+      <div className="max-w-4xl mx-auto p-4 md:px-12 md:py-6">
         {/* Header */}
         <motion.div
           initial={{ opacity: 0, y: -10 }}
@@ -356,14 +356,14 @@ export default function EditAsset() {
           transition={spring.gentle}
           className="mb-8"
         >
-          <Link to="/assets" className="inline-flex items-center gap-1 text-[15px] text-[var(--system-blue)] mb-4">
-            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          <Link to="/assets" className="inline-flex items-center gap-1 text-[12px] text-[var(--label-tertiary)] hover:text-[var(--chart-primary)] mb-3 transition-colors">
+            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
             </svg>
-            Assets
+            Back to Assets
           </Link>
-          <h1 className="text-[28px] font-semibold text-[var(--label-primary)]">Edit Asset</h1>
-          <p className="text-[15px] text-[var(--label-secondary)] mt-1">Update the details of your asset</p>
+          <h1 className="text-[20px] font-bold text-[var(--label-primary)]">Edit Asset</h1>
+          <p className="text-[13px] text-[var(--label-secondary)] mt-0.5">Update the details of your asset</p>
         </motion.div>
 
         {/* Error Message */}
@@ -495,7 +495,7 @@ export default function EditAsset() {
           <div className="lg:col-span-1">
             <div className="sticky top-24">
               <Card padding="p-5" hoverable glow>
-                <p className="text-[11px] font-semibold text-[var(--label-tertiary)] uppercase tracking-wider mb-4">Preview</p>
+                <p className="text-[11px] text-[var(--label-secondary)] uppercase tracking-wide font-medium mb-4">Preview</p>
 
                 <div className={`p-4 rounded-xl ${colors.bg} mb-4`}>
                   <div className="flex items-center gap-3">

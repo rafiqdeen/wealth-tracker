@@ -10,6 +10,9 @@ export const transactionService = {
   // Get single transaction
   getById: (id) => api.get(`/transactions/${id}`),
 
+  // Update a transaction
+  update: (id, data) => api.put(`/transactions/${id}`, data),
+
   // Delete a transaction
   delete: (id) => api.delete(`/transactions/${id}`),
 };
