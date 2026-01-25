@@ -22,13 +22,6 @@ const INSTITUTIONS_KEY = 'wealth_tracker_institutions';
 const GOALS_KEY = 'wealth_tracker_goals';
 const TAGS_KEY = 'wealth_tracker_tags';
 
-// Step configuration
-const STEPS = [
-  { id: 1, label: 'Category', description: 'Choose asset type' },
-  { id: 2, label: 'Type', description: 'Select specific type' },
-  { id: 3, label: 'Details', description: 'Add to portfolio' },
-];
-
 // Predefined tags
 const DEFAULT_TAGS = [
   { id: 'tax-saver', label: 'Tax Saver', color: 'emerald' },
@@ -506,13 +499,6 @@ export default function AddAsset() {
     );
   }, [formData.category, formData.principal, formData.interest_rate, formData.start_date, formData.maturity_date, formData.asset_type]);
 
-  // Calculate current step
-  const currentStep = useMemo(() => {
-    if (formData.category && formData.asset_type) return 3;
-    if (formData.category) return 2;
-    return 1;
-  }, [formData.category, formData.asset_type]);
-
   // Calculate portfolio impact
   const portfolioImpact = useMemo(() => {
     const newValue = getPreviewValue();
@@ -737,6 +723,21 @@ export default function AddAsset() {
             notes: preparedData.notes,
           });
         }
+      } else if (formData.category === 'FIXED_INCOME' && preparedData.principal) {
+        // Create asset first
+        const assetResponse = await assetService.create(preparedData);
+        const assetId = assetResponse.data.asset.id;
+
+        // Create initial deposit transaction for Fixed Income
+        const { transactionService } = await import('../services/transactions');
+        await transactionService.create({
+          asset_id: assetId,
+          type: 'BUY',
+          quantity: 1,
+          price: preparedData.principal,
+          transaction_date: preparedData.start_date || new Date().toISOString().split('T')[0],
+          notes: 'Initial deposit',
+        });
       } else {
         await assetService.create(preparedData);
       }
@@ -1966,53 +1967,6 @@ export default function AddAsset() {
           <p className="text-[14px] text-[var(--label-secondary)] mt-1">
             {quickEntryMode ? 'Minimal fields for fast entry' : 'Choose a category and fill in the details'}
           </p>
-
-          {/* Step Progress Indicator */}
-          <div className="mt-6">
-            <div className="flex items-center">
-              {STEPS.map((step, index) => (
-                <div key={step.id} className="flex items-center flex-1 last:flex-none">
-                  <div className="flex flex-col items-center min-w-[60px]">
-                    <motion.div
-                      initial={false}
-                      animate={{
-                        backgroundColor: currentStep >= step.id ? 'var(--chart-primary)' : 'var(--fill-tertiary)',
-                        scale: currentStep === step.id ? 1.1 : 1,
-                      }}
-                      className={`w-8 h-8 rounded-full flex items-center justify-center text-[13px] font-semibold transition-colors ${
-                        currentStep >= step.id ? 'text-white' : 'text-[var(--label-tertiary)]'
-                      }`}
-                    >
-                      {currentStep > step.id ? (
-                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                        </svg>
-                      ) : (
-                        step.id
-                      )}
-                    </motion.div>
-                    <span className={`text-[11px] mt-1.5 font-medium text-center hidden sm:block ${
-                      currentStep >= step.id ? 'text-[var(--label-primary)]' : 'text-[var(--label-tertiary)]'
-                    }`}>
-                      {step.label}
-                    </span>
-                  </div>
-                  {index < STEPS.length - 1 && (
-                    <div className="flex-1 mx-1 sm:mx-3 -mt-5 sm:-mt-5">
-                      <div className="h-0.5 bg-[var(--fill-tertiary)] rounded-full overflow-hidden">
-                        <motion.div
-                          initial={false}
-                          animate={{ width: currentStep > step.id ? '100%' : '0%' }}
-                          transition={{ duration: 0.3 }}
-                          className="h-full bg-[var(--chart-primary)]"
-                        />
-                      </div>
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
-          </div>
         </motion.div>
 
         {/* Error Message */}

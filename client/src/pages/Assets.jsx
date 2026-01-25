@@ -8,7 +8,7 @@ import QuickAddTransaction from '../components/QuickAddTransaction';
 import { spring, staggerContainer, staggerItem } from '../utils/animations';
 import { categoryColors } from '../constants/theme';
 import { formatCurrency, formatCompact } from '../utils/formatting';
-import { calculateFixedIncomeValue, getCompoundingFrequency, calculateXIRRFromTransactions } from '../utils/interest';
+import { calculateFixedIncomeValue, getCompoundingFrequency, calculateXIRRFromTransactions, generateRecurringDepositSchedule } from '../utils/interest';
 import { useToast } from '../context/ToastContext';
 
 export default function Assets() {
@@ -25,6 +25,9 @@ export default function Assets() {
   const [fixedIncomeLoading, setFixedIncomeLoading] = useState(false);
   const [showAddTransaction, setShowAddTransaction] = useState(false);
   const [selectedAssetForTxn, setSelectedAssetForTxn] = useState(null);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [assetToDelete, setAssetToDelete] = useState(null);
+  const [isDeleting, setIsDeleting] = useState(false);
   const [highlightedAssetId, setHighlightedAssetId] = useState(null);
   const [selectedFilter, setSelectedFilter] = useState('ALL');
   const [sortBy, setSortBy] = useState('value'); // value, returns, name, recent
@@ -144,15 +147,55 @@ export default function Assets() {
 
   const fetchFixedIncomeCalculations = async (fixedIncomeAssets) => {
     setFixedIncomeLoading(true);
+    const recurringDepositTypes = ['PPF', 'RD', 'EPF', 'VPF', 'SSY'];
+
     try {
       const calcs = {};
       for (const asset of fixedIncomeAssets) {
         const txnResponse = await assetService.getTransactions(asset.id);
         const transactions = txnResponse.data.transactions || [];
+        const compoundingFreq = getCompoundingFrequency(asset.asset_type);
+        const isRecurring = recurringDepositTypes.includes(asset.asset_type);
+
         if (transactions.length > 0) {
-          const compoundingFreq = getCompoundingFrequency(asset.asset_type);
-          const calculation = calculateFixedIncomeValue(transactions, asset.interest_rate, new Date(), compoundingFreq);
-          calcs[asset.id] = calculation;
+          // Use PPF-specific calculation for PPF assets (FY-based with weighted monthly interest)
+          if (asset.asset_type === 'PPF') {
+            const ppfResult = generateRecurringDepositSchedule(transactions, asset.interest_rate, asset.start_date);
+            if (ppfResult) {
+              calcs[asset.id] = {
+                principal: ppfResult.summary.totalDeposited,
+                currentValue: ppfResult.summary.currentValue,  // Bank balance (credited interest only)
+                estimatedValue: ppfResult.summary.estimatedValue,  // With accrued interest
+                interest: ppfResult.summary.totalInterest,
+                interestPercent: ppfResult.summary.interestPercent,
+                currentFYAccruedInterest: ppfResult.summary.currentFYAccruedInterest
+              };
+            }
+          } else {
+            const calculation = calculateFixedIncomeValue(transactions, asset.interest_rate, new Date(), compoundingFreq);
+            calcs[asset.id] = calculation;
+          }
+        } else if (asset.principal) {
+          // For recurring deposits without transactions, can't accurately calculate interest
+          if (isRecurring) {
+            calcs[asset.id] = {
+              principal: asset.principal,
+              currentValue: asset.principal,
+              interest: 0,
+              interestPercent: 0,
+              needsTransactions: true
+            };
+          } else {
+            // For lump-sum deposits, use asset's principal and start_date
+            const startDate = asset.start_date || asset.created_at?.split('T')[0] || new Date().toISOString().split('T')[0];
+            const fakeTransaction = [{
+              type: 'BUY',
+              total_amount: asset.principal,
+              transaction_date: startDate
+            }];
+            const calculation = calculateFixedIncomeValue(fakeTransaction, asset.interest_rate, new Date(), compoundingFreq);
+            calcs[asset.id] = calculation;
+          }
         }
       }
       setFixedIncomeCalcs(calcs);
@@ -176,17 +219,32 @@ export default function Assets() {
     }
   };
 
-  const handleDelete = async (id, name, e) => {
+  const handleDelete = (asset, e) => {
     e.preventDefault();
     e.stopPropagation();
-    if (!window.confirm(`Delete "${name}"?`)) return;
+    setAssetToDelete(asset);
+    setShowDeleteConfirm(true);
+  };
+
+  const confirmDelete = async () => {
+    if (!assetToDelete) return;
+    setIsDeleting(true);
     try {
-      await assetService.delete(id);
-      setAssets(assets.filter((a) => a.id !== id));
-      toast.success(`"${name}" deleted successfully`);
+      await assetService.delete(assetToDelete.id);
+      setAssets(assets.filter((a) => a.id !== assetToDelete.id));
+      toast.success(`"${assetToDelete.name}" deleted successfully`);
+      setShowDeleteConfirm(false);
+      setAssetToDelete(null);
     } catch (error) {
       toast.error('Failed to delete asset');
+    } finally {
+      setIsDeleting(false);
     }
+  };
+
+  const cancelDelete = () => {
+    setShowDeleteConfirm(false);
+    setAssetToDelete(null);
   };
 
   // Asset value calculations
@@ -765,7 +823,7 @@ export default function Assets() {
                       {/* Table Header */}
                       <div className="hidden md:grid grid-cols-12 gap-3 px-4 py-2 bg-[var(--fill-tertiary)]/40 border-y border-[var(--separator-opaque)] text-[10px] font-semibold text-[var(--label-tertiary)] uppercase tracking-wider shadow-[0_1px_2px_rgba(0,0,0,0.02)]">
                         <div className="col-span-4">Asset</div>
-                        <div className="col-span-2 text-right">Qty / Avg</div>
+                        <div className="col-span-2 text-right">Invested</div>
                         <div className="col-span-2 text-right">Current</div>
                         <div className="col-span-2 text-right">P&L</div>
                         <div className="col-span-1 text-right">Today</div>
@@ -835,16 +893,16 @@ export default function Assets() {
                                   </div>
                                 </div>
 
-                                {/* Qty + Avg Price */}
+                                {/* Invested Value */}
                                 <div className="hidden md:block col-span-2 text-right">
-                                  <p className="text-[14px] font-medium text-[var(--label-primary)] tabular-nums">
-                                    {asset.quantity ? formatQty(asset) : '—'}
+                                  <p className="text-[15px] font-semibold text-[var(--label-primary)] tabular-nums">
+                                    {formatCompact(investedValue)}
                                   </p>
                                   <p className="text-[13px] text-[var(--label-secondary)] tabular-nums mt-0.5">
                                     {isFixedIncome
                                       ? `@ ${asset.interest_rate}% p.a.`
-                                      : asset.avg_buy_price
-                                        ? `@ ₹${asset.avg_buy_price.toLocaleString('en-IN', { maximumFractionDigits: 2 })}`
+                                      : asset.quantity
+                                        ? `${formatQty(asset)} units`
                                         : ''
                                     }
                                   </p>
@@ -884,9 +942,8 @@ export default function Assets() {
                                   )}
                                 </div>
 
-                                {/* Actions - Icon Only */}
-                                <div className="hidden md:flex col-span-1 items-center justify-end gap-1">
-                                  {/* Add Transaction */}
+                                {/* Actions - Add Button Only */}
+                                <div className="hidden md:flex col-span-1 items-center justify-end">
                                   <motion.button
                                     whileHover={{ scale: 1.08 }}
                                     whileTap={{ scale: 0.95 }}
@@ -899,116 +956,14 @@ export default function Assets() {
                                     <svg className="w-[18px] h-[18px]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                                       <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
                                     </svg>
-                                    <span className="absolute -top-9 left-1/2 -translate-x-1/2 px-2.5 py-1.5 text-[11px] font-medium text-white bg-[var(--label-primary)] rounded-lg opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-10 shadow-lg">
+                                    <span className="absolute -top-9 right-0 px-2.5 py-1.5 text-[11px] font-medium text-white bg-[var(--label-primary)] rounded-lg opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-10 shadow-lg">
                                       Add Transaction
                                     </span>
                                   </motion.button>
-
-                                  {/* More Options Menu */}
-                                  <div className="relative">
-                                    <motion.button
-                                      ref={el => menuButtonRefs.current[asset.id] = el}
-                                      whileHover={{ scale: 1.08 }}
-                                      whileTap={{ scale: 0.95 }}
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        if (openMenuId === asset.id) {
-                                          setOpenMenuId(null);
-                                        } else {
-                                          const rect = e.currentTarget.getBoundingClientRect();
-                                          setMenuPosition({
-                                            top: rect.bottom + 8,
-                                            right: window.innerWidth - rect.right,
-                                          });
-                                          setOpenMenuId(asset.id);
-                                        }
-                                      }}
-                                      className="group relative w-8 h-8 flex items-center justify-center rounded-xl bg-[var(--fill-tertiary)] hover:bg-[var(--fill-secondary)] transition-all text-[var(--label-secondary)] hover:text-[var(--label-primary)]"
-                                    >
-                                      <svg className="w-[18px] h-[18px]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                                        <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 12a.75.75 0 1 1-1.5 0 .75.75 0 0 1 1.5 0ZM12.75 12a.75.75 0 1 1-1.5 0 .75.75 0 0 1 1.5 0ZM18.75 12a.75.75 0 1 1-1.5 0 .75.75 0 0 1 1.5 0Z" />
-                                      </svg>
-                                      <span className="absolute -top-9 left-1/2 -translate-x-1/2 px-2.5 py-1.5 text-[11px] font-medium text-white bg-[var(--label-primary)] rounded-lg opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-10 shadow-lg">
-                                        More
-                                      </span>
-                                    </motion.button>
-
-                                    {/* Portal Dropdown Menu - Renders outside container */}
-                                    {openMenuId === asset.id && createPortal(
-                                      <AnimatePresence>
-                                        <motion.div
-                                          ref={menuRef}
-                                          initial={{ opacity: 0, scale: 0.95, y: -8 }}
-                                          animate={{ opacity: 1, scale: 1, y: 0 }}
-                                          exit={{ opacity: 0, scale: 0.95, y: -8 }}
-                                          transition={{ type: 'spring', stiffness: 400, damping: 25 }}
-                                          style={{
-                                            position: 'fixed',
-                                            top: menuPosition.top,
-                                            right: menuPosition.right,
-                                          }}
-                                          className="z-[9999] bg-[var(--bg-primary)] rounded-xl shadow-2xl border border-[var(--separator-opaque)] py-1.5 min-w-[160px] overflow-hidden"
-                                        >
-                                          {(asset.category === 'EQUITY' || asset.category === 'FIXED_INCOME') && (
-                                            <Link
-                                              to={`/assets/${asset.id}/transactions`}
-                                              onClick={(e) => {
-                                                e.stopPropagation();
-                                                setOpenMenuId(null);
-                                              }}
-                                              className="flex items-center gap-3 px-3.5 py-2.5 text-[13px] font-medium text-[var(--label-primary)] hover:bg-[var(--fill-tertiary)] transition-colors"
-                                            >
-                                              <div className="w-7 h-7 rounded-lg bg-[var(--fill-tertiary)] flex items-center justify-center">
-                                                <svg className="w-4 h-4 text-[var(--label-secondary)]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                                                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                                </svg>
-                                              </div>
-                                              History
-                                            </Link>
-                                          )}
-                                          <Link
-                                            to={`/assets/edit/${asset.id}`}
-                                            onClick={(e) => {
-                                              e.stopPropagation();
-                                              setOpenMenuId(null);
-                                            }}
-                                            className="flex items-center gap-3 px-3.5 py-2.5 text-[13px] font-medium text-[var(--label-primary)] hover:bg-[var(--fill-tertiary)] transition-colors"
-                                          >
-                                            <div className="w-7 h-7 rounded-lg bg-[var(--fill-tertiary)] flex items-center justify-center">
-                                              <svg className="w-4 h-4 text-[var(--label-secondary)]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                                                <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125" />
-                                              </svg>
-                                            </div>
-                                            Edit
-                                          </Link>
-
-                                          {/* Divider before destructive action */}
-                                          <div className="my-1.5 mx-3 h-px bg-[var(--separator-opaque)]" />
-
-                                          <button
-                                            onClick={(e) => {
-                                              e.stopPropagation();
-                                              setOpenMenuId(null);
-                                              handleDelete(asset.id, asset.name, e);
-                                            }}
-                                            className="w-full flex items-center gap-3 px-3.5 py-2.5 text-[13px] font-medium text-[var(--system-red)] hover:bg-[var(--system-red)]/10 transition-colors"
-                                          >
-                                            <div className="w-7 h-7 rounded-lg bg-[var(--system-red)]/10 flex items-center justify-center">
-                                              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                                                <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
-                                              </svg>
-                                            </div>
-                                            Delete
-                                          </button>
-                                        </motion.div>
-                                      </AnimatePresence>,
-                                      document.body
-                                    )}
-                                  </div>
                                 </div>
                               </div>
 
-                              {/* Expanded Details */}
+                              {/* Expanded Details - Clean Modern Design */}
                               <AnimatePresence>
                                 {isRowExpanded && (
                                   <motion.div
@@ -1018,83 +973,119 @@ export default function Assets() {
                                     transition={spring.gentle}
                                     className="overflow-hidden"
                                   >
-                                    <div className="px-4 pb-4 pt-1">
-                                      <div className="bg-[var(--bg-secondary)] rounded-xl p-4">
-                                        {/* Stats Grid */}
-                                        <div className={`grid grid-cols-2 gap-4 mb-4 ${asset.asset_type === 'MUTUAL_FUND' ? 'md:grid-cols-5' : 'md:grid-cols-4'}`}>
-                                          <div>
-                                            <p className="text-[11px] text-[var(--label-secondary)] uppercase tracking-wide font-medium mb-0.5">Invested</p>
-                                            <p className="text-[14px] font-medium text-[var(--label-primary)] tabular-nums">{formatCurrency(investedValue)}</p>
+                                    <div className="pb-4 pt-2 border-t border-dashed border-[var(--separator)]">
+                                      {/* Main Content Row - Aligned with asset title */}
+                                      <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4 py-3 px-4 md:pl-[52px] md:pr-6">
+
+                                        {/* Left: Holdings & Returns Info - Single Row */}
+                                        <div className="flex flex-wrap items-center gap-5">
+                                          {/* Holdings Info - Qty, Avg, LTP */}
+                                          {!isFixedIncome && asset.quantity && (
+                                            <div className="flex items-center gap-4 px-4 py-2.5 bg-[var(--fill-tertiary)]/50 rounded-xl">
+                                              <div className="flex items-center gap-2">
+                                                <span className="text-[12px] text-[var(--label-tertiary)] font-medium">Qty</span>
+                                                <span className="text-[15px] font-bold text-[var(--label-primary)] tabular-nums">{formatQty(asset)}</span>
+                                              </div>
+                                              <span className="text-[var(--label-quaternary)] text-[15px]">×</span>
+                                              <div className="flex items-center gap-2">
+                                                <span className="text-[12px] text-[var(--label-tertiary)] font-medium">Avg</span>
+                                                <span className="text-[15px] font-semibold text-[var(--label-primary)] tabular-nums">₹{asset.avg_buy_price?.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</span>
+                                              </div>
+                                              {currentPrice > 0 && (
+                                                <>
+                                                  <span className="text-[var(--label-quaternary)] text-[15px]">→</span>
+                                                  <div className="flex items-center gap-2">
+                                                    <span className="text-[12px] text-[var(--label-tertiary)] font-medium">LTP</span>
+                                                    <span className="text-[15px] font-semibold text-[var(--label-primary)] tabular-nums">₹{currentPrice.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</span>
+                                                  </div>
+                                                </>
+                                              )}
+                                            </div>
+                                          )}
+
+                                          {/* Fixed Income Rate Info */}
+                                          {isFixedIncome && (
+                                            <div className="flex items-center gap-4 px-4 py-2.5 bg-[var(--fill-tertiary)]/50 rounded-xl">
+                                              <div className="flex items-center gap-2">
+                                                <span className="text-[12px] text-[var(--label-tertiary)] font-medium">Principal</span>
+                                                <span className="text-[15px] font-bold text-[var(--label-primary)] tabular-nums">{formatCurrency(asset.principal)}</span>
+                                              </div>
+                                              <span className="text-[var(--label-quaternary)] text-[15px]">@</span>
+                                              <div className="flex items-center gap-2">
+                                                <span className="text-[12px] text-[var(--label-tertiary)] font-medium">Rate</span>
+                                                <span className="text-[15px] font-semibold text-[var(--system-green)] tabular-nums">{asset.interest_rate}% p.a.</span>
+                                              </div>
+                                            </div>
+                                          )}
+
+                                          {/* Separator */}
+                                          <div className="hidden sm:block h-10 w-px bg-[var(--separator)]"></div>
+
+                                          {/* Returns */}
+                                          <div className="flex items-center gap-2">
+                                            <span className="text-[12px] text-[var(--label-tertiary)] font-semibold uppercase">Returns</span>
+                                            <span className={`text-[16px] font-bold tabular-nums ${gainLoss >= 0 ? 'text-[#059669]' : 'text-[#DC2626]'}`}>
+                                              {gainLoss >= 0 ? '+' : ''}{formatCurrency(Math.abs(gainLoss))}
+                                              <span className="text-[13px] font-semibold ml-1.5 opacity-80">({gainPercent >= 0 ? '+' : ''}{gainPercent.toFixed(2)}%)</span>
+                                            </span>
                                           </div>
-                                          <div>
-                                            <p className="text-[11px] text-[var(--label-secondary)] uppercase tracking-wide font-medium mb-0.5">Current</p>
-                                            <p className="text-[14px] font-medium text-[var(--label-primary)] tabular-nums">{formatCurrency(currentValue)}</p>
-                                          </div>
-                                          <div>
-                                            <p className="text-[11px] text-[var(--label-secondary)] uppercase tracking-wide font-medium mb-0.5">Returns</p>
-                                            <p className={`text-[14px] font-medium tabular-nums ${gainLoss >= 0 ? 'text-[var(--chart-positive)]' : 'text-[var(--chart-negative)]'}`}>
-                                              {gainLoss >= 0 ? '+' : ''}{formatCurrency(gainLoss)} ({gainPercent.toFixed(2)}%)
-                                            </p>
-                                          </div>
-                                          {/* XIRR for Mutual Funds */}
+
+                                          {/* XIRR for Mutual Funds - only show if holding period >= 30 days */}
                                           {asset.asset_type === 'MUTUAL_FUND' && transactionDates[asset.id]?.transactions && currentValue > 0 && (() => {
-                                            const xirr = calculateXIRRFromTransactions(transactionDates[asset.id].transactions, currentValue);
-                                            if (xirr && !isNaN(xirr)) {
-                                              const xirrPositive = xirr >= 0;
-                                              return (
-                                                <div>
-                                                  <p className="text-[11px] text-[var(--label-secondary)] uppercase tracking-wide font-medium mb-0.5">XIRR</p>
-                                                  <p className={`text-[14px] font-medium tabular-nums ${xirrPositive ? 'text-[var(--chart-positive)]' : 'text-[var(--chart-negative)]'}`}>
-                                                    {xirrPositive ? '+' : ''}{xirr.toFixed(2)}%
-                                                  </p>
-                                                </div>
-                                              );
-                                            }
-                                            return null;
+                                            const txnData = transactionDates[asset.id];
+                                            const firstDate = txnData.firstDate ? new Date(txnData.firstDate) : null;
+                                            const holdingDays = firstDate ? Math.floor((new Date() - firstDate) / (1000 * 60 * 60 * 24)) : 0;
+
+                                            // Only show XIRR for holdings >= 30 days
+                                            if (holdingDays < 30) return null;
+
+                                            const xirrRaw = calculateXIRRFromTransactions(txnData.transactions, currentValue);
+                                            if (!xirrRaw || isNaN(xirrRaw)) return null;
+
+                                            // Cap XIRR at ±999.99% for display
+                                            const xirr = Math.min(Math.max(xirrRaw, -999.99), 999.99);
+                                            const xirrPositive = xirr >= 0;
+                                            const xirrCapped = Math.abs(xirrRaw) > 999.99;
+
+                                            return (
+                                              <div className="flex items-center gap-2 pl-4 border-l border-[var(--separator)]">
+                                                <span className="text-[12px] text-[var(--label-tertiary)] font-semibold uppercase">XIRR</span>
+                                                <span className={`text-[16px] font-bold tabular-nums ${xirrPositive ? 'text-[#059669]' : 'text-[#DC2626]'}`}>
+                                                  {xirrPositive ? '+' : ''}{xirr.toFixed(2)}%{xirrCapped ? '+' : ''}
+                                                </span>
+                                              </div>
+                                            );
                                           })()}
-                                          <div>
-                                            <p className="text-[11px] text-[var(--label-secondary)] uppercase tracking-wide font-medium mb-0.5">Weight</p>
-                                            <p className="text-[14px] font-medium text-[var(--label-primary)] tabular-nums">{portfolioWeight.toFixed(2)}%</p>
+
+                                          {/* Portfolio Weight */}
+                                          <div className="flex items-center gap-2 pl-4 border-l border-[var(--separator)]">
+                                            <span className="text-[12px] text-[var(--label-tertiary)] font-semibold uppercase">Weight</span>
+                                            <span className="text-[16px] font-bold text-[var(--label-primary)] tabular-nums">
+                                              {portfolioWeight.toFixed(2)}%
+                                            </span>
                                           </div>
                                         </div>
 
-                                        {/* Extra Info */}
-                                        {isFixedIncome && asset.maturity_date && (
-                                          <div className="flex items-center gap-4 py-2 border-t border-[var(--separator)]/30 text-[12px]">
-                                            <span className="text-[var(--label-tertiary)]">
-                                              Matures: {new Date(asset.maturity_date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
-                                            </span>
-                                          </div>
-                                        )}
-
-                                        {transactionDates[asset.id] && (
-                                          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 py-2 border-t border-[var(--separator)]/30 text-[12px] text-[var(--label-tertiary)]">
-                                            <span>{transactionDates[asset.id].count} transactions</span>
-                                            {transactionDates[asset.id].firstDate && (
-                                              <>
-                                                <span>•</span>
-                                                <span>Since {new Date(transactionDates[asset.id].firstDate).toLocaleDateString('en-IN', { month: 'short', year: 'numeric' })}</span>
-                                              </>
-                                            )}
-                                          </div>
-                                        )}
-
-                                        {/* Action Buttons - Mobile Only */}
-                                        <div className="flex gap-2 mt-3 pt-3 border-t border-[var(--separator)]/30 md:hidden">
+                                        {/* Right: Action Buttons */}
+                                        <div className="flex items-center gap-2">
+                                          {/* Add Transaction - Mobile only */}
                                           <button
                                             onClick={(e) => openAddTransaction(asset, e)}
-                                            className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 bg-[var(--chart-primary)] text-white rounded-lg text-[13px] font-medium hover:opacity-90 transition-opacity"
+                                            className="md:hidden h-10 px-4 flex items-center gap-2 text-[13px] font-semibold text-[var(--chart-primary)] bg-[var(--chart-primary)]/10 hover:bg-[var(--chart-primary)]/20 rounded-lg transition-colors"
+                                            title="Add Transaction"
                                           >
                                             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                                               <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
                                             </svg>
-                                            Add Txn
+                                            Add
                                           </button>
+
+                                          {/* History */}
                                           {(asset.category === 'EQUITY' || asset.category === 'FIXED_INCOME') && (
                                             <Link
                                               to={`/assets/${asset.id}/transactions`}
                                               onClick={(e) => e.stopPropagation()}
-                                              className="flex items-center justify-center gap-1.5 px-3 py-2 bg-[var(--fill-tertiary)] text-[var(--label-primary)] rounded-lg text-[13px] font-medium"
+                                              className="h-10 px-4 flex items-center gap-2 text-[13px] font-medium text-[var(--label-secondary)] bg-[var(--fill-tertiary)] hover:bg-[var(--fill-secondary)] hover:text-[var(--label-primary)] rounded-lg transition-colors"
                                             >
                                               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                                                 <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -1102,24 +1093,63 @@ export default function Assets() {
                                               History
                                             </Link>
                                           )}
+
+                                          {/* Edit */}
                                           <Link
                                             to={`/assets/edit/${asset.id}`}
                                             onClick={(e) => e.stopPropagation()}
-                                            className="flex items-center justify-center px-3 py-2 bg-[var(--fill-tertiary)] text-[var(--label-primary)] rounded-lg text-[13px] font-medium"
+                                            className="h-10 px-4 flex items-center gap-2 text-[13px] font-medium text-[var(--label-secondary)] bg-[var(--fill-tertiary)] hover:bg-[var(--fill-secondary)] hover:text-[var(--label-primary)] rounded-lg transition-colors"
                                           >
                                             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                                               <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125" />
                                             </svg>
+                                            Edit
                                           </Link>
+
+                                          {/* Delete */}
                                           <button
-                                            onClick={(e) => handleDelete(asset.id, asset.name, e)}
-                                            className="flex items-center justify-center px-3 py-2 bg-[var(--system-red)]/10 text-[var(--system-red)] rounded-lg text-[13px] font-medium"
+                                            onClick={(e) => handleDelete(asset, e)}
+                                            className="h-10 px-4 flex items-center gap-2 text-[13px] font-medium text-[var(--system-red)] bg-[var(--system-red)]/10 hover:bg-[var(--system-red)]/20 rounded-lg transition-colors"
                                           >
                                             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                                               <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
                                             </svg>
+                                            Delete
                                           </button>
                                         </div>
+                                      </div>
+
+                                      {/* Footer: Metadata - Aligned with content */}
+                                      <div className="flex items-center gap-2 text-[12px] text-[var(--label-tertiary)] pt-2 mx-4 md:ml-[52px] md:mr-6 border-t border-[var(--separator)]/20">
+                                        {isFixedIncome && asset.maturity_date && (
+                                          <>
+                                            <span className="flex items-center gap-1">
+                                              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                                                <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 11.25v7.5" />
+                                              </svg>
+                                              Matures {new Date(asset.maturity_date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+                                            </span>
+                                            <span className="text-[var(--separator)]">•</span>
+                                          </>
+                                        )}
+                                        {transactionDates[asset.id] ? (
+                                          <>
+                                            <span className="flex items-center gap-1">
+                                              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                                                <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 21L3 16.5m0 0L7.5 12M3 16.5h13.5m0-13.5L21 7.5m0 0L16.5 12M21 7.5H7.5" />
+                                              </svg>
+                                              {transactionDates[asset.id].count} transaction{transactionDates[asset.id].count !== 1 ? 's' : ''}
+                                            </span>
+                                            {transactionDates[asset.id].firstDate && (
+                                              <>
+                                                <span className="text-[var(--separator)]">•</span>
+                                                <span>Since {new Date(transactionDates[asset.id].firstDate).toLocaleDateString('en-IN', { month: 'short', year: 'numeric' })}</span>
+                                              </>
+                                            )}
+                                          </>
+                                        ) : (
+                                          <span className="text-[var(--label-quaternary)]">No transactions recorded</span>
+                                        )}
                                       </div>
                                     </div>
                                   </motion.div>
@@ -1194,6 +1224,107 @@ export default function Assets() {
               setSelectedAssetForTxn(null);
             }}
           />
+        )}
+      </Modal>
+
+      {/* Delete Confirmation Modal */}
+      <Modal
+        isOpen={showDeleteConfirm}
+        onClose={cancelDelete}
+        title="Delete Asset"
+        size="sm"
+      >
+        {assetToDelete && (
+          <div className="p-1">
+            {/* Warning Icon & Message */}
+            <div className="flex flex-col items-center text-center mb-6">
+              <div className="w-14 h-14 rounded-full bg-[var(--system-red)]/10 flex items-center justify-center mb-4">
+                <svg className="w-7 h-7 text-[var(--system-red)]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
+                </svg>
+              </div>
+              <h3 className="text-[17px] font-semibold text-[var(--label-primary)] mb-2">
+                Delete "{assetToDelete.name}"?
+              </h3>
+              <p className="text-[14px] text-[var(--label-secondary)] leading-relaxed">
+                This will permanently delete this asset and all its transaction history. This action cannot be undone.
+              </p>
+            </div>
+
+            {/* Asset Details */}
+            <div className="bg-[var(--fill-tertiary)] rounded-xl p-4 mb-6">
+              <div className="flex items-center gap-3">
+                <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${
+                  assetToDelete.category === 'EQUITY' ? 'bg-[#4F7DF3]' :
+                  assetToDelete.category === 'FIXED_INCOME' ? 'bg-[#22C55E]' :
+                  assetToDelete.category === 'REAL_ESTATE' ? 'bg-[#F59E0B]' :
+                  assetToDelete.category === 'GOLD' ? 'bg-[#EAB308]' :
+                  assetToDelete.category === 'CASH' ? 'bg-[#6366F1]' :
+                  'bg-[var(--system-gray)]'
+                }`}>
+                  <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                    {assetToDelete.category === 'EQUITY' ? (
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 013 19.875v-6.75zM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V8.625zM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V4.125z" />
+                    ) : assetToDelete.category === 'FIXED_INCOME' ? (
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 18.75a60.07 60.07 0 0115.797 2.101c.727.198 1.453-.342 1.453-1.096V18.75M3.75 4.5v.75A.75.75 0 013 6h-.75m0 0v-.375c0-.621.504-1.125 1.125-1.125H20.25M2.25 6v9m18-10.5v.75c0 .414.336.75.75.75h.75m-1.5-1.5h.375c.621 0 1.125.504 1.125 1.125v9.75c0 .621-.504 1.125-1.125 1.125h-.375m1.5-1.5H21a.75.75 0 00-.75.75v.75m0 0H3.75m0 0h-.375a1.125 1.125 0 01-1.125-1.125V15m1.5 1.5v-.75A.75.75 0 003 15h-.75M15 10.5a3 3 0 11-6 0 3 3 0 016 0zm3 0h.008v.008H18V10.5zm-12 0h.008v.008H6V10.5z" />
+                    ) : assetToDelete.category === 'REAL_ESTATE' ? (
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 21v-4.875c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21m0 0h4.5V3.545M12.75 21h7.5V10.75M2.25 21h1.5m18 0h-18M2.25 9l4.5-1.636M18.75 3l-1.5.545m0 6.205l3 1m1.5.5l-1.5-.5M6.75 7.364V3h-3v18m3-13.636l10.5-3.819" />
+                    ) : assetToDelete.category === 'GOLD' ? (
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M20.25 6.375c0 2.278-3.694 4.125-8.25 4.125S3.75 8.653 3.75 6.375m16.5 0c0-2.278-3.694-4.125-8.25-4.125S3.75 4.097 3.75 6.375m16.5 0v11.25c0 2.278-3.694 4.125-8.25 4.125s-8.25-1.847-8.25-4.125V6.375m16.5 0v3.75m-16.5-3.75v3.75m16.5 0v3.75C20.25 16.153 16.556 18 12 18s-8.25-1.847-8.25-4.125v-3.75m16.5 0c0 2.278-3.694 4.125-8.25 4.125s-8.25-1.847-8.25-4.125" />
+                    ) : (
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 18.75a60.07 60.07 0 0115.797 2.101c.727.198 1.453-.342 1.453-1.096V18.75M3.75 4.5v.75A.75.75 0 013 6h-.75m0 0v-.375c0-.621.504-1.125 1.125-1.125H20.25M2.25 6v9m18-10.5v.75c0 .414.336.75.75.75h.75m-1.5-1.5h.375c.621 0 1.125.504 1.125 1.125v9.75c0 .621-.504 1.125-1.125 1.125h-.375m1.5-1.5H21a.75.75 0 00-.75.75v.75m0 0H3.75m0 0h-.375a1.125 1.125 0 01-1.125-1.125V15m1.5 1.5v-.75A.75.75 0 003 15h-.75M15 10.5a3 3 0 11-6 0 3 3 0 016 0zm3 0h.008v.008H18V10.5zm-12 0h.008v.008H6V10.5z" />
+                    )}
+                  </svg>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-[15px] font-semibold text-[var(--label-primary)] truncate">
+                    {assetToDelete.name}
+                  </p>
+                  <p className="text-[13px] text-[var(--label-secondary)]">
+                    {assetToDelete.category?.replace('_', ' ')} • {assetToDelete.asset_type?.replace('_', ' ') || 'Asset'}
+                  </p>
+                </div>
+                <div className="text-right">
+                  <p className="text-[15px] font-semibold text-[var(--label-primary)] tabular-nums">
+                    {formatCurrency(getAssetValue(assetToDelete))}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Action Buttons */}
+            <div className="flex gap-3">
+              <button
+                onClick={cancelDelete}
+                disabled={isDeleting}
+                className="flex-1 h-12 px-4 text-[15px] font-semibold text-[var(--label-primary)] bg-[var(--fill-tertiary)] hover:bg-[var(--fill-secondary)] rounded-xl transition-colors disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmDelete}
+                disabled={isDeleting}
+                className="flex-1 h-12 px-4 text-[15px] font-semibold text-white bg-[var(--system-red)] hover:bg-[#B91C1C] rounded-xl transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                {isDeleting ? (
+                  <>
+                    <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    Deleting...
+                  </>
+                ) : (
+                  <>
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
+                    </svg>
+                    Delete Asset
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
         )}
       </Modal>
     </div>

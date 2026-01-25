@@ -7,7 +7,7 @@ import { Card, Button, Skeleton, SkeletonRow, ProgressBar, BottomSheet, Modal } 
 import { spring, staggerContainer, staggerItem, tapScale } from '../utils/animations';
 import { ANIMATION } from '../constants/theme';
 import { formatCurrency, formatCompact, formatNumber, formatDate, formatPrice } from '../utils/formatting';
-import { calculateFixedIncomeValue, getCompoundingFrequency, calculateXIRRFromTransactions } from '../utils/interest';
+import { calculateFixedIncomeValue, getCompoundingFrequency, calculateXIRRFromTransactions, generateCompoundingSchedule, generateRecurringDepositSchedule, getFinancialYear } from '../utils/interest';
 import { useToast } from '../context/ToastContext';
 import CSVImport from '../components/CSVImport';
 
@@ -348,23 +348,96 @@ export default function TransactionHistory() {
   const isFixedIncome = asset?.category === 'FIXED_INCOME';
   const categoryColor = getCategoryColor();
 
-  const interestCalc = isFixedIncome && transactions.length > 0
-    ? calculateFixedIncomeValue(
+  // Recurring deposit types need actual transactions for accurate interest calculation
+  const recurringDepositTypes = ['PPF', 'RD', 'EPF', 'VPF', 'SSY'];
+  const isRecurringType = recurringDepositTypes.includes(asset?.asset_type);
+
+  // Calculate Fixed Income values - use transactions if available, otherwise use asset principal
+  const getInterestCalc = () => {
+    if (!isFixedIncome) return null;
+
+    if (transactions.length > 0) {
+      return calculateFixedIncomeValue(
         transactions,
         asset?.interest_rate || 7.1,
         new Date(),
         getCompoundingFrequency(asset?.asset_type)
+      );
+    }
+
+    // Fallback: use asset's principal and start_date if no transactions
+    if (asset?.principal) {
+      // For recurring deposits without transactions, we can't accurately calculate interest
+      // because we don't know when each contribution was made
+      if (isRecurringType) {
+        // Return principal only - interest calculation would be misleading
+        return {
+          principal: asset.principal,
+          currentValue: asset.principal, // Can't calculate without transaction dates
+          interest: 0,
+          interestPercent: 0,
+          needsTransactions: true // Flag to show message to user
+        };
+      }
+
+      // For lump-sum deposits, calculate interest from start date
+      const startDate = asset.start_date || asset.created_at?.split('T')[0] || new Date().toISOString().split('T')[0];
+      const fakeTransaction = [{
+        type: 'BUY',
+        total_amount: asset.principal,
+        transaction_date: startDate
+      }];
+      return calculateFixedIncomeValue(
+        fakeTransaction,
+        asset?.interest_rate || 7.1,
+        new Date(),
+        getCompoundingFrequency(asset?.asset_type)
+      );
+    }
+
+    return null;
+  };
+  const interestCalc = getInterestCalc();
+
+  // Generate compounding schedule for Fixed Income assets
+  // Only for lump-sum deposits (FD, NSC, etc.) - recurring deposits need different handling
+  const isLumpSumDeposit = ['FD', 'NSC', 'KVP', 'SCSS', 'BOND'].includes(asset?.asset_type);
+  const hasTransactions = transactions.length > 0;
+
+  // Compounding schedule only makes sense for lump-sum deposits
+  const compoundingSchedule = isFixedIncome && isLumpSumDeposit && asset?.principal && asset?.interest_rate
+    ? generateCompoundingSchedule(
+        asset.principal,
+        asset.interest_rate,
+        asset.start_date || asset.created_at?.split('T')[0],
+        asset.maturity_date,
+        getCompoundingFrequency(asset.asset_type)
       )
     : null;
 
+  // For recurring deposits with transactions, generate FY-based schedule
+  const recurringSchedule = isFixedIncome && isRecurringType && hasTransactions && asset?.interest_rate
+    ? generateRecurringDepositSchedule(transactions, asset.interest_rate, asset.start_date)
+    : null;
+
+  // For recurring deposits, show a different card
+  const showRecurringCard = isFixedIncome && isRecurringType;
+
+  // Show right column for lump-sum schedule OR recurring deposits with transactions
+  const showRightColumn = compoundingSchedule || showRecurringCard;
+
   return (
     <div className="p-4 md:px-12 md:py-6 h-full overflow-auto">
-      <motion.div
-        initial={{ opacity: 0, y: 10 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={spring.gentle}
-      >
-        <Card padding="p-0" className="overflow-hidden">
+      {/* Two-column layout for Fixed Income, single column for others */}
+      <div className={`${showRightColumn ? 'grid grid-cols-1 xl:grid-cols-5 gap-6' : ''}`}>
+        {/* Main Content Column */}
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={spring.gentle}
+          className={showRightColumn ? 'xl:col-span-3' : ''}
+        >
+          <Card padding="p-0" className="overflow-hidden">
           {/* Header Section with gradient */}
           <div
             className="px-5 py-4 border-b border-[var(--separator-opaque)]"
@@ -486,11 +559,14 @@ export default function TransactionHistory() {
               // Is price estimated (using latest txn price instead of live price)?
               const isPriceEstimated = !validCurrentPrice && latestTxnPrice > 0;
 
-              // Calculate holding period
-              const firstTxnDate = sortedByDateAsc.length > 0 ? new Date(sortedByDateAsc[0].transaction_date) : null;
+              // Calculate holding period - use first transaction date, or asset start_date for Fixed Income
+              let firstDate = sortedByDateAsc.length > 0 ? new Date(sortedByDateAsc[0].transaction_date) : null;
+              if (!firstDate && isFixedIncome && asset?.start_date) {
+                firstDate = new Date(asset.start_date);
+              }
               let holdingPeriod = '—';
-              if (firstTxnDate) {
-                const days = Math.floor((new Date() - firstTxnDate) / (1000 * 60 * 60 * 24));
+              if (firstDate) {
+                const days = Math.floor((new Date() - firstDate) / (1000 * 60 * 60 * 24));
                 const years = Math.floor(days / 365);
                 const months = Math.floor((days % 365) / 30);
                 if (years > 0) holdingPeriod = `${years}y ${months}m`;
@@ -499,9 +575,13 @@ export default function TransactionHistory() {
               }
 
               // Calculate XIRR with validation
+              // XIRR is only meaningful for holding periods > 30 days, cap display at 999.99%
               const xirrRaw = currentValue > 0 ? calculateXIRRFromTransactions(transactions, currentValue) : 0;
-              const xirr = xirrRaw && !isNaN(xirrRaw) ? xirrRaw : 0;
+              const holdingDays = firstDate ? Math.floor((new Date() - firstDate) / (1000 * 60 * 60 * 24)) : 0;
+              const xirrValid = xirrRaw && !isNaN(xirrRaw) && holdingDays >= 30;
+              const xirr = xirrValid ? Math.min(Math.max(xirrRaw, -999.99), 999.99) : 0;
               const xirrIsPositive = xirr >= 0;
+              const xirrCapped = xirrValid && Math.abs(xirrRaw) > 999.99;
 
               if (!isFixedIncome) {
                 return (
@@ -542,10 +622,10 @@ export default function TransactionHistory() {
                     {/* Row 2 */}
                     <div>
                       <p className="text-[10px] text-[var(--label-tertiary)] uppercase tracking-wider font-medium mb-1">
-                        XIRR
+                        XIRR {holdingDays < 30 && <span className="text-[8px] text-[var(--label-quaternary)]">(need 30d+)</span>}
                       </p>
                       <p className={`text-[17px] font-semibold tabular-nums ${xirrIsPositive ? 'text-[#34C759]' : 'text-[#FF3B30]'}`}>
-                        {xirr ? `${xirrIsPositive ? '+' : ''}${xirr.toFixed(2)}%` : '—'}
+                        {xirr ? `${xirrIsPositive ? '+' : ''}${xirr.toFixed(2)}%${xirrCapped ? '+' : ''}` : '—'}
                       </p>
                     </div>
                     <div>
@@ -575,47 +655,69 @@ export default function TransactionHistory() {
                   </div>
                 );
               } else {
+                // For recurring deposits, prefer FY-based calculation from recurringSchedule
+                // This will be calculated later but we need to reference it here
+                // We'll use a computed value based on what data source is available
+                const fiDeposited = recurringSchedule?.summary?.totalDeposited || interestCalc?.principal || invested;
+                const fiCurrentValue = recurringSchedule?.summary?.currentValue || interestCalc?.currentValue || invested;
+                const fiInterest = recurringSchedule?.summary?.totalInterest || interestCalc?.interest || 0;
+                const fiInterestPercent = recurringSchedule?.summary?.interestPercent || interestCalc?.interestPercent || 0;
+                const needsTxns = !recurringSchedule && interestCalc?.needsTransactions;
+
                 return (
-                  <div className="grid grid-cols-2 md:grid-cols-5 gap-4 md:gap-6">
-                    <div>
-                      <p className="text-[10px] text-[var(--label-tertiary)] uppercase tracking-wider font-medium mb-1">
-                        Deposited
-                      </p>
-                      <p className="text-[18px] font-semibold text-[var(--label-primary)] tabular-nums">
-                        {formatCompact(interestCalc?.principal || invested)}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-[10px] text-[var(--label-tertiary)] uppercase tracking-wider font-medium mb-1">
-                        Current Value
-                      </p>
-                      <p className="text-[18px] font-semibold text-[var(--label-primary)] tabular-nums">
-                        {formatCompact(interestCalc?.currentValue || invested)}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-[10px] text-[var(--label-tertiary)] uppercase tracking-wider font-medium mb-1">
-                        Interest
-                      </p>
-                      <p className="text-[18px] font-semibold text-[#34C759] tabular-nums">
-                        +{formatCompact(interestCalc?.interest || 0)}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-[10px] text-[var(--label-tertiary)] uppercase tracking-wider font-medium mb-1">
-                        Return
-                      </p>
-                      <p className="text-[18px] font-semibold text-[#34C759] tabular-nums">
-                        +{(interestCalc?.interestPercent || 0).toFixed(1)}%
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-[10px] text-[var(--label-tertiary)] uppercase tracking-wider font-medium mb-1">
-                        Holding
-                      </p>
-                      <p className="text-[18px] font-semibold text-[var(--label-primary)] tabular-nums">
-                        {holdingPeriod}
-                      </p>
+                  <div>
+                    {/* Warning for recurring deposits without transactions */}
+                    {needsTxns && (
+                      <div className="mb-4 px-3 py-2 bg-[var(--system-orange)]/10 border border-[var(--system-orange)]/20 rounded-lg flex items-center gap-2">
+                        <svg className="w-4 h-4 text-[var(--system-orange)] flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                        </svg>
+                        <p className="text-[12px] text-[var(--system-orange)]">
+                          <span className="font-semibold">{asset.asset_type}</span> is a recurring deposit. Add your periodic contributions to calculate accurate interest.
+                        </p>
+                      </div>
+                    )}
+                    <div className="grid grid-cols-2 md:grid-cols-5 gap-4 md:gap-6">
+                      <div>
+                        <p className="text-[10px] text-[var(--label-tertiary)] uppercase tracking-wider font-medium mb-1">
+                          Deposited
+                        </p>
+                        <p className="text-[18px] font-semibold text-[var(--label-primary)] tabular-nums">
+                          {formatCompact(fiDeposited)}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] text-[var(--label-tertiary)] uppercase tracking-wider font-medium mb-1">
+                          Current Value {needsTxns && <span className="text-[8px] text-[var(--label-quaternary)]">(needs txns)</span>}
+                        </p>
+                        <p className="text-[18px] font-semibold text-[var(--label-primary)] tabular-nums">
+                          {needsTxns ? '—' : formatCompact(fiCurrentValue)}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] text-[var(--label-tertiary)] uppercase tracking-wider font-medium mb-1">
+                          Interest {needsTxns && <span className="text-[8px] text-[var(--label-quaternary)]">(needs txns)</span>}
+                        </p>
+                        <p className="text-[18px] font-semibold text-[#34C759] tabular-nums">
+                          {needsTxns ? '—' : `+${formatCompact(fiInterest)}`}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] text-[var(--label-tertiary)] uppercase tracking-wider font-medium mb-1">
+                          Return {needsTxns && <span className="text-[8px] text-[var(--label-quaternary)]">(needs txns)</span>}
+                        </p>
+                        <p className="text-[18px] font-semibold text-[#34C759] tabular-nums">
+                          {needsTxns ? '—' : `+${fiInterestPercent.toFixed(1)}%`}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] text-[var(--label-tertiary)] uppercase tracking-wider font-medium mb-1">
+                          Holding
+                        </p>
+                        <p className="text-[18px] font-semibold text-[var(--label-primary)] tabular-nums">
+                          {holdingPeriod}
+                        </p>
+                      </div>
                     </div>
                   </div>
                 );
@@ -959,7 +1061,544 @@ export default function TransactionHistory() {
             </div>
           )}
         </Card>
-      </motion.div>
+        </motion.div>
+
+        {/* Compounding Schedule Card - Right Column for Fixed Income */}
+        {isFixedIncome && compoundingSchedule && (
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ ...spring.gentle, delay: 0.1 }}
+            className="xl:col-span-2"
+          >
+            <Card padding="p-0" className="overflow-hidden sticky top-6">
+              {/* Header */}
+              <div
+                className="px-5 py-4 border-b border-[var(--separator-opaque)]"
+                style={{
+                  background: `linear-gradient(to right, ${categoryColor}12, ${categoryColor}06, transparent)`
+                }}
+              >
+                <div className="flex items-center gap-3">
+                  <div
+                    className="w-9 h-9 rounded-xl flex items-center justify-center"
+                    style={{ backgroundColor: categoryColor }}
+                  >
+                    <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 013 19.875v-6.75zM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V8.625zM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V4.125z" />
+                    </svg>
+                  </div>
+                  <div className="flex-1">
+                    <h3 className="text-[15px] font-semibold text-[var(--label-primary)]">
+                      Interest Schedule
+                    </h3>
+                    <p className="text-[12px] text-[var(--label-secondary)]">
+                      Quarterly Compounding @ {asset.interest_rate}% p.a.
+                    </p>
+                  </div>
+                  {/* Days to Maturity Badge */}
+                  {(() => {
+                    const maturityDate = compoundingSchedule.summary.maturityDate ? new Date(compoundingSchedule.summary.maturityDate) : null;
+                    if (!maturityDate) return null;
+                    const today = new Date();
+                    const daysRemaining = Math.ceil((maturityDate - today) / (1000 * 60 * 60 * 24));
+                    const isMatured = daysRemaining <= 0;
+                    return (
+                      <div className={`px-2.5 py-1.5 rounded-lg text-center ${isMatured ? 'bg-[#34C759]/10' : 'bg-[var(--fill-tertiary)]'}`}>
+                        <p className={`text-[14px] font-bold tabular-nums ${isMatured ? 'text-[#34C759]' : 'text-[var(--label-primary)]'}`}>
+                          {isMatured ? 'Matured' : daysRemaining}
+                        </p>
+                        {!isMatured && <p className="text-[9px] text-[var(--label-tertiary)] uppercase">Days Left</p>}
+                      </div>
+                    );
+                  })()}
+                </div>
+              </div>
+
+              {/* Tenure Progress */}
+              {compoundingSchedule.summary.progressPercent !== null && (
+                <div className="px-5 py-4 border-b border-[var(--separator-opaque)]">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-[11px] font-medium text-[var(--label-tertiary)] uppercase tracking-wider">Tenure Progress</span>
+                    <span className="text-[12px] font-semibold text-[var(--label-primary)]">
+                      {compoundingSchedule.summary.progressPercent.toFixed(1)}%
+                    </span>
+                  </div>
+                  <div className="h-2 bg-[var(--fill-tertiary)] rounded-full overflow-hidden">
+                    <div
+                      className="h-full rounded-full transition-all duration-500"
+                      style={{
+                        width: `${Math.min(100, compoundingSchedule.summary.progressPercent)}%`,
+                        backgroundColor: compoundingSchedule.summary.progressPercent >= 100 ? '#34C759' : categoryColor
+                      }}
+                    />
+                  </div>
+                  <div className="flex items-center justify-between mt-2 text-[11px] text-[var(--label-tertiary)]">
+                    <span>{new Date(compoundingSchedule.summary.startDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}</span>
+                    {compoundingSchedule.summary.maturityDate && (
+                      <span>{new Date(compoundingSchedule.summary.maturityDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}</span>
+                    )}
+                  </div>
+                </div>
+              )}
+
+
+              {/* Maturity Projection */}
+              {(() => {
+                // Calculate tenure
+                const startDate = new Date(compoundingSchedule.summary.startDate);
+                const endDate = compoundingSchedule.summary.maturityDate
+                  ? new Date(compoundingSchedule.summary.maturityDate)
+                  : new Date(startDate.getFullYear() + 5, startDate.getMonth(), startDate.getDate());
+                const totalMonths = Math.round((endDate - startDate) / (1000 * 60 * 60 * 24 * 30.44));
+                const years = Math.floor(totalMonths / 12);
+                const months = totalMonths % 12;
+                const tenureLabel = years > 0
+                  ? (months > 0 ? `${years}Y ${months}M` : `${years}Y`)
+                  : `${months}M`;
+                const returnPercent = (compoundingSchedule.summary.totalInterest / compoundingSchedule.summary.principal) * 100;
+
+                // Calculate interest earned so far
+                const currentInterest = compoundingSchedule.summary.currentInterest || 0;
+                const interestProgress = compoundingSchedule.summary.totalInterest > 0
+                  ? (currentInterest / compoundingSchedule.summary.totalInterest) * 100
+                  : 0;
+
+                return (
+                  <div className="px-5 py-4 border-b border-[var(--separator-opaque)] bg-[var(--fill-tertiary)]/30">
+                    <div className="grid grid-cols-4 gap-3 mb-3">
+                      <div>
+                        <p className="text-[10px] text-[var(--label-tertiary)] uppercase tracking-wider font-medium mb-1">Principal</p>
+                        <p className="text-[16px] font-bold text-[var(--label-primary)] tabular-nums">
+                          {formatCompact(compoundingSchedule.summary.principal)}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] text-[var(--label-tertiary)] uppercase tracking-wider font-medium mb-1">Tenure</p>
+                        <p className="text-[16px] font-bold text-[var(--label-primary)] tabular-nums">
+                          {tenureLabel}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] text-[var(--label-tertiary)] uppercase tracking-wider font-medium mb-1">Maturity</p>
+                        <p className="text-[16px] font-bold text-[var(--label-primary)] tabular-nums">
+                          {formatCompact(compoundingSchedule.summary.maturityValue)}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] text-[var(--label-tertiary)] uppercase tracking-wider font-medium mb-1">Total Interest</p>
+                        <p className="text-[16px] font-bold text-[#34C759] tabular-nums">
+                          +{formatCompact(compoundingSchedule.summary.totalInterest)}
+                          <span className="text-[10px] font-semibold ml-0.5 opacity-80">
+                            ({returnPercent.toFixed(1)}%)
+                          </span>
+                        </p>
+                      </div>
+                    </div>
+                    {/* Interest Earned So Far */}
+                    <div className="pt-3 border-t border-[var(--separator-opaque)]/50">
+                      <div className="flex items-center justify-between mb-1.5">
+                        <span className="text-[11px] text-[var(--label-tertiary)]">Interest Earned So Far</span>
+                        <span className="text-[12px] font-semibold text-[#34C759]">
+                          +{formatCompact(currentInterest)} / {formatCompact(compoundingSchedule.summary.totalInterest)}
+                        </span>
+                      </div>
+                      <div className="h-1.5 bg-[var(--fill-tertiary)] rounded-full overflow-hidden">
+                        <div
+                          className="h-full rounded-full bg-[#34C759] transition-all duration-500"
+                          style={{ width: `${Math.min(100, interestProgress)}%` }}
+                        />
+                      </div>
+                      <p className="text-[10px] text-[var(--label-quaternary)] mt-1.5 text-right">
+                        Final Interest on Maturity: <span className="font-semibold text-[var(--label-tertiary)]">{formatCurrency(compoundingSchedule.summary.totalInterest)}</span>
+                      </p>
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* Compounding Schedule Table */}
+              {(() => {
+                // Calculate annual interest to determine if TDS applies (threshold: ₹40,000)
+                const annualInterest = compoundingSchedule.summary.totalInterest;
+                const tdsApplicable = annualInterest > 40000;
+                const tdsRate = 0.10; // 10% TDS rate with PAN
+
+                return (
+                  <div>
+                    {/* TDS Notice */}
+                    {tdsApplicable && (
+                      <div className="px-4 py-2 bg-[#FF9500]/10 border-b border-[#FF9500]/20">
+                        <p className="text-[11px] text-[#FF9500] flex items-center gap-1.5">
+                          <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20">
+                            <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                          </svg>
+                          TDS @10% applicable (Interest exceeds ₹40,000/year)
+                        </p>
+                      </div>
+                    )}
+                    <table className="w-full">
+                      <thead className="sticky top-0 bg-[var(--fill-tertiary)]/80 backdrop-blur-sm">
+                        <tr>
+                          <th className="px-3 py-2.5 text-left text-[10px] font-semibold text-[var(--label-tertiary)] uppercase tracking-wider">Period</th>
+                          <th className="px-3 py-2.5 text-right text-[10px] font-semibold text-[var(--label-tertiary)] uppercase tracking-wider">Opening</th>
+                          <th className="px-3 py-2.5 text-right text-[10px] font-semibold text-[var(--label-tertiary)] uppercase tracking-wider">Interest</th>
+                          {tdsApplicable && (
+                            <>
+                              <th className="px-3 py-2.5 text-right text-[10px] font-semibold text-[#FF9500] uppercase tracking-wider">TDS</th>
+                              <th className="px-3 py-2.5 text-right text-[10px] font-semibold text-[var(--label-tertiary)] uppercase tracking-wider">Post-Tax</th>
+                            </>
+                          )}
+                          <th className="px-3 py-2.5 text-right text-[10px] font-semibold text-[var(--label-tertiary)] uppercase tracking-wider">Closing</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-[var(--separator-opaque)]/50">
+                        {compoundingSchedule.schedule.map((period, index) => {
+                          const tdsAmount = tdsApplicable ? period.interestEarned * tdsRate : 0;
+                          const postTaxInterest = period.interestEarned - tdsAmount;
+
+                          return (
+                            <tr
+                              key={period.period}
+                              className={`
+                                ${period.status === 'current' ? 'bg-[var(--chart-primary)]/5' : ''}
+                                ${period.status === 'upcoming' ? 'opacity-50' : ''}
+                              `}
+                            >
+                              <td className="px-3 py-2.5">
+                                <div className="flex items-center gap-2">
+                                  {period.status === 'completed' && (
+                                    <span className="w-2 h-2 rounded-full bg-[#34C759]" />
+                                  )}
+                                  {period.status === 'current' && (
+                                    <span className="w-2 h-2 rounded-full bg-[var(--chart-primary)] animate-pulse" />
+                                  )}
+                                  {period.status === 'upcoming' && (
+                                    <span className="w-2 h-2 rounded-full bg-[var(--label-quaternary)]" />
+                                  )}
+                                  <span className={`text-[12px] font-medium ${period.status === 'current' ? 'text-[var(--chart-primary)]' : 'text-[var(--label-primary)]'}`}>
+                                    {period.label}
+                                  </span>
+                                </div>
+                              </td>
+                              <td className="px-3 py-2.5 text-right text-[12px] tabular-nums text-[var(--label-secondary)]">
+                                {formatCompact(period.openingBalance)}
+                              </td>
+                              <td className="px-3 py-2.5 text-right text-[12px] tabular-nums text-[#34C759] font-semibold">
+                                +{formatCompact(period.interestEarned)}
+                              </td>
+                              {tdsApplicable && (
+                                <>
+                                  <td className="px-3 py-2.5 text-right text-[12px] tabular-nums text-[#FF9500] font-medium">
+                                    -{formatCompact(tdsAmount)}
+                                  </td>
+                                  <td className="px-3 py-2.5 text-right text-[12px] tabular-nums text-[#34C759]">
+                                    +{formatCompact(postTaxInterest)}
+                                  </td>
+                                </>
+                              )}
+                              <td className="px-3 py-2.5 text-right text-[12px] tabular-nums text-[var(--label-primary)] font-bold">
+                                {formatCompact(period.closingBalance)}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                      {/* TDS Summary Footer */}
+                      {tdsApplicable && (
+                        <tfoot className="bg-[var(--fill-tertiary)]/50 border-t border-[var(--separator-opaque)]">
+                          <tr>
+                            <td colSpan={2} className="px-3 py-2.5 text-right text-[11px] font-semibold text-[var(--label-secondary)]">
+                              Total
+                            </td>
+                            <td className="px-3 py-2.5 text-right text-[12px] tabular-nums text-[#34C759] font-bold">
+                              +{formatCompact(annualInterest)}
+                            </td>
+                            <td className="px-3 py-2.5 text-right text-[12px] tabular-nums text-[#FF9500] font-bold">
+                              -{formatCompact(annualInterest * tdsRate)}
+                            </td>
+                            <td className="px-3 py-2.5 text-right text-[12px] tabular-nums text-[#34C759] font-bold">
+                              +{formatCompact(annualInterest * (1 - tdsRate))}
+                            </td>
+                            <td className="px-3 py-2.5 text-right text-[12px] tabular-nums text-[var(--label-primary)] font-bold">
+                              {formatCompact(compoundingSchedule.summary.maturityValue)}
+                            </td>
+                          </tr>
+                        </tfoot>
+                      )}
+                    </table>
+                  </div>
+                );
+              })()}
+
+              {/* Footer with legend */}
+              <div className="px-4 py-3 border-t border-[var(--separator-opaque)] bg-[var(--fill-tertiary)]/30">
+                <div className="flex items-center justify-center gap-5 text-[11px] text-[var(--label-tertiary)]">
+                  <span className="flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-[#34C759]" />
+                    Completed
+                  </span>
+                  <span className="flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-[var(--chart-primary)]" />
+                    Current
+                  </span>
+                  <span className="flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-[var(--label-quaternary)]" />
+                    Upcoming
+                  </span>
+                </div>
+              </div>
+            </Card>
+          </motion.div>
+        )}
+
+        {/* FY-wise Interest Schedule Card - Right Column for Recurring Deposits (PPF, RD, etc.) */}
+        {showRecurringCard && !compoundingSchedule && (
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ ...spring.gentle, delay: 0.1 }}
+            className="xl:col-span-2"
+          >
+            <Card padding="p-0" className="overflow-hidden sticky top-6">
+              {/* Header */}
+              <div
+                className="px-5 py-4 border-b border-[var(--separator-opaque)]"
+                style={{
+                  background: `linear-gradient(to right, ${categoryColor}12, ${categoryColor}06, transparent)`
+                }}
+              >
+                <div className="flex items-center gap-3">
+                  <div
+                    className="w-9 h-9 rounded-xl flex items-center justify-center"
+                    style={{ backgroundColor: categoryColor }}
+                  >
+                    <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 013 19.875v-6.75zM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V8.625zM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V4.125z" />
+                    </svg>
+                  </div>
+                  <div className="flex-1">
+                    <h3 className="text-[15px] font-semibold text-[var(--label-primary)]">
+                      Year-on-Year Growth Breakdown
+                    </h3>
+                    <p className="text-[12px] text-[var(--label-secondary)]">
+                      {asset.asset_type} @ {asset.interest_rate}% p.a. (FY: Apr-Mar)
+                    </p>
+                  </div>
+                  {/* Years to Maturity Badge - PPF has 15-year lock-in */}
+                  {recurringSchedule && asset.asset_type === 'PPF' && (
+                    <div className="px-2.5 py-1.5 rounded-lg text-center bg-[var(--fill-tertiary)]">
+                      <p className="text-[14px] font-bold tabular-nums text-[var(--label-primary)]">
+                        {Math.max(0, 15 - recurringSchedule.summary.totalYears)}
+                      </p>
+                      <p className="text-[9px] text-[var(--label-tertiary)] uppercase">Years Left</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {recurringSchedule ? (
+                <>
+                  {/* Account Progress for PPF (15-year tenure) */}
+                  {asset.asset_type === 'PPF' && (
+                    <div className="px-5 py-4 border-b border-[var(--separator-opaque)]">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-[11px] font-medium text-[var(--label-tertiary)] uppercase tracking-wider">
+                          Account Progress
+                        </span>
+                        <span className="text-[12px] font-semibold text-[var(--label-primary)]">
+                          Year {recurringSchedule.summary.totalYears} of 15
+                        </span>
+                      </div>
+                      <div className="h-2 bg-[var(--fill-tertiary)] rounded-full overflow-hidden">
+                        <div
+                          className="h-full rounded-full transition-all duration-500"
+                          style={{
+                            width: `${Math.min(100, (recurringSchedule.summary.totalYears / 15) * 100)}%`,
+                            backgroundColor: recurringSchedule.summary.totalYears >= 15 ? '#34C759' : categoryColor
+                          }}
+                        />
+                      </div>
+                      <div className="flex items-center justify-between mt-2 text-[11px] text-[var(--label-tertiary)]">
+                        <span>Opened {recurringSchedule.summary.firstDepositDate ? new Date(recurringSchedule.summary.firstDepositDate).toLocaleDateString('en-IN', { month: 'short', year: 'numeric' }) : '—'}</span>
+                        <span>{recurringSchedule.summary.totalYears >= 5 ? '✓ Partial withdrawal eligible' : `${5 - recurringSchedule.summary.totalYears}y to partial withdrawal`}</span>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Current FY Contribution Tracker */}
+                  {(() => {
+                    const currentFY = getFinancialYear(new Date());
+                    const currentFYData = recurringSchedule.schedule.find(s => s.fy === currentFY.fy);
+                    const depositsThisFY = currentFYData?.depositsThisFY || 0;
+                    const maxLimit = asset.asset_type === 'PPF' ? 150000 : (asset.asset_type === 'SSY' ? 150000 : null);
+
+                    if (!maxLimit) return null;
+
+                    const limitUsedPercent = (depositsThisFY / maxLimit) * 100;
+                    const remaining = Math.max(0, maxLimit - depositsThisFY);
+
+                    return (
+                      <div className="px-5 py-4 border-b border-[var(--separator-opaque)]">
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-[11px] font-medium text-[var(--label-tertiary)] uppercase tracking-wider">
+                            FY {currentFY.fy} Contribution
+                          </span>
+                          <span className="text-[12px] font-semibold text-[var(--label-primary)]">
+                            {formatCompact(depositsThisFY)} / {formatCompact(maxLimit)}
+                          </span>
+                        </div>
+                        <div className="h-2 bg-[var(--fill-tertiary)] rounded-full overflow-hidden">
+                          <div
+                            className="h-full rounded-full transition-all duration-500"
+                            style={{
+                              width: `${Math.min(100, limitUsedPercent)}%`,
+                              backgroundColor: limitUsedPercent >= 100 ? '#34C759' : '#F59E0B'
+                            }}
+                          />
+                        </div>
+                        <div className="flex items-center justify-between mt-2 text-[11px]">
+                          <span className="text-[var(--label-tertiary)]">
+                            {limitUsedPercent >= 100 ? '✓ Limit reached' : `₹${formatCompact(remaining)} more allowed`}
+                          </span>
+                          <span className="text-[#34C759] font-medium">
+                            Section 80C
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })()}
+
+
+                  {/* Summary Stats */}
+                  <div className="px-5 py-4 border-b border-[var(--separator-opaque)] bg-[var(--fill-tertiary)]/30">
+                    <div className="grid grid-cols-4 gap-3">
+                      <div>
+                        <p className="text-[10px] text-[var(--label-tertiary)] uppercase tracking-wider font-medium mb-1">Deposited</p>
+                        <p className="text-[16px] font-bold text-[var(--label-primary)] tabular-nums">
+                          {formatCompact(recurringSchedule.summary.totalDeposited)}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] text-[var(--label-tertiary)] uppercase tracking-wider font-medium mb-1">Years</p>
+                        <p className="text-[16px] font-bold text-[var(--label-primary)] tabular-nums">
+                          {recurringSchedule.summary.totalYears}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] text-[var(--label-tertiary)] uppercase tracking-wider font-medium mb-1">Value</p>
+                        <p className="text-[16px] font-bold text-[var(--label-primary)] tabular-nums">
+                          {formatCompact(recurringSchedule.summary.currentValue)}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] text-[var(--label-tertiary)] uppercase tracking-wider font-medium mb-1">Interest</p>
+                        <p className="text-[16px] font-bold text-[#34C759] tabular-nums">
+                          +{formatCompact(recurringSchedule.summary.totalInterest)}
+                          <span className="text-[10px] font-semibold ml-0.5 opacity-80">
+                            ({recurringSchedule.summary.interestPercent.toFixed(1)}%)
+                          </span>
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* FY-wise Schedule Table with Opening Balance */}
+                  <div>
+                    <table className="w-full">
+                      <thead className="sticky top-0 bg-[var(--fill-tertiary)]/80 backdrop-blur-sm">
+                        <tr>
+                          <th className="px-3 py-2.5 text-left text-[10px] font-semibold text-[var(--label-tertiary)] uppercase tracking-wider">FY</th>
+                          <th className="px-3 py-2.5 text-right text-[10px] font-semibold text-[var(--label-tertiary)] uppercase tracking-wider">Opening</th>
+                          <th className="px-3 py-2.5 text-right text-[10px] font-semibold text-[var(--label-tertiary)] uppercase tracking-wider">Deposit</th>
+                          <th className="px-3 py-2.5 text-right text-[10px] font-semibold text-[var(--label-tertiary)] uppercase tracking-wider">Interest</th>
+                          <th className="px-3 py-2.5 text-right text-[10px] font-semibold text-[var(--label-tertiary)] uppercase tracking-wider">Closing</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-[var(--separator-opaque)]/50">
+                        {recurringSchedule.schedule.map((period) => (
+                          <tr
+                            key={period.fy}
+                            className={`
+                              ${period.status === 'current' ? 'bg-[var(--chart-primary)]/5' : ''}
+                            `}
+                          >
+                            <td className="px-3 py-2.5">
+                              <div className="flex items-center gap-1.5">
+                                {period.status === 'completed' && (
+                                  <span className="w-2 h-2 rounded-full bg-[#34C759]" />
+                                )}
+                                {period.status === 'current' && (
+                                  <span className="w-2 h-2 rounded-full bg-[var(--chart-primary)] animate-pulse" />
+                                )}
+                                <span className={`text-[12px] font-medium ${period.status === 'current' ? 'text-[var(--chart-primary)]' : 'text-[var(--label-primary)]'}`}>
+                                  {period.fyLabel}
+                                </span>
+                              </div>
+                            </td>
+                            <td className="px-3 py-2.5 text-right text-[12px] tabular-nums text-[var(--label-secondary)]">
+                              {formatCompact(period.openingBalance)}
+                            </td>
+                            <td className="px-3 py-2.5 text-right text-[12px] tabular-nums text-[var(--label-primary)] font-medium">
+                              {period.depositsThisFY > 0 ? formatCompact(period.depositsThisFY) : '—'}
+                            </td>
+                            <td className="px-3 py-2.5 text-right text-[12px] tabular-nums text-[#34C759] font-semibold">
+                              +{formatCompact(period.interestEarned)}
+                            </td>
+                            <td className="px-3 py-2.5 text-right text-[12px] tabular-nums text-[var(--label-primary)] font-bold">
+                              {formatCompact(period.closingBalance)}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  {/* Footer with legend */}
+                  <div className="px-4 py-3 border-t border-[var(--separator-opaque)] bg-[var(--fill-tertiary)]/30">
+                    <div className="flex items-center justify-center gap-5 text-[11px] text-[var(--label-tertiary)]">
+                      <span className="flex items-center gap-2">
+                        <span className="w-2 h-2 rounded-full bg-[#34C759]" />
+                        Completed
+                      </span>
+                      <span className="flex items-center gap-2">
+                        <span className="w-2 h-2 rounded-full bg-[var(--chart-primary)]" />
+                        Current FY
+                      </span>
+                    </div>
+                  </div>
+                </>
+              ) : (
+                /* No transactions - show help message */
+                <div className="px-5 py-8 text-center">
+                  <div className="w-12 h-12 rounded-full bg-[var(--system-orange)]/10 flex items-center justify-center mx-auto mb-3">
+                    <svg className="w-6 h-6 text-[var(--system-orange)]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
+                    </svg>
+                  </div>
+                  <h4 className="text-[14px] font-semibold text-[var(--label-primary)] mb-1">
+                    Add Your Contributions
+                  </h4>
+                  <p className="text-[12px] text-[var(--label-secondary)] mb-4 max-w-[200px] mx-auto">
+                    {asset.asset_type} is a recurring deposit. Add your yearly contributions to see FY-wise interest growth.
+                  </p>
+                  <Link
+                    to="/assets/add"
+                    state={{ category: 'FIXED_INCOME', assetType: asset.asset_type, assetId: asset.id }}
+                    className="inline-flex items-center gap-1.5 px-3 py-2 text-[13px] font-medium text-white rounded-lg"
+                    style={{ backgroundColor: categoryColor }}
+                  >
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+                    </svg>
+                    Add Contribution
+                  </Link>
+                </div>
+              )}
+            </Card>
+          </motion.div>
+        )}
+      </div>
 
       {/* Delete Confirmation Modal */}
       <Modal

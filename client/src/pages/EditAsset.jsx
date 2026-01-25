@@ -1,12 +1,36 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useNavigate, useParams, Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { assetService, ASSET_CONFIG } from '../services/assets';
 import { Card, Button, SkeletonCard, Skeleton } from '../components/apple';
-import { spring, tapScale } from '../utils/animations';
+import { spring } from '../utils/animations';
 import { categoryColors, CategoryIcon } from '../constants/theme';
 import { formatCurrency } from '../utils/formatting';
 import StockAutocomplete from '../components/StockAutocomplete';
+
+// Category card configuration with icons and colors (matching AddAsset)
+const CATEGORY_CARDS = {
+  EQUITY: { label: 'Equity', description: 'Stocks & Mutual Funds', gradient: 'from-blue-500/15 to-blue-600/5', iconBg: 'bg-[#4F7DF3]' },
+  FIXED_INCOME: { label: 'Fixed Income', description: 'FD, PPF, Bonds', gradient: 'from-emerald-500/15 to-emerald-600/5', iconBg: 'bg-[#22C55E]' },
+  REAL_ESTATE: { label: 'Real Estate', description: 'Property & Land', gradient: 'from-amber-500/15 to-amber-600/5', iconBg: 'bg-[#F59E0B]' },
+  PHYSICAL: { label: 'Physical Assets', description: 'Gold, Silver, Art', gradient: 'from-orange-500/15 to-orange-600/5', iconBg: 'bg-[#F97316]' },
+  SAVINGS: { label: 'Savings', description: 'Bank Accounts', gradient: 'from-teal-500/15 to-teal-600/5', iconBg: 'bg-[#14B8A6]' },
+  CRYPTO: { label: 'Cryptocurrency', description: 'Bitcoin, Ethereum', gradient: 'from-indigo-500/15 to-indigo-600/5', iconBg: 'bg-[#6366F1]' },
+  INSURANCE: { label: 'Insurance', description: 'Life, ULIP Policies', gradient: 'from-pink-500/15 to-pink-600/5', iconBg: 'bg-[#EC4899]' },
+  OTHER: { label: 'Other', description: 'Miscellaneous', gradient: 'from-gray-500/15 to-gray-600/5', iconBg: 'bg-[#6B7280]' },
+};
+
+// Validation rules per category
+const VALIDATION_RULES = {
+  EQUITY: ['name', 'symbol'],
+  FIXED_INCOME: ['name', 'principal'],
+  REAL_ESTATE: ['name'],
+  PHYSICAL: ['name'],
+  SAVINGS: ['name'],
+  CRYPTO: ['name'],
+  INSURANCE: ['name'],
+  OTHER: ['name'],
+};
 
 export default function EditAsset() {
   const navigate = useNavigate();
@@ -42,6 +66,8 @@ export default function EditAsset() {
     policy_number: '',
     purchase_date: '',
     notes: '',
+    created_at: '',
+    updated_at: '',
   });
 
   useEffect(() => {
@@ -52,7 +78,6 @@ export default function EditAsset() {
     try {
       const response = await assetService.getById(id);
       const asset = response.data.asset;
-      // Helper to round numbers to 2 decimal places for display
       const roundPrice = (val) => val ? Math.round(val * 100) / 100 : '';
 
       setFormData({
@@ -82,6 +107,8 @@ export default function EditAsset() {
         policy_number: asset.policy_number || '',
         purchase_date: asset.purchase_date || '',
         notes: asset.notes || '',
+        created_at: asset.created_at || '',
+        updated_at: asset.updated_at || '',
       });
     } catch (err) {
       setError('Failed to load asset');
@@ -103,7 +130,6 @@ export default function EditAsset() {
     try {
       let dataToSubmit = { ...formData };
 
-      // Calculate appreciated value and rate for Real Estate based on mode
       if (formData.category === 'REAL_ESTATE' && formData.purchase_price && formData.purchase_date) {
         const purchasePrice = parseFloat(formData.purchase_price);
         const purchaseDate = new Date(formData.purchase_date);
@@ -112,11 +138,9 @@ export default function EditAsset() {
         const calcMode = formData.real_estate_calc_mode || 'rate';
 
         if (calcMode === 'rate' && formData.appreciation_rate) {
-          // Mode: Enter rate → Calculate value
           const rate = parseFloat(formData.appreciation_rate) / 100;
           dataToSubmit.current_value = Math.round(purchasePrice * Math.pow(1 + rate, Math.max(0, years)));
         } else if (calcMode === 'value' && formData.current_value) {
-          // Mode: Enter value → Calculate rate
           const currentValue = parseFloat(formData.current_value);
           if (years > 0 && purchasePrice > 0) {
             dataToSubmit.appreciation_rate = Math.round((Math.pow(currentValue / purchasePrice, 1 / years) - 1) * 1000) / 10;
@@ -142,7 +166,6 @@ export default function EditAsset() {
     if (category === 'FIXED_INCOME') return principal || 0;
     if (category === 'SAVINGS') return balance || 0;
 
-    // For Real Estate, calculate appreciated value if in rate mode
     if (category === 'REAL_ESTATE') {
       const calcMode = formData.real_estate_calc_mode || 'rate';
       if (calcMode === 'rate' && purchase_price && formData.purchase_date && formData.appreciation_rate) {
@@ -161,9 +184,28 @@ export default function EditAsset() {
     return current_value || purchase_price || 0;
   };
 
-  const inputClass = "w-full px-4 py-3 bg-[var(--fill-tertiary)] border-0 rounded-xl focus:outline-none focus:ring-2 focus:ring-[var(--system-blue)]/50 transition-all text-[var(--label-primary)] placeholder-[var(--label-tertiary)] text-[15px]";
-  const selectClass = `w-full px-4 py-3 pr-10 bg-[var(--fill-tertiary)] border-0 rounded-xl focus:outline-none focus:ring-2 focus:ring-[var(--system-blue)]/50 transition-all text-[var(--label-primary)] text-[15px] appearance-none cursor-pointer bg-no-repeat bg-[right_12px_center] bg-[length:20px_20px] bg-[url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%238E8E93' stroke-width='2'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' d='M19.5 8.25l-7.5 7.5-7.5-7.5'/%3E%3C/svg%3E")]`;
+  // Calculate form completion percentage
+  const completionPercentage = useMemo(() => {
+    if (!formData.category) return 0;
+    const requiredFields = VALIDATION_RULES[formData.category] || ['name'];
+    const additionalFields = ['purchase_date'];
+    const allFields = [...requiredFields, ...additionalFields];
+
+    const filledCount = allFields.filter(field => {
+      const value = formData[field];
+      return value !== '' && value !== null && value !== undefined;
+    }).length;
+
+    return Math.round((filledCount / allFields.length) * 100);
+  }, [formData]);
+
+  // Input styles matching AddAsset
+  const inputClass = "w-full px-4 py-3 bg-[var(--bg-primary)] border border-[var(--separator-opaque)] rounded-xl focus:outline-none focus:ring-2 focus:ring-[var(--chart-primary)]/30 focus:border-[var(--chart-primary)] transition-all text-[var(--label-primary)] placeholder-[var(--label-tertiary)] text-[15px]";
+  const selectClass = `w-full px-4 py-3 pr-10 bg-[var(--bg-primary)] border border-[var(--separator-opaque)] rounded-xl focus:outline-none focus:ring-2 focus:ring-[var(--chart-primary)]/30 focus:border-[var(--chart-primary)] transition-all text-[var(--label-primary)] text-[15px] appearance-none cursor-pointer bg-no-repeat bg-[right_12px_center] bg-[length:20px_20px] bg-[url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%238E8E93' stroke-width='2'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' d='M19.5 8.25l-7.5 7.5-7.5-7.5'/%3E%3C/svg%3E")]`;
   const labelClass = "block text-[13px] font-medium text-[var(--label-secondary)] mb-2";
+
+  const categoryConfig = CATEGORY_CARDS[formData.category];
+  const selectedType = ASSET_CONFIG[formData.category]?.types.find(t => t.value === formData.asset_type);
 
   const renderCategoryFields = () => {
     const { category, asset_type } = formData;
@@ -191,7 +233,10 @@ export default function EditAsset() {
             </div>
             <div>
               <label className={labelClass}>Avg Buy Price</label>
-              <input type="number" name="avg_buy_price" value={formData.avg_buy_price} onChange={handleChange} step="0.01" placeholder="0.00" className={inputClass} />
+              <div className="relative">
+                <span className="absolute left-4 top-1/2 -translate-y-1/2 text-[var(--label-tertiary)]">₹</span>
+                <input type="number" name="avg_buy_price" value={formData.avg_buy_price} onChange={handleChange} step="0.01" placeholder="0.00" className={`${inputClass} pl-8`} />
+              </div>
             </div>
           </div>
         );
@@ -201,7 +246,10 @@ export default function EditAsset() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
             <div>
               <label className={labelClass}>Principal Amount</label>
-              <input type="number" name="principal" value={formData.principal} onChange={handleChange} placeholder="0" className={inputClass} />
+              <div className="relative">
+                <span className="absolute left-4 top-1/2 -translate-y-1/2 text-[var(--label-tertiary)]">₹</span>
+                <input type="number" name="principal" value={formData.principal} onChange={handleChange} placeholder="0" className={`${inputClass} pl-8`} />
+              </div>
             </div>
             <div>
               <label className={labelClass}>Interest Rate (% p.a.)</label>
@@ -223,10 +271,8 @@ export default function EditAsset() {
         );
 
       case 'REAL_ESTATE':
-        // Calculate values based on mode
         const calcMode = formData.real_estate_calc_mode || 'rate';
 
-        // Calculate appreciated value (when mode is 'rate')
         const appreciatedValue = (() => {
           if (calcMode !== 'rate' || !formData.purchase_price || !formData.purchase_date || !formData.appreciation_rate) return null;
           const purchasePrice = parseFloat(formData.purchase_price);
@@ -238,7 +284,6 @@ export default function EditAsset() {
           return Math.round(purchasePrice * Math.pow(1 + rate, years));
         })();
 
-        // Calculate appreciation rate (when mode is 'value')
         const calculatedRate = (() => {
           if (calcMode !== 'value' || !formData.purchase_price || !formData.purchase_date || !formData.current_value) return null;
           const purchasePrice = parseFloat(formData.purchase_price);
@@ -256,7 +301,10 @@ export default function EditAsset() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-5 mb-5">
               <div>
                 <label className={labelClass}>Purchase Price</label>
-                <input type="number" name="purchase_price" value={formData.purchase_price} onChange={handleChange} placeholder="0" className={inputClass} />
+                <div className="relative">
+                  <span className="absolute left-4 top-1/2 -translate-y-1/2 text-[var(--label-tertiary)]">₹</span>
+                  <input type="number" name="purchase_price" value={formData.purchase_price} onChange={handleChange} placeholder="0" className={`${inputClass} pl-8`} />
+                </div>
               </div>
               <div>
                 <label className={labelClass}>Purchase Date</label>
@@ -265,16 +313,16 @@ export default function EditAsset() {
             </div>
 
             {/* Calculation Mode Toggle */}
-            <div className="mb-5">
-              <div className="flex items-center justify-between mb-3">
-                <span className="text-[13px] font-medium text-[var(--label-secondary)]">Calculate By</span>
-                <div className="flex items-center bg-[var(--fill-tertiary)] rounded-lg p-0.5">
+            <div className="mb-5 p-4 bg-[var(--fill-tertiary)]/50 rounded-xl">
+              <div className="flex items-center justify-between mb-4">
+                <span className="text-[13px] font-semibold text-[var(--label-primary)]">Valuation Method</span>
+                <div className="flex items-center bg-[var(--bg-primary)] rounded-lg p-1 shadow-sm">
                   <button
                     type="button"
                     onClick={() => setFormData(prev => ({ ...prev, real_estate_calc_mode: 'rate', current_value: '' }))}
-                    className={`px-3 py-1.5 text-[12px] font-medium rounded-md transition-all ${
+                    className={`px-4 py-2 text-[13px] font-semibold rounded-md transition-all ${
                       calcMode === 'rate'
-                        ? 'bg-[var(--bg-primary)] text-[var(--label-primary)] shadow-sm'
+                        ? 'bg-[var(--chart-primary)] text-white shadow-sm'
                         : 'text-[var(--label-secondary)] hover:text-[var(--label-primary)]'
                     }`}
                   >
@@ -283,9 +331,9 @@ export default function EditAsset() {
                   <button
                     type="button"
                     onClick={() => setFormData(prev => ({ ...prev, real_estate_calc_mode: 'value', appreciation_rate: '' }))}
-                    className={`px-3 py-1.5 text-[12px] font-medium rounded-md transition-all ${
+                    className={`px-4 py-2 text-[13px] font-semibold rounded-md transition-all ${
                       calcMode === 'value'
-                        ? 'bg-[var(--bg-primary)] text-[var(--label-primary)] shadow-sm'
+                        ? 'bg-[var(--chart-primary)] text-white shadow-sm'
                         : 'text-[var(--label-secondary)] hover:text-[var(--label-primary)]'
                     }`}
                   >
@@ -298,7 +346,7 @@ export default function EditAsset() {
                 <div>
                   <label className={labelClass}>
                     Appreciation Rate
-                    {calcMode === 'value' && calculatedRate !== null && <span className="text-[var(--system-green)] ml-1">(Auto)</span>}
+                    {calcMode === 'value' && calculatedRate !== null && <span className="text-[var(--system-green)] ml-1 text-[11px]">(Auto-calculated)</span>}
                   </label>
                   <div className="relative">
                     <input
@@ -309,30 +357,33 @@ export default function EditAsset() {
                       placeholder="6"
                       step="0.1"
                       readOnly={calcMode === 'value'}
-                      className={`${inputClass} pr-16 ${calcMode === 'value' ? 'bg-[var(--system-green)]/5' : ''}`}
+                      className={`${inputClass} pr-16 ${calcMode === 'value' ? 'bg-[var(--system-green)]/5 border-[var(--system-green)]/30' : ''}`}
                     />
                     <span className="absolute right-4 top-1/2 -translate-y-1/2 text-[var(--label-tertiary)] text-[13px]">% p.a.</span>
                   </div>
                   {calcMode === 'rate' && (
-                    <p className="text-[11px] text-[var(--label-tertiary)] mt-1">Typical: 5-8% for residential</p>
+                    <p className="text-[11px] text-[var(--label-tertiary)] mt-1.5">Typical: 5-8% for residential</p>
                   )}
                 </div>
                 <div>
                   <label className={labelClass}>
                     Current Value
-                    {calcMode === 'rate' && appreciatedValue && <span className="text-[var(--system-green)] ml-1">(Auto)</span>}
+                    {calcMode === 'rate' && appreciatedValue && <span className="text-[var(--system-green)] ml-1 text-[11px]">(Auto-calculated)</span>}
                   </label>
-                  <input
-                    type="number"
-                    name="current_value"
-                    value={calcMode === 'rate' && appreciatedValue ? appreciatedValue : formData.current_value}
-                    onChange={handleChange}
-                    placeholder="0"
-                    readOnly={calcMode === 'rate'}
-                    className={`${inputClass} ${calcMode === 'rate' ? 'bg-[var(--system-green)]/5' : ''}`}
-                  />
+                  <div className="relative">
+                    <span className="absolute left-4 top-1/2 -translate-y-1/2 text-[var(--label-tertiary)]">₹</span>
+                    <input
+                      type="number"
+                      name="current_value"
+                      value={calcMode === 'rate' && appreciatedValue ? appreciatedValue : formData.current_value}
+                      onChange={handleChange}
+                      placeholder="0"
+                      readOnly={calcMode === 'rate'}
+                      className={`${inputClass} pl-8 ${calcMode === 'rate' ? 'bg-[var(--system-green)]/5 border-[var(--system-green)]/30' : ''}`}
+                    />
+                  </div>
                   {calcMode === 'value' && (
-                    <p className="text-[11px] text-[var(--label-tertiary)] mt-1">Enter estimated market value</p>
+                    <p className="text-[11px] text-[var(--label-tertiary)] mt-1.5">Enter estimated market value</p>
                   )}
                 </div>
               </div>
@@ -375,11 +426,17 @@ export default function EditAsset() {
             )}
             <div>
               <label className={labelClass}>Purchase Price</label>
-              <input type="number" name="purchase_price" value={formData.purchase_price} onChange={handleChange} placeholder="0" className={inputClass} />
+              <div className="relative">
+                <span className="absolute left-4 top-1/2 -translate-y-1/2 text-[var(--label-tertiary)]">₹</span>
+                <input type="number" name="purchase_price" value={formData.purchase_price} onChange={handleChange} placeholder="0" className={`${inputClass} pl-8`} />
+              </div>
             </div>
             <div>
               <label className={labelClass}>Current Value</label>
-              <input type="number" name="current_value" value={formData.current_value} onChange={handleChange} placeholder="0" className={inputClass} />
+              <div className="relative">
+                <span className="absolute left-4 top-1/2 -translate-y-1/2 text-[var(--label-tertiary)]">₹</span>
+                <input type="number" name="current_value" value={formData.current_value} onChange={handleChange} placeholder="0" className={`${inputClass} pl-8`} />
+              </div>
             </div>
           </div>
         );
@@ -389,7 +446,10 @@ export default function EditAsset() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
             <div>
               <label className={labelClass}>Current Balance</label>
-              <input type="number" name="balance" value={formData.balance} onChange={handleChange} placeholder="0" className={inputClass} />
+              <div className="relative">
+                <span className="absolute left-4 top-1/2 -translate-y-1/2 text-[var(--label-tertiary)]">₹</span>
+                <input type="number" name="balance" value={formData.balance} onChange={handleChange} placeholder="0" className={`${inputClass} pl-8`} />
+              </div>
             </div>
             <div>
               <label className={labelClass}>Interest Rate (% p.a.)</label>
@@ -419,7 +479,10 @@ export default function EditAsset() {
             </div>
             <div>
               <label className={labelClass}>Avg Buy Price</label>
-              <input type="number" name="avg_buy_price" value={formData.avg_buy_price} onChange={handleChange} step="0.01" placeholder="0.00" className={inputClass} />
+              <div className="relative">
+                <span className="absolute left-4 top-1/2 -translate-y-1/2 text-[var(--label-tertiary)]">₹</span>
+                <input type="number" name="avg_buy_price" value={formData.avg_buy_price} onChange={handleChange} step="0.01" placeholder="0.00" className={`${inputClass} pl-8`} />
+              </div>
             </div>
           </div>
         );
@@ -437,15 +500,24 @@ export default function EditAsset() {
             </div>
             <div>
               <label className={labelClass}>Premium/year</label>
-              <input type="number" name="premium" value={formData.premium} onChange={handleChange} placeholder="0" className={inputClass} />
+              <div className="relative">
+                <span className="absolute left-4 top-1/2 -translate-y-1/2 text-[var(--label-tertiary)]">₹</span>
+                <input type="number" name="premium" value={formData.premium} onChange={handleChange} placeholder="0" className={`${inputClass} pl-8`} />
+              </div>
             </div>
             <div>
               <label className={labelClass}>Sum Assured</label>
-              <input type="number" name="sum_assured" value={formData.sum_assured} onChange={handleChange} placeholder="0" className={inputClass} />
+              <div className="relative">
+                <span className="absolute left-4 top-1/2 -translate-y-1/2 text-[var(--label-tertiary)]">₹</span>
+                <input type="number" name="sum_assured" value={formData.sum_assured} onChange={handleChange} placeholder="0" className={`${inputClass} pl-8`} />
+              </div>
             </div>
             <div>
               <label className={labelClass}>Current Value</label>
-              <input type="number" name="current_value" value={formData.current_value} onChange={handleChange} placeholder="For ULIP/endowment" className={inputClass} />
+              <div className="relative">
+                <span className="absolute left-4 top-1/2 -translate-y-1/2 text-[var(--label-tertiary)]">₹</span>
+                <input type="number" name="current_value" value={formData.current_value} onChange={handleChange} placeholder="For ULIP/endowment" className={`${inputClass} pl-8`} />
+              </div>
             </div>
             <div>
               <label className={labelClass}>Maturity Date</label>
@@ -459,11 +531,17 @@ export default function EditAsset() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
             <div>
               <label className={labelClass}>Current Value</label>
-              <input type="number" name="current_value" value={formData.current_value} onChange={handleChange} placeholder="0" className={inputClass} />
+              <div className="relative">
+                <span className="absolute left-4 top-1/2 -translate-y-1/2 text-[var(--label-tertiary)]">₹</span>
+                <input type="number" name="current_value" value={formData.current_value} onChange={handleChange} placeholder="0" className={`${inputClass} pl-8`} />
+              </div>
             </div>
             <div>
               <label className={labelClass}>Purchase Price</label>
-              <input type="number" name="purchase_price" value={formData.purchase_price} onChange={handleChange} placeholder="0" className={inputClass} />
+              <div className="relative">
+                <span className="absolute left-4 top-1/2 -translate-y-1/2 text-[var(--label-tertiary)]">₹</span>
+                <input type="number" name="purchase_price" value={formData.purchase_price} onChange={handleChange} placeholder="0" className={`${inputClass} pl-8`} />
+              </div>
             </div>
           </div>
         );
@@ -476,11 +554,11 @@ export default function EditAsset() {
   if (loading) {
     return (
       <div className="h-full overflow-auto bg-[var(--bg-secondary)]">
-        <div className="max-w-4xl mx-auto p-4 md:px-12 md:py-6">
+        <div className="max-w-6xl mx-auto p-4 md:px-8 md:py-6">
           <div className="mb-8">
-            <Skeleton width="60px" height="1rem" rounded="sm" className="mb-4" />
-            <Skeleton width="150px" height="2rem" rounded="md" className="mb-2" />
-            <Skeleton width="200px" height="1rem" rounded="sm" />
+            <Skeleton width="100px" height="1rem" rounded="md" className="mb-4" />
+            <Skeleton width="200px" height="2rem" rounded="md" className="mb-2" />
+            <Skeleton width="280px" height="1rem" rounded="md" />
           </div>
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             <div className="lg:col-span-2">
@@ -495,26 +573,26 @@ export default function EditAsset() {
     );
   }
 
-  const colors = categoryColors[formData.category] || categoryColors.OTHER;
-
   return (
     <div className="h-full overflow-auto bg-[var(--bg-secondary)]">
-      <div className="max-w-4xl mx-auto p-4 md:px-12 md:py-6">
+      <div className="max-w-6xl mx-auto p-4 md:px-8 md:py-6">
         {/* Header */}
         <motion.div
           initial={{ opacity: 0, y: -10 }}
           animate={{ opacity: 1, y: 0 }}
           transition={spring.gentle}
-          className="mb-8"
+          className="mb-6"
         >
-          <Link to="/assets" className="inline-flex items-center gap-1 text-[12px] text-[var(--label-tertiary)] hover:text-[var(--chart-primary)] mb-3 transition-colors">
-            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
-            </svg>
-            Back to Assets
-          </Link>
-          <h1 className="text-[20px] font-bold text-[var(--label-primary)]">Edit Asset</h1>
-          <p className="text-[13px] text-[var(--label-secondary)] mt-0.5">Update the details of your asset</p>
+          <div className="flex items-center justify-between mb-4">
+            <Link to="/assets" className="inline-flex items-center gap-1.5 text-[13px] text-[var(--label-tertiary)] hover:text-[var(--chart-primary)] transition-colors">
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+              </svg>
+              Back to Assets
+            </Link>
+          </div>
+          <h1 className="text-[24px] font-bold text-[var(--label-primary)]">Edit Asset</h1>
+          <p className="text-[14px] text-[var(--label-secondary)] mt-1">Update the details of your investment</p>
         </motion.div>
 
         {/* Error Message */}
@@ -527,7 +605,7 @@ export default function EditAsset() {
               transition={spring.snappy}
               className="mb-6"
             >
-              <div className="bg-[var(--system-red)]/10 text-[var(--system-red)] px-4 py-3 rounded-xl text-[15px] flex items-center gap-2">
+              <div className="bg-[var(--system-red)]/10 text-[var(--system-red)] px-4 py-3 rounded-xl text-[14px] flex items-center gap-2">
                 <svg className="w-5 h-5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
@@ -537,178 +615,256 @@ export default function EditAsset() {
           )}
         </AnimatePresence>
 
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ ...spring.gentle, delay: 0.1 }}
-          className="grid grid-cols-1 lg:grid-cols-3 gap-6"
-        >
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Main Form */}
-          <div className="lg:col-span-2">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ ...spring.gentle, delay: 0.05 }}
+            className="lg:col-span-2"
+          >
             <form onSubmit={handleSubmit}>
-              <Card padding="p-6" hoverable>
-                {/* Asset Type Header */}
-                <div className="flex items-center gap-3 mb-6 pb-6 border-b border-[var(--separator)]/30">
-                  <div
-                    className={`w-10 h-10 rounded-xl flex items-center justify-center ${colors.bg}`}
-                    style={{ color: colors.color }}
-                  >
-                    <CategoryIcon category={formData.category} />
-                  </div>
-                  <div>
-                    <h2 className="font-semibold text-[15px] text-[var(--label-primary)]">
-                      {ASSET_CONFIG[formData.category]?.types.find(t => t.value === formData.asset_type)?.label || formData.asset_type.replace(/_/g, ' ')}
-                    </h2>
-                    <p className="text-[13px] text-[var(--label-tertiary)]">{ASSET_CONFIG[formData.category]?.label || formData.category}</p>
-                  </div>
-                </div>
-
-                {/* Asset Name */}
-                <div className="mb-6">
-                  <label className={labelClass}>Asset Name</label>
-                  {formData.category === 'EQUITY' ? (
-                    <StockAutocomplete
-                      value={formData.name}
-                      assetType={formData.asset_type}
-                      onChange={(value) => setFormData(prev => ({ ...prev, name: value }))}
-                      onSelect={(item) => {
-                        const cleanSymbol = item.symbol.replace(/\.(NS|BO)$/, '');
-                        const exchange = item.symbol.endsWith('.NS') ? 'NSE' : item.symbol.endsWith('.BO') ? 'BSE' : item.exchange;
-                        setFormData(prev => ({
-                          ...prev,
-                          name: item.name,
-                          symbol: formData.asset_type === 'MUTUAL_FUND' ? item.symbol : cleanSymbol,
-                          exchange: exchange || prev.exchange
-                        }));
-                      }}
-                      placeholder={formData.asset_type === 'MUTUAL_FUND' ? 'Search mutual fund...' : 'Search stock...'}
-                    />
-                  ) : (
-                    <input
-                      type="text"
-                      name="name"
-                      value={formData.name}
-                      onChange={handleChange}
-                      placeholder="Enter a name for this asset"
-                      className={inputClass}
-                      required
-                    />
-                  )}
-                </div>
-
-                {/* Category-specific fields */}
-                <div className="mb-6">
-                  {renderCategoryFields()}
-                </div>
-
-                {/* Common fields */}
-                <div className="space-y-5 pt-6 border-t border-[var(--separator)]/30">
-                  <div>
-                    <label className={labelClass}>Purchase Date</label>
-                    <input type="date" name="purchase_date" value={formData.purchase_date} onChange={handleChange} className={inputClass} />
-                  </div>
-                  <div>
-                    <label className={labelClass}>Notes</label>
-                    <textarea
-                      name="notes"
-                      value={formData.notes}
-                      onChange={handleChange}
-                      rows={3}
-                      placeholder="Add any additional notes..."
-                      className={`${inputClass} resize-none`}
-                    />
-                  </div>
-                </div>
-
-                {/* Buttons */}
-                <div className="flex justify-end gap-3 pt-6 mt-6 border-t border-[var(--separator)]/30">
-                  <Button variant="gray" onClick={() => navigate('/assets')}>
-                    Cancel
-                  </Button>
-                  <Button
-                    type="submit"
-                    variant="filled"
-                    loading={saving}
-                    icon={
-                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                      </svg>
-                    }
-                  >
-                    Save Changes
-                  </Button>
-                </div>
-              </Card>
-            </form>
-          </div>
-
-          {/* Preview Card */}
-          <div className="lg:col-span-1">
-            <div className="sticky top-24">
-              <Card padding="p-5" hoverable glow>
-                <p className="text-[11px] text-[var(--label-secondary)] uppercase tracking-wide font-medium mb-4">Preview</p>
-
-                <div className={`p-4 rounded-xl ${colors.bg} mb-4`}>
+              <Card padding="p-0" className="overflow-hidden">
+                {/* Form Header with Gradient */}
+                <div className={`px-5 py-4 border-b border-[var(--separator-opaque)] bg-gradient-to-r ${categoryConfig?.gradient || 'from-gray-500/10 to-transparent'}`}>
                   <div className="flex items-center gap-3">
-                    <div style={{ color: colors.color }}>
-                      <CategoryIcon category={formData.category} />
+                    <div className={`w-10 h-10 rounded-xl ${categoryConfig?.iconBg || 'bg-gray-500'} flex items-center justify-center shadow-sm`}>
+                      <span className="text-white">
+                        <CategoryIcon category={formData.category} />
+                      </span>
                     </div>
-                    <div className="min-w-0 flex-1">
-                      <p className="font-semibold text-[15px] text-[var(--label-primary)] truncate">{formData.name || 'Asset Name'}</p>
-                      <p className="text-[13px] text-[var(--label-tertiary)]">
-                        {ASSET_CONFIG[formData.category]?.types.find(t => t.value === formData.asset_type)?.label || formData.asset_type.replace(/_/g, ' ')}
+                    <div>
+                      <h2 className="text-[15px] font-semibold text-[var(--label-primary)]">
+                        {selectedType?.label || formData.asset_type?.replace(/_/g, ' ')}
+                      </h2>
+                      <p className="text-[12px] text-[var(--label-tertiary)]">
+                        {categoryConfig?.label || formData.category} • Edit details below
                       </p>
                     </div>
                   </div>
                 </div>
 
-                <div className="space-y-3">
-                  <div className="flex justify-between items-center">
-                    <span className="text-[13px] text-[var(--label-tertiary)]">Category</span>
-                    <span className="text-[13px] font-medium text-[var(--label-primary)]">
-                      {ASSET_CONFIG[formData.category]?.label || formData.category}
-                    </span>
+                <div className="p-5">
+                  {/* Asset Name */}
+                  <div className="mb-6">
+                    <label className={labelClass}>Asset Name</label>
+                    {formData.category === 'EQUITY' ? (
+                      <StockAutocomplete
+                        value={formData.name}
+                        assetType={formData.asset_type}
+                        onChange={(value) => setFormData(prev => ({ ...prev, name: value }))}
+                        onSelect={(item) => {
+                          const cleanSymbol = item.symbol.replace(/\.(NS|BO)$/, '');
+                          const exchange = item.symbol.endsWith('.NS') ? 'NSE' : item.symbol.endsWith('.BO') ? 'BSE' : item.exchange;
+                          setFormData(prev => ({
+                            ...prev,
+                            name: item.name,
+                            symbol: formData.asset_type === 'MUTUAL_FUND' ? item.symbol : cleanSymbol,
+                            exchange: exchange || prev.exchange
+                          }));
+                        }}
+                        placeholder={formData.asset_type === 'MUTUAL_FUND' ? 'Search mutual fund...' : 'Search stock...'}
+                      />
+                    ) : (
+                      <input
+                        type="text"
+                        name="name"
+                        value={formData.name}
+                        onChange={handleChange}
+                        placeholder="Enter a name for this asset"
+                        className={inputClass}
+                        required
+                      />
+                    )}
                   </div>
 
-                  {formData.symbol && (
-                    <div className="flex justify-between items-center">
-                      <span className="text-[13px] text-[var(--label-tertiary)]">Symbol</span>
-                      <span className="text-[13px] font-medium text-[var(--label-primary)]">{formData.symbol}</span>
-                    </div>
-                  )}
+                  {/* Category-specific fields */}
+                  <div className="mb-6">
+                    {renderCategoryFields()}
+                  </div>
 
-                  {formData.quantity && (
-                    <div className="flex justify-between items-center">
-                      <span className="text-[13px] text-[var(--label-tertiary)]">Quantity</span>
-                      <span className="text-[13px] font-medium text-[var(--label-primary)]">{formData.quantity}</span>
+                  {/* Common fields */}
+                  <div className="space-y-5 pt-5 border-t border-[var(--separator-opaque)]">
+                    {/* Purchase Date and Added On - Two Column */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                      <div>
+                        <label className={labelClass}>Purchase Date</label>
+                        <input type="date" name="purchase_date" value={formData.purchase_date} onChange={handleChange} className={inputClass} />
+                      </div>
+                      <div>
+                        <label className={labelClass}>
+                          Added On
+                          <span className="text-[var(--label-quaternary)] font-normal ml-1">(read-only)</span>
+                        </label>
+                        <div className="flex items-center h-[46px] px-4 bg-[var(--fill-tertiary)] border border-[var(--separator-opaque)] rounded-xl text-[15px] text-[var(--label-secondary)]">
+                          <svg className="w-4 h-4 mr-2 text-[var(--label-tertiary)]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
+                          </svg>
+                          {formData.created_at
+                            ? new Date(formData.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+                            : '—'
+                          }
+                        </div>
+                      </div>
                     </div>
-                  )}
+                    <div>
+                      <label className={labelClass}>Notes</label>
+                      <textarea
+                        name="notes"
+                        value={formData.notes}
+                        onChange={handleChange}
+                        rows={3}
+                        placeholder="Add any additional notes..."
+                        className={`${inputClass} resize-none`}
+                      />
+                    </div>
+                  </div>
 
-                  {formData.institution && (
-                    <div className="flex justify-between items-center">
-                      <span className="text-[13px] text-[var(--label-tertiary)]">Institution</span>
-                      <span className="text-[13px] font-medium text-[var(--label-primary)] truncate max-w-[120px]">{formData.institution}</span>
-                    </div>
-                  )}
+                  {/* Buttons */}
+                  <div className="flex justify-end gap-3 pt-6 mt-6 border-t border-[var(--separator-opaque)]">
+                    <Button variant="gray" onClick={() => navigate('/assets')}>
+                      Cancel
+                    </Button>
+                    <Button
+                      type="submit"
+                      variant="filled"
+                      loading={saving}
+                      icon={
+                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                        </svg>
+                      }
+                    >
+                      Save Changes
+                    </Button>
+                  </div>
+                </div>
+              </Card>
+            </form>
+          </motion.div>
 
-                  {formData.interest_rate && (
-                    <div className="flex justify-between items-center">
-                      <span className="text-[13px] text-[var(--label-tertiary)]">Interest Rate</span>
-                      <span className="text-[13px] font-medium text-[var(--label-primary)]">{formData.interest_rate}% p.a.</span>
-                    </div>
-                  )}
+          {/* Preview Card */}
+          <motion.div
+            initial={{ opacity: 0, x: 20 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ ...spring.gentle, delay: 0.1 }}
+            className="lg:col-span-1"
+          >
+            <div className="sticky top-6">
+              <Card padding="p-0" className="overflow-hidden" glow>
+                {/* Preview Header with Gradient */}
+                <div className={`p-5 bg-gradient-to-br ${categoryConfig?.gradient || 'from-[var(--chart-primary)]/10 via-[var(--chart-primary)]/5 to-transparent'}`}>
+                  <p className="text-[11px] font-medium text-[var(--label-tertiary)] uppercase tracking-wide mb-3">Preview</p>
 
-                  <div className="pt-3 mt-3 border-t border-[var(--separator)]/30">
-                    <div className="flex justify-between items-center">
-                      <span className="text-[13px] text-[var(--label-tertiary)]">Estimated Value</span>
-                      <span className="text-[20px] font-light text-[var(--label-primary)]">{formatCurrency(getPreviewValue())}</span>
+                  {/* Hero Value */}
+                  <p className="text-[32px] font-bold text-[var(--label-primary)] tracking-tight leading-none mb-1">
+                    {formatCurrency(getPreviewValue())}
+                  </p>
+                  <p className="text-[13px] text-[var(--label-secondary)]">
+                    {formData.name || 'Asset Name'}
+                  </p>
+                </div>
+
+                {/* Form Completion Progress */}
+                <div className="px-5 py-3 border-b border-[var(--separator-opaque)]">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-[12px] text-[var(--label-tertiary)]">Form completion</span>
+                    <span className="text-[12px] font-medium text-[var(--label-primary)]">{completionPercentage}%</span>
+                  </div>
+                  <div className="h-1.5 bg-[var(--fill-tertiary)] rounded-full overflow-hidden">
+                    <motion.div
+                      className="h-full bg-[var(--chart-primary)] rounded-full"
+                      initial={{ width: 0 }}
+                      animate={{ width: `${completionPercentage}%` }}
+                      transition={{ duration: 0.3 }}
+                    />
+                  </div>
+                </div>
+
+                {/* Preview Details */}
+                <div className="p-5 space-y-4">
+                  {/* Asset Icon + Type */}
+                  <div className="flex items-center gap-3 pb-4 border-b border-[var(--separator-opaque)]">
+                    <div className={`w-12 h-12 rounded-xl flex items-center justify-center shrink-0 ${categoryConfig?.iconBg || 'bg-[var(--fill-tertiary)]'}`}>
+                      <span className="text-white">
+                        <CategoryIcon category={formData.category} />
+                      </span>
                     </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-[15px] font-semibold text-[var(--label-primary)] truncate">
+                        {selectedType?.label || formData.asset_type?.replace(/_/g, ' ')}
+                      </p>
+                      <p className="text-[13px] text-[var(--label-tertiary)]">
+                        {categoryConfig?.label || formData.category}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Details List */}
+                  <div className="space-y-3">
+                    {formData.symbol && (
+                      <div className="flex justify-between items-center">
+                        <span className="text-[13px] text-[var(--label-tertiary)]">Symbol</span>
+                        <span className="text-[13px] font-semibold text-[var(--label-primary)] bg-[var(--fill-tertiary)] px-2 py-0.5 rounded-md">{formData.symbol}</span>
+                      </div>
+                    )}
+
+                    {formData.exchange && formData.category === 'EQUITY' && formData.asset_type !== 'MUTUAL_FUND' && (
+                      <div className="flex justify-between items-center">
+                        <span className="text-[13px] text-[var(--label-tertiary)]">Exchange</span>
+                        <span className="text-[13px] font-medium text-[var(--label-primary)]">{formData.exchange}</span>
+                      </div>
+                    )}
+
+                    {formData.quantity && (
+                      <div className="flex justify-between items-center">
+                        <span className="text-[13px] text-[var(--label-tertiary)]">Quantity</span>
+                        <span className="text-[13px] font-medium text-[var(--label-primary)]">{formData.quantity}</span>
+                      </div>
+                    )}
+
+                    {formData.institution && (
+                      <div className="flex justify-between items-center">
+                        <span className="text-[13px] text-[var(--label-tertiary)]">Institution</span>
+                        <span className="text-[13px] font-medium text-[var(--label-primary)] truncate max-w-[120px]">{formData.institution}</span>
+                      </div>
+                    )}
+
+                    {formData.interest_rate && (
+                      <div className="flex justify-between items-center">
+                        <span className="text-[13px] text-[var(--label-tertiary)]">Interest Rate</span>
+                        <span className="text-[13px] font-medium text-[var(--label-primary)]">{formData.interest_rate}% p.a.</span>
+                      </div>
+                    )}
+
+                    {formData.appreciation_rate && formData.category === 'REAL_ESTATE' && (
+                      <div className="flex justify-between items-center">
+                        <span className="text-[13px] text-[var(--label-tertiary)]">Appreciation</span>
+                        <span className="text-[13px] font-medium text-[var(--system-green)]">{formData.appreciation_rate}% p.a.</span>
+                      </div>
+                    )}
+
+                    {formData.location && (
+                      <div className="flex justify-between items-center">
+                        <span className="text-[13px] text-[var(--label-tertiary)]">Location</span>
+                        <span className="text-[13px] font-medium text-[var(--label-primary)] truncate max-w-[120px]">{formData.location}</span>
+                      </div>
+                    )}
+
+                    {formData.purchase_date && (
+                      <div className="flex justify-between items-center">
+                        <span className="text-[13px] text-[var(--label-tertiary)]">Purchase Date</span>
+                        <span className="text-[13px] font-medium text-[var(--label-primary)]">
+                          {new Date(formData.purchase_date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+                        </span>
+                      </div>
+                    )}
                   </div>
                 </div>
               </Card>
             </div>
-          </div>
-        </motion.div>
+          </motion.div>
+        </div>
       </div>
     </div>
   );

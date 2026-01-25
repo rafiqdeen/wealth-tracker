@@ -146,13 +146,37 @@ export default function Dashboard() {
 
       // Process Fixed Income calculations
       if (fixedIncomeAssets.length > 0) {
+        const recurringDepositTypes = ['PPF', 'RD', 'EPF', 'VPF', 'SSY'];
         const calcs = {};
         fixedIncomeAssets.forEach(asset => {
           const transactions = transactionMap[asset.id] || [];
+          const compoundingFreq = getCompoundingFrequency(asset.asset_type);
+          const isRecurring = recurringDepositTypes.includes(asset.asset_type);
+
           if (transactions.length > 0) {
-            const compoundingFreq = getCompoundingFrequency(asset.asset_type);
             const calculation = calculateFixedIncomeValue(transactions, asset.interest_rate, new Date(), compoundingFreq);
             calcs[asset.id] = calculation;
+          } else if (asset.principal) {
+            // For recurring deposits without transactions, can't accurately calculate interest
+            if (isRecurring) {
+              calcs[asset.id] = {
+                principal: asset.principal,
+                currentValue: asset.principal,
+                interest: 0,
+                interestPercent: 0,
+                needsTransactions: true
+              };
+            } else {
+              // For lump-sum deposits, use asset's principal and start_date
+              const startDate = asset.start_date || asset.created_at?.split('T')[0] || new Date().toISOString().split('T')[0];
+              const fakeTransaction = [{
+                type: 'BUY',
+                total_amount: asset.principal,
+                transaction_date: startDate
+              }];
+              const calculation = calculateFixedIncomeValue(fakeTransaction, asset.interest_rate, new Date(), compoundingFreq);
+              calcs[asset.id] = calculation;
+            }
           }
         });
         setFixedIncomeCalcs(calcs);
@@ -778,7 +802,7 @@ export default function Dashboard() {
                   <button
                     onClick={handleExportPDF}
                     disabled={assets.length === 0}
-                    className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-[var(--bg-primary)]/60 text-[var(--label-secondary)] hover:bg-[var(--bg-primary)] transition-colors disabled:opacity-50 text-[13px] font-medium"
+                    className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-[var(--fill-tertiary)] border border-[var(--separator-opaque)] text-[var(--label-primary)] hover:bg-[var(--fill-secondary)] transition-colors disabled:opacity-50 text-[13px] font-semibold"
                   >
                     <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                       <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
@@ -927,8 +951,11 @@ export default function Dashboard() {
                     <span className="text-[15px] font-semibold text-[var(--label-primary)]">Holdings</span>
                     <span className="text-[12px] text-[var(--label-tertiary)]">({holdings.length} assets)</span>
                   </div>
-                  <Link to="/assets" className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-[var(--bg-primary)]/60 text-[var(--label-secondary)] hover:bg-[var(--bg-primary)] transition-colors text-[13px] font-medium">
+                  <Link to="/assets" className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-[var(--fill-tertiary)] border border-[var(--separator-opaque)] text-[var(--label-primary)] hover:bg-[var(--fill-secondary)] transition-colors text-[13px] font-semibold">
                     View All
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
+                    </svg>
                   </Link>
                 </div>
 
