@@ -150,10 +150,17 @@ export default function Assets() {
     const recurringDepositTypes = ['PPF', 'RD', 'EPF', 'VPF', 'SSY'];
 
     try {
+      // Fetch all transactions in parallel for better performance
+      const transactionResults = await Promise.all(
+        fixedIncomeAssets.map(asset =>
+          assetService.getTransactions(asset.id)
+            .then(res => ({ asset, transactions: res.data.transactions || [] }))
+            .catch(() => ({ asset, transactions: [] }))
+        )
+      );
+
       const calcs = {};
-      for (const asset of fixedIncomeAssets) {
-        const txnResponse = await assetService.getTransactions(asset.id);
-        const transactions = txnResponse.data.transactions || [];
+      for (const { asset, transactions } of transactionResults) {
         const compoundingFreq = getCompoundingFrequency(asset.asset_type);
         const isRecurring = recurringDepositTypes.includes(asset.asset_type);
 
@@ -200,7 +207,7 @@ export default function Assets() {
       }
       setFixedIncomeCalcs(calcs);
     } catch (error) {
-      console.error('Error fetching Fixed Income calculations:', error);
+      // Silent fail - calculations will show 0
     } finally {
       setFixedIncomeLoading(false);
     }
@@ -252,7 +259,11 @@ export default function Assets() {
     if (asset.category === 'EQUITY' && asset.quantity && asset.symbol) {
       const priceKey = asset.asset_type === 'MUTUAL_FUND' ? asset.symbol : `${asset.symbol}.${asset.exchange === 'BSE' ? 'BO' : 'NS'}`;
       const priceData = prices[priceKey];
-      if (priceData?.price) return asset.quantity * priceData.price;
+      // Use price if available (check for number, as 0 is falsy but could be valid)
+      if (priceData && typeof priceData.price === 'number' && priceData.price > 0) {
+        return asset.quantity * priceData.price;
+      }
+      // Fallback to avg_buy_price only if price is unavailable
       if (asset.avg_buy_price) return asset.quantity * asset.avg_buy_price;
     }
     if (asset.category === 'FIXED_INCOME') {
@@ -297,7 +308,12 @@ export default function Assets() {
   const getCurrentPrice = (asset) => {
     if (asset.category === 'EQUITY' && asset.symbol) {
       const priceKey = asset.asset_type === 'MUTUAL_FUND' ? asset.symbol : `${asset.symbol}.${asset.exchange === 'BSE' ? 'BO' : 'NS'}`;
-      return prices[priceKey]?.price || asset.avg_buy_price || 0;
+      const priceData = prices[priceKey];
+      // Return price if it's a valid positive number
+      if (priceData && typeof priceData.price === 'number' && priceData.price > 0) {
+        return priceData.price;
+      }
+      return asset.avg_buy_price || 0;
     }
     return asset.avg_buy_price || 0;
   };
@@ -307,12 +323,15 @@ export default function Assets() {
     if (asset.category === 'EQUITY' && asset.symbol) {
       const priceKey = asset.asset_type === 'MUTUAL_FUND' ? asset.symbol : `${asset.symbol}.${asset.exchange === 'BSE' ? 'BO' : 'NS'}`;
       const priceData = prices[priceKey];
-      if (priceData?.changePercent && asset.quantity) {
-        const currentValue = asset.quantity * (priceData.price || 0);
-        const dayChangeAmount = (currentValue * priceData.changePercent) / (100 + priceData.changePercent);
+      // Check for valid price and changePercent (changePercent can be 0 on holidays)
+      if (priceData && typeof priceData.price === 'number' && priceData.price > 0 && asset.quantity) {
+        const currentValue = asset.quantity * priceData.price;
+        const changePercent = typeof priceData.changePercent === 'number' ? priceData.changePercent : 0;
+        // Day change = currentValue × changePercent / 100
+        const dayChangeAmount = currentValue * changePercent / 100;
         return {
           amount: dayChangeAmount,
-          percent: priceData.changePercent
+          percent: changePercent
         };
       }
     }

@@ -1,84 +1,92 @@
-// Goals service - uses localStorage for persistence
-// Can be migrated to API backend later
+import api from './api';
 
-const STORAGE_KEY = 'wealth_tracker_goals';
+const MIGRATION_KEY = 'wealth_tracker_goals_migrated';
+const OLD_STORAGE_KEY = 'wealth_tracker_goals';
 
-const getGoals = () => {
-  try {
-    const data = localStorage.getItem(STORAGE_KEY);
-    return data ? JSON.parse(data) : [];
-  } catch {
-    return [];
+// Check if migration is needed and perform it
+async function checkAndMigrate() {
+  if (localStorage.getItem(MIGRATION_KEY)) {
+    return; // Already migrated
   }
-};
 
-const saveGoals = (goals) => {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(goals));
-};
+  const localData = localStorage.getItem(OLD_STORAGE_KEY);
+  if (!localData) {
+    localStorage.setItem(MIGRATION_KEY, 'true');
+    return; // No data to migrate
+  }
+
+  try {
+    const localGoals = JSON.parse(localData);
+    if (localGoals && localGoals.length > 0) {
+      await api.post('/goals/migrate', { goals: localGoals });
+    }
+    localStorage.setItem(MIGRATION_KEY, 'true');
+  } catch (error) {
+    console.error('Failed to migrate goals:', error);
+    // Don't set migration flag so it can be retried
+  }
+}
 
 export const goalService = {
-  // Get all goals
-  getAll: () => {
-    return Promise.resolve({ data: { goals: getGoals() } });
+  // Get all goals (with auto-migration check)
+  getAll: async () => {
+    await checkAndMigrate();
+    return api.get('/goals');
   },
 
-  // Get single goal
-  getById: (id) => {
-    const goals = getGoals();
-    const goal = goals.find(g => g.id === id);
-    return Promise.resolve({ data: { goal } });
-  },
+  // Get single goal with full details
+  getById: (id) => api.get(`/goals/${id}`),
 
-  // Create goal
-  create: (data) => {
-    const goals = getGoals();
-    const newGoal = {
-      id: Date.now().toString(),
-      ...data,
-      current_amount: 0,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    };
-    goals.push(newGoal);
-    saveGoals(goals);
-    return Promise.resolve({ data: { goal: newGoal } });
-  },
+  // Create goal with optional linked assets
+  create: (data) => api.post('/goals', data),
 
   // Update goal
-  update: (id, data) => {
-    const goals = getGoals();
-    const index = goals.findIndex(g => g.id === id);
-    if (index !== -1) {
-      goals[index] = {
-        ...goals[index],
-        ...data,
-        updated_at: new Date().toISOString(),
-      };
-      saveGoals(goals);
-      return Promise.resolve({ data: { goal: goals[index] } });
-    }
-    return Promise.reject(new Error('Goal not found'));
-  },
-
-  // Update goal progress (current amount)
-  updateProgress: (id, currentAmount) => {
-    const goals = getGoals();
-    const index = goals.findIndex(g => g.id === id);
-    if (index !== -1) {
-      goals[index].current_amount = currentAmount;
-      goals[index].updated_at = new Date().toISOString();
-      saveGoals(goals);
-      return Promise.resolve({ data: { goal: goals[index] } });
-    }
-    return Promise.reject(new Error('Goal not found'));
-  },
+  update: (id, data) => api.put(`/goals/${id}`, data),
 
   // Delete goal
-  delete: (id) => {
-    const goals = getGoals();
-    const filtered = goals.filter(g => g.id !== id);
-    saveGoals(filtered);
-    return Promise.resolve({ data: { success: true } });
+  delete: (id) => api.delete(`/goals/${id}`),
+
+  // ===== Asset Links =====
+
+  // Get all asset links for a goal
+  getLinks: (goalId) => api.get(`/goals/${goalId}/links`),
+
+  // Add asset link to goal
+  addLink: (goalId, linkData) => api.post(`/goals/${goalId}/links`, linkData),
+
+  // Update asset link
+  updateLink: (goalId, linkId, data) => api.put(`/goals/${goalId}/links/${linkId}`, data),
+
+  // Remove asset link
+  removeLink: (goalId, linkId) => api.delete(`/goals/${goalId}/links/${linkId}`),
+
+  // ===== Contributions =====
+
+  // Get contribution history
+  getContributions: (goalId) => api.get(`/goals/${goalId}/contributions`),
+
+  // Add manual contribution
+  addContribution: (goalId, data) => api.post(`/goals/${goalId}/contributions`, data),
+
+  // ===== Progress & History =====
+
+  // Get current progress details
+  getProgress: (goalId) => api.get(`/goals/${goalId}/progress`),
+
+  // Get historical progress
+  getHistory: (goalId, days = 30) => api.get(`/goals/${goalId}/history?days=${days}`),
+
+  // Record daily snapshot (can be called periodically)
+  recordSnapshot: () => api.post('/goals/snapshot'),
+
+  // ===== Utility =====
+
+  // Get all allocations for an asset (to check availability)
+  getAssetAllocations: (assetId) => api.get(`/goals/asset-allocations/${assetId}`),
+
+  // Force re-migration (for debugging)
+  resetMigration: () => {
+    localStorage.removeItem(MIGRATION_KEY);
   },
 };
 
@@ -95,6 +103,12 @@ export const GOAL_CATEGORIES = {
     icon: 'sunset',
     color: '#AF52DE',
     description: 'Long-term retirement corpus',
+  },
+  FIRE: {
+    label: 'FIRE',
+    icon: 'fire',
+    color: '#EF4444',
+    description: 'Financial independence goal',
   },
   HOME: {
     label: 'Home Purchase',
@@ -129,7 +143,45 @@ export const GOAL_CATEGORIES = {
   CUSTOM: {
     label: 'Custom Goal',
     icon: 'target',
-    color: '#8E8E93',
+    color: '#00C7BE',
     description: 'Your custom financial goal',
+  },
+};
+
+// Progress modes
+export const PROGRESS_MODES = {
+  AUTO: {
+    label: 'Auto (From Assets)',
+    description: 'Progress calculated from linked assets',
+    icon: 'link',
+  },
+  MANUAL: {
+    label: 'Manual',
+    description: 'You enter progress manually',
+    icon: 'edit',
+  },
+  HYBRID: {
+    label: 'Hybrid',
+    description: 'Linked assets + manual contributions',
+    icon: 'layers',
+  },
+};
+
+// Link types
+export const LINK_TYPES = {
+  FUNDING: {
+    label: 'Funding',
+    description: 'Asset contributes to goal progress',
+    color: '#10B981',
+  },
+  TARGET: {
+    label: 'Target',
+    description: 'Goal is to acquire this asset',
+    color: '#3B82F6',
+  },
+  TRACKER: {
+    label: 'Tracker',
+    description: 'Monitor only, no progress contribution',
+    color: '#6B7280',
   },
 };

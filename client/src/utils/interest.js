@@ -3,6 +3,16 @@
  */
 
 /**
+ * Year calculation constants:
+ * - DAYS_IN_YEAR (365): Used for Indian banking calculations (FD, PPF, etc.)
+ *   Indian banks use 365 days regardless of leap year
+ * - DAYS_IN_YEAR_AVG (365.25): Used for investment return calculations (CAGR)
+ *   where leap years should be factored in for accuracy
+ */
+const DAYS_IN_YEAR = 365;
+const DAYS_IN_YEAR_AVG = 365.25;
+
+/**
  * Calculate compound interest for a single deposit (Quarterly Compounding)
  * @param {number} principal - Deposit amount
  * @param {number} rate - Annual interest rate (e.g., 7.1 for 7.1%)
@@ -15,9 +25,9 @@ export function calculateCompoundInterest(principal, rate, depositDate, asOfDate
   const start = new Date(depositDate);
   const end = new Date(asOfDate);
 
-  // Calculate years using 365 days (standard for Indian banks)
+  // Calculate years using DAYS_IN_YEAR (standard for Indian banks)
   const days = (end - start) / (1000 * 60 * 60 * 24);
-  const years = days / 365;
+  const years = days / DAYS_IN_YEAR;
 
   if (years <= 0) return principal;
 
@@ -100,7 +110,7 @@ export function generateCompoundingSchedule(principal, rate, startDate, maturity
 
   // Calculate total tenure in days and years
   const totalDays = (endDate - start) / (1000 * 60 * 60 * 24);
-  const totalYears = totalDays / 365;
+  const totalYears = totalDays / DAYS_IN_YEAR;
 
   // Compound Interest maturity value: A = P × (1 + r/n)^(n×t)
   const maturityValue = principal * Math.pow(1 + periodRate, compoundingFrequency * totalYears);
@@ -114,10 +124,17 @@ export function generateCompoundingSchedule(principal, rate, startDate, maturity
   const addMonths = (date, months) => {
     const result = new Date(date);
     const originalDay = date.getDate();
-    result.setMonth(result.getMonth() + months);
+    const targetMonth = (result.getMonth() + months) % 12;
+    const yearDelta = Math.floor((result.getMonth() + months) / 12);
+
+    // Set year first, then month, to avoid rollover issues
+    result.setFullYear(result.getFullYear() + yearDelta);
+    result.setMonth(targetMonth);
+
     // If day changed (rolled over due to shorter month), set to last day of target month
     if (result.getDate() !== originalDay) {
-      result.setDate(0); // Go to last day of previous month
+      // Go back to day 0 which gives last day of the target month
+      result.setDate(0);
     }
     return result;
   };
@@ -197,7 +214,7 @@ export function generateCompoundingSchedule(principal, rate, startDate, maturity
   const progressPercent = totalDays ? Math.min(100, (elapsedDays / totalDays) * 100) : null;
 
   // Current value using compound interest (as of today)
-  const yearsElapsed = elapsedDays / 365;
+  const yearsElapsed = elapsedDays / DAYS_IN_YEAR;
   const currentValue = principal * Math.pow(1 + periodRate, compoundingFrequency * yearsElapsed);
   const currentInterest = currentValue - principal;
 
@@ -279,12 +296,17 @@ export function calculateXIRR(cashFlows, guess = 0.1) {
     let dnpv = 0;
 
     for (const v of values) {
-      const factor = Math.pow(1 + rate, v.days / 365);
+      const factor = Math.pow(1 + rate, v.days / DAYS_IN_YEAR);
       npv += v.amount / factor;
-      dnpv -= (v.days / 365) * v.amount / (factor * (1 + rate));
+      dnpv -= (v.days / DAYS_IN_YEAR) * v.amount / (factor * (1 + rate));
     }
 
     if (Math.abs(npv) < TOLERANCE) {
+      return rate * 100;
+    }
+
+    // Guard against division by zero or near-zero dnpv
+    if (Math.abs(dnpv) < 1e-10) {
       return rate * 100;
     }
 
@@ -429,7 +451,8 @@ export function calculateAbsoluteReturn(invested, currentValue) {
 export function yearsBetweenDates(startDate, endDate = new Date()) {
   const start = new Date(startDate);
   const end = new Date(endDate);
-  return (end - start) / (365.25 * 24 * 60 * 60 * 1000);
+  // Use DAYS_IN_YEAR_AVG (365.25) for investment return calculations
+  return (end - start) / (DAYS_IN_YEAR_AVG * 24 * 60 * 60 * 1000);
 }
 
 /**

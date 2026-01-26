@@ -1,7 +1,7 @@
 import { useState, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { downloadJSON, downloadCSV, exportAllData } from '../utils/export';
-import { goalService } from '../services/goals';
+import api from '../services/api';
+import { formatDate } from '../utils/formatting';
 
 const backdropVariants = {
   hidden: { opacity: 0 },
@@ -13,25 +13,65 @@ const modalVariants = {
   visible: { opacity: 1, scale: 1, y: 0 },
 };
 
+// Asset category field configurations
+const CATEGORY_FIELDS = {
+  EQUITY: ['symbol', 'exchange', 'quantity', 'avg_buy_price', 'purchase_date'],
+  FIXED_INCOME: ['principal', 'interest_rate', 'start_date', 'maturity_date', 'institution'],
+  REAL_ESTATE: ['purchase_price', 'current_value', 'location', 'area_sqft', 'appreciation_rate'],
+  PHYSICAL: ['weight_grams', 'purity', 'purchase_price', 'purchase_date'],
+  SAVINGS: ['balance', 'interest_rate', 'institution'],
+  CRYPTO: ['symbol', 'quantity', 'avg_buy_price', 'exchange'],
+  INSURANCE: ['premium', 'sum_assured', 'policy_number', 'start_date', 'maturity_date'],
+  OTHER: ['purchase_price', 'current_value', 'purchase_date'],
+};
+
 export default function DataBackup({ isOpen, onClose, assets = [] }) {
   const [importing, setImporting] = useState(false);
+  const [exporting, setExporting] = useState(false);
   const [importResult, setImportResult] = useState(null);
+  const [importOptions, setImportOptions] = useState({
+    overwrite: false,
+    importAssets: true,
+    importGoals: true,
+    importTransactions: true,
+  });
   const fileInputRef = useRef(null);
 
-  const handleExportBackup = () => {
+  // Export full backup using server API
+  const handleExportBackup = async () => {
+    setExporting(true);
+    setImportResult(null);
     try {
-      const goals = goalService.getGoalsSync ? goalService.getGoalsSync() :
-        JSON.parse(localStorage.getItem('wealthtracker_goals') || '[]');
-      const transactions = JSON.parse(localStorage.getItem('wealthtracker_transactions') || '[]');
+      const response = await api.get('/backup/export');
+      const exportData = response.data;
 
-      exportAllData(assets, transactions, goals);
-      setImportResult({ type: 'success', message: 'Backup exported successfully!' });
-      setTimeout(() => setImportResult(null), 3000);
+      // Download as JSON
+      const json = JSON.stringify(exportData, null, 2);
+      const blob = new Blob([json], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `wealthtracker-backup-${formatDate(new Date()).replace(/\s/g, '-')}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+
+      setImportResult({
+        type: 'success',
+        message: `Backup exported: ${exportData.stats.assets} assets, ${exportData.stats.goals} goals, ${exportData.stats.transactions} transactions`,
+      });
+      setTimeout(() => setImportResult(null), 5000);
     } catch (error) {
-      setImportResult({ type: 'error', message: 'Failed to export backup' });
+      console.error('Export error:', error);
+      setImportResult({
+        type: 'error',
+        message: error.response?.data?.error || 'Failed to export backup',
+      });
+    } finally {
+      setExporting(false);
     }
   };
 
+  // Export CSV with all asset-type specific fields
   const handleExportCSV = () => {
     try {
       if (!assets || assets.length === 0) {
@@ -39,22 +79,161 @@ export default function DataBackup({ isOpen, onClose, assets = [] }) {
         return;
       }
 
-      const csvData = assets.map(asset => ({
-        Name: asset.name,
-        Symbol: asset.symbol || '',
-        Category: asset.category,
-        Quantity: asset.quantity,
-        'Buy Price': asset.buyPrice,
-        'Current Price': asset.currentPrice || asset.buyPrice,
-        'Buy Date': asset.buyDate,
-        Notes: asset.notes || '',
-      }));
+      // Build CSV data with all relevant fields based on category
+      const csvData = assets.map(asset => {
+        const base = {
+          ID: asset.id,
+          Name: asset.name,
+          Category: asset.category,
+          'Asset Type': asset.asset_type,
+          Status: asset.status || 'ACTIVE',
+          Notes: asset.notes || '',
+          'Created At': asset.created_at || '',
+        };
 
-      downloadCSV(csvData, 'wealthtracker-assets.csv');
-      setImportResult({ type: 'success', message: 'CSV exported successfully!' });
+        // Add category-specific fields
+        switch (asset.category) {
+          case 'EQUITY':
+          case 'CRYPTO':
+            return {
+              ...base,
+              Symbol: asset.symbol || '',
+              Exchange: asset.exchange || '',
+              Quantity: asset.quantity || 0,
+              'Avg Buy Price': asset.avg_buy_price || 0,
+              'Purchase Date': asset.purchase_date || '',
+              'Invested Value': (asset.quantity || 0) * (asset.avg_buy_price || 0),
+            };
+
+          case 'FIXED_INCOME':
+            return {
+              ...base,
+              Principal: asset.principal || 0,
+              'Interest Rate (%)': asset.interest_rate || 0,
+              'Start Date': asset.start_date || '',
+              'Maturity Date': asset.maturity_date || '',
+              Institution: asset.institution || '',
+            };
+
+          case 'REAL_ESTATE':
+            return {
+              ...base,
+              'Purchase Price': asset.purchase_price || 0,
+              'Current Value': asset.current_value || 0,
+              Location: asset.location || '',
+              'Area (sqft)': asset.area_sqft || '',
+              'Appreciation Rate (%)': asset.appreciation_rate || '',
+              'Purchase Date': asset.purchase_date || '',
+            };
+
+          case 'PHYSICAL':
+            return {
+              ...base,
+              'Weight (grams)': asset.weight_grams || '',
+              Purity: asset.purity || '',
+              'Purchase Price': asset.purchase_price || 0,
+              'Purchase Date': asset.purchase_date || '',
+            };
+
+          case 'SAVINGS':
+            return {
+              ...base,
+              Balance: asset.balance || 0,
+              'Interest Rate (%)': asset.interest_rate || '',
+              Institution: asset.institution || '',
+            };
+
+          case 'INSURANCE':
+            return {
+              ...base,
+              Premium: asset.premium || 0,
+              'Sum Assured': asset.sum_assured || 0,
+              'Policy Number': asset.policy_number || '',
+              'Start Date': asset.start_date || '',
+              'Maturity Date': asset.maturity_date || '',
+            };
+
+          default:
+            return {
+              ...base,
+              'Purchase Price': asset.purchase_price || asset.principal || 0,
+              'Current Value': asset.current_value || asset.balance || 0,
+              'Purchase Date': asset.purchase_date || '',
+            };
+        }
+      });
+
+      // Get all unique headers from all rows
+      const allHeaders = new Set();
+      csvData.forEach(row => Object.keys(row).forEach(key => allHeaders.add(key)));
+      const headers = Array.from(allHeaders);
+
+      // Build CSV string
+      const csvRows = [
+        headers.join(','),
+        ...csvData.map(row =>
+          headers.map(header => {
+            const value = row[header];
+            if (value === undefined || value === null) return '';
+            if (typeof value === 'string' && (value.includes(',') || value.includes('"') || value.includes('\n'))) {
+              return `"${value.replace(/"/g, '""')}"`;
+            }
+            return value;
+          }).join(',')
+        ),
+      ];
+
+      const csv = csvRows.join('\n');
+      const blob = new Blob([csv], { type: 'text/csv' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `wealthtracker-assets-${formatDate(new Date()).replace(/\s/g, '-')}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+
+      setImportResult({ type: 'success', message: `CSV exported: ${assets.length} assets` });
       setTimeout(() => setImportResult(null), 3000);
     } catch (error) {
+      console.error('CSV export error:', error);
       setImportResult({ type: 'error', message: 'Failed to export CSV' });
+    }
+  };
+
+  // Export Goals with links as JSON
+  const handleExportGoalsJSON = async () => {
+    setExporting(true);
+    try {
+      const response = await api.get('/backup/export');
+      const { goals, goalAssetLinks, goalContributions } = response.data.data;
+
+      const exportData = {
+        version: '2.0',
+        exportedAt: new Date().toISOString(),
+        goals,
+        goalAssetLinks,
+        goalContributions,
+      };
+
+      const json = JSON.stringify(exportData, null, 2);
+      const blob = new Blob([json], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `wealthtracker-goals-${formatDate(new Date()).replace(/\s/g, '-')}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+
+      setImportResult({
+        type: 'success',
+        message: `Goals exported: ${goals.length} goals with ${goalAssetLinks.length} asset links`,
+      });
+      setTimeout(() => setImportResult(null), 3000);
+    } catch (error) {
+      console.error('Goals export error:', error);
+      setImportResult({ type: 'error', message: 'Failed to export goals' });
+    } finally {
+      setExporting(false);
     }
   };
 
@@ -71,49 +250,54 @@ export default function DataBackup({ isOpen, onClose, assets = [] }) {
 
     try {
       const text = await file.text();
-      const data = JSON.parse(text);
+      const backupData = JSON.parse(text);
 
       // Validate backup format
-      if (!data.version || !data.data) {
-        throw new Error('Invalid backup file format');
+      if (!backupData.version || !backupData.data) {
+        throw new Error('Invalid backup file format. Please use a WealthTracker backup file.');
       }
 
-      // Import goals
-      if (data.data.goals && Array.isArray(data.data.goals)) {
-        localStorage.setItem('wealthtracker_goals', JSON.stringify(data.data.goals));
-      }
+      // Send to server for import
+      const response = await api.post('/backup/import', {
+        data: backupData.data,
+        options: importOptions,
+      });
 
-      // Import transactions
-      if (data.data.transactions && Array.isArray(data.data.transactions)) {
-        localStorage.setItem('wealthtracker_transactions', JSON.stringify(data.data.transactions));
+      const { results } = response.data;
+
+      const messages = [];
+      if (results.assets.imported > 0) messages.push(`${results.assets.imported} assets`);
+      if (results.goals.imported > 0) messages.push(`${results.goals.imported} goals`);
+      if (results.transactions.imported > 0) messages.push(`${results.transactions.imported} transactions`);
+      if (results.goalLinks.imported > 0) messages.push(`${results.goalLinks.imported} goal links`);
+
+      const skipped = [];
+      if (results.assets.skipped > 0) skipped.push(`${results.assets.skipped} assets`);
+      if (results.goals.skipped > 0) skipped.push(`${results.goals.skipped} goals`);
+
+      let message = messages.length > 0
+        ? `Imported: ${messages.join(', ')}`
+        : 'No new data to import';
+
+      if (skipped.length > 0) {
+        message += `. Skipped (already exist): ${skipped.join(', ')}`;
       }
 
       setImportResult({
         type: 'success',
-        message: `Imported ${data.data.goals?.length || 0} goals and ${data.data.transactions?.length || 0} transactions. Refresh to see changes.`
+        message: message + '. Refresh the page to see changes.',
       });
     } catch (error) {
+      console.error('Import error:', error);
       setImportResult({
         type: 'error',
-        message: error.message || 'Failed to import backup file'
+        message: error.response?.data?.error || error.message || 'Failed to import backup file',
       });
     } finally {
       setImporting(false);
-      // Reset file input
       if (fileInputRef.current) {
         fileInputRef.current.value = '';
       }
-    }
-  };
-
-  const handleExportGoalsJSON = () => {
-    try {
-      const goals = JSON.parse(localStorage.getItem('wealthtracker_goals') || '[]');
-      downloadJSON({ goals }, 'wealthtracker-goals.json');
-      setImportResult({ type: 'success', message: 'Goals exported successfully!' });
-      setTimeout(() => setImportResult(null), 3000);
-    } catch (error) {
-      setImportResult({ type: 'error', message: 'Failed to export goals' });
     }
   };
 
@@ -155,7 +339,7 @@ export default function DataBackup({ isOpen, onClose, assets = [] }) {
             </div>
 
             {/* Content */}
-            <div className="px-5 py-4 space-y-4">
+            <div className="px-5 py-4 space-y-4 max-h-[70vh] overflow-y-auto">
               {/* Status Message */}
               {importResult && (
                 <motion.div
@@ -179,16 +363,24 @@ export default function DataBackup({ isOpen, onClose, assets = [] }) {
                 <div className="space-y-2">
                   <button
                     onClick={handleExportBackup}
-                    className="w-full flex items-center gap-3 p-3 bg-[var(--fill-tertiary)]/50 hover:bg-[var(--fill-tertiary)] rounded-xl transition-colors text-left"
+                    disabled={exporting}
+                    className="w-full flex items-center gap-3 p-3 bg-[var(--fill-tertiary)]/50 hover:bg-[var(--fill-tertiary)] rounded-xl transition-colors text-left disabled:opacity-50"
                   >
                     <div className="w-10 h-10 bg-[var(--system-blue)]/10 rounded-xl flex items-center justify-center">
-                      <svg className="w-5 h-5 text-[var(--system-blue)]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M20.25 7.5l-.625 10.632a2.25 2.25 0 01-2.247 2.118H6.622a2.25 2.25 0 01-2.247-2.118L3.75 7.5m8.25 3v6.75m0 0l-3-3m3 3l3-3M3.375 7.5h17.25c.621 0 1.125-.504 1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125H3.375c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125z" />
-                      </svg>
+                      {exporting ? (
+                        <svg className="w-5 h-5 text-[var(--system-blue)] animate-spin" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                        </svg>
+                      ) : (
+                        <svg className="w-5 h-5 text-[var(--system-blue)]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M20.25 7.5l-.625 10.632a2.25 2.25 0 01-2.247 2.118H6.622a2.25 2.25 0 01-2.247-2.118L3.75 7.5m8.25 3v6.75m0 0l-3-3m3 3l3-3M3.375 7.5h17.25c.621 0 1.125-.504 1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125H3.375c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125z" />
+                        </svg>
+                      )}
                     </div>
                     <div>
                       <p className="text-[15px] font-medium text-[var(--label-primary)]">Full Backup (JSON)</p>
-                      <p className="text-[13px] text-[var(--label-tertiary)]">Export all data for safekeeping</p>
+                      <p className="text-[13px] text-[var(--label-tertiary)]">All assets, goals, transactions & history</p>
                     </div>
                   </button>
 
@@ -203,13 +395,14 @@ export default function DataBackup({ isOpen, onClose, assets = [] }) {
                     </div>
                     <div>
                       <p className="text-[15px] font-medium text-[var(--label-primary)]">Assets (CSV)</p>
-                      <p className="text-[13px] text-[var(--label-tertiary)]">Export assets for spreadsheets</p>
+                      <p className="text-[13px] text-[var(--label-tertiary)]">All asset types with category-specific fields</p>
                     </div>
                   </button>
 
                   <button
                     onClick={handleExportGoalsJSON}
-                    className="w-full flex items-center gap-3 p-3 bg-[var(--fill-tertiary)]/50 hover:bg-[var(--fill-tertiary)] rounded-xl transition-colors text-left"
+                    disabled={exporting}
+                    className="w-full flex items-center gap-3 p-3 bg-[var(--fill-tertiary)]/50 hover:bg-[var(--fill-tertiary)] rounded-xl transition-colors text-left disabled:opacity-50"
                   >
                     <div className="w-10 h-10 bg-[var(--system-purple)]/10 rounded-xl flex items-center justify-center">
                       <svg className="w-5 h-5 text-[var(--system-purple)]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
@@ -218,7 +411,7 @@ export default function DataBackup({ isOpen, onClose, assets = [] }) {
                     </div>
                     <div>
                       <p className="text-[15px] font-medium text-[var(--label-primary)]">Goals (JSON)</p>
-                      <p className="text-[13px] text-[var(--label-tertiary)]">Export financial goals</p>
+                      <p className="text-[13px] text-[var(--label-tertiary)]">Goals with asset links & contributions</p>
                     </div>
                   </button>
                 </div>
@@ -229,6 +422,38 @@ export default function DataBackup({ isOpen, onClose, assets = [] }) {
                 <h3 className="text-[11px] font-semibold text-[var(--label-tertiary)] uppercase tracking-wider mb-3">
                   Import Data
                 </h3>
+
+                {/* Import Options */}
+                <div className="mb-3 p-3 bg-[var(--fill-tertiary)]/30 rounded-xl space-y-2">
+                  <label className="flex items-center gap-2 text-[13px] text-[var(--label-secondary)]">
+                    <input
+                      type="checkbox"
+                      checked={importOptions.importAssets}
+                      onChange={(e) => setImportOptions({ ...importOptions, importAssets: e.target.checked })}
+                      className="w-4 h-4 rounded"
+                    />
+                    Import assets & transactions
+                  </label>
+                  <label className="flex items-center gap-2 text-[13px] text-[var(--label-secondary)]">
+                    <input
+                      type="checkbox"
+                      checked={importOptions.importGoals}
+                      onChange={(e) => setImportOptions({ ...importOptions, importGoals: e.target.checked })}
+                      className="w-4 h-4 rounded"
+                    />
+                    Import goals & contributions
+                  </label>
+                  <label className="flex items-center gap-2 text-[13px] text-[var(--label-secondary)]">
+                    <input
+                      type="checkbox"
+                      checked={importOptions.overwrite}
+                      onChange={(e) => setImportOptions({ ...importOptions, overwrite: e.target.checked })}
+                      className="w-4 h-4 rounded"
+                    />
+                    Overwrite existing data
+                  </label>
+                </div>
+
                 <button
                   onClick={handleImportClick}
                   disabled={importing}
@@ -266,7 +491,7 @@ export default function DataBackup({ isOpen, onClose, assets = [] }) {
             {/* Footer */}
             <div className="px-5 py-3 bg-[var(--fill-tertiary)]/50 border-t border-[var(--separator)]/30">
               <p className="text-[12px] text-[var(--label-tertiary)] text-center">
-                Backups include goals and transactions stored locally
+                Backups include all data from the server database
               </p>
             </div>
           </motion.div>

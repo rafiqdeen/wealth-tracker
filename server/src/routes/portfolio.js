@@ -38,46 +38,54 @@ router.get('/history', (req, res) => {
   try {
     const { period } = req.query; // 1D, 1W, 1M, 3M, 6M, 1Y, ALL
 
-    let dateFilter = '';
+    let startDate = null;
     const today = new Date();
 
     switch (period) {
       case '1W':
         const oneWeekAgo = new Date(today);
         oneWeekAgo.setDate(today.getDate() - 7);
-        dateFilter = `AND date >= '${oneWeekAgo.toISOString().split('T')[0]}'`;
+        startDate = oneWeekAgo.toISOString().split('T')[0];
         break;
       case '1M':
         const oneMonthAgo = new Date(today);
         oneMonthAgo.setMonth(today.getMonth() - 1);
-        dateFilter = `AND date >= '${oneMonthAgo.toISOString().split('T')[0]}'`;
+        startDate = oneMonthAgo.toISOString().split('T')[0];
         break;
       case '3M':
         const threeMonthsAgo = new Date(today);
         threeMonthsAgo.setMonth(today.getMonth() - 3);
-        dateFilter = `AND date >= '${threeMonthsAgo.toISOString().split('T')[0]}'`;
+        startDate = threeMonthsAgo.toISOString().split('T')[0];
         break;
       case '6M':
         const sixMonthsAgo = new Date(today);
         sixMonthsAgo.setMonth(today.getMonth() - 6);
-        dateFilter = `AND date >= '${sixMonthsAgo.toISOString().split('T')[0]}'`;
+        startDate = sixMonthsAgo.toISOString().split('T')[0];
         break;
       case '1Y':
         const oneYearAgo = new Date(today);
         oneYearAgo.setFullYear(today.getFullYear() - 1);
-        dateFilter = `AND date >= '${oneYearAgo.toISOString().split('T')[0]}'`;
+        startDate = oneYearAgo.toISOString().split('T')[0];
         break;
       case 'ALL':
       default:
-        dateFilter = '';
+        startDate = null;
     }
 
-    const history = db.prepare(`
-      SELECT date, total_value, total_invested, day_change
-      FROM portfolio_history
-      WHERE user_id = ? ${dateFilter}
-      ORDER BY date ASC
-    `).all(req.user.id);
+    // Use parameterized query to avoid SQL injection
+    const history = startDate
+      ? db.prepare(`
+          SELECT date, total_value, total_invested, day_change
+          FROM portfolio_history
+          WHERE user_id = ? AND date >= ?
+          ORDER BY date ASC
+        `).all(req.user.id, startDate)
+      : db.prepare(`
+          SELECT date, total_value, total_invested, day_change
+          FROM portfolio_history
+          WHERE user_id = ?
+          ORDER BY date ASC
+        `).all(req.user.id);
 
     // Calculate performance metrics
     let performance = {
@@ -228,7 +236,10 @@ router.post('/backfill', (req, res) => {
         from: allDates[0],
         to: allDates[allDates.length - 1]
       },
-      debug: debugData
+      debug: debugData,
+      disclaimer: 'Historical values are estimated using a linear projection based on current gain ratio. ' +
+        'Actual historical values may have varied due to market fluctuations. ' +
+        'This data is for visualization purposes only and should not be used for financial reporting.'
     });
   } catch (error) {
     console.error('Error backfilling history:', error);
@@ -436,35 +447,37 @@ router.get('/monthly-investments', (req, res) => {
   }
 });
 
-// Debug endpoint - check transactions
-router.get('/debug-transactions', (req, res) => {
-  try {
-    const transactions = db.prepare(`
-      SELECT t.transaction_date, t.type, t.quantity, t.price, t.total_amount, a.name, a.category
-      FROM transactions t
-      JOIN assets a ON t.asset_id = a.id
-      WHERE t.user_id = ?
-      ORDER BY t.transaction_date ASC
-    `).all(req.user.id);
+// Debug endpoint - DEVELOPMENT ONLY
+if (process.env.NODE_ENV !== 'production') {
+  router.get('/debug-transactions', (req, res) => {
+    try {
+      const transactions = db.prepare(`
+        SELECT t.transaction_date, t.type, t.quantity, t.price, t.total_amount, a.name, a.category
+        FROM transactions t
+        JOIN assets a ON t.asset_id = a.id
+        WHERE t.user_id = ?
+        ORDER BY t.transaction_date ASC
+      `).all(req.user.id);
 
-    const history = db.prepare(`
-      SELECT date, total_value, total_invested
-      FROM portfolio_history
-      WHERE user_id = ?
-      ORDER BY date ASC
-    `).all(req.user.id);
+      const history = db.prepare(`
+        SELECT date, total_value, total_invested
+        FROM portfolio_history
+        WHERE user_id = ?
+        ORDER BY date ASC
+      `).all(req.user.id);
 
-    res.json({
-      transactionCount: transactions.length,
-      transactions: transactions.slice(0, 10), // First 10
-      transactionsLast: transactions.slice(-5), // Last 5
-      historyCount: history.length,
-      historyFirst: history.slice(0, 5),
-      historyLast: history.slice(-5)
-    });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
+      res.json({
+        transactionCount: transactions.length,
+        transactions: transactions.slice(0, 10),
+        transactionsLast: transactions.slice(-5),
+        historyCount: history.length,
+        historyFirst: history.slice(0, 5),
+        historyLast: history.slice(-5)
+      });
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+}
 
 export default router;

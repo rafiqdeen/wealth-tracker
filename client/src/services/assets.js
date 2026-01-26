@@ -33,14 +33,17 @@ export const priceService = {
   // Get bulk prices (forceRefresh bypasses cache)
   getBulkPrices: (symbols, forceRefresh = false) => api.post('/prices/bulk', { symbols, forceRefresh }),
 
-  // Clear price cache
-  clearCache: () => api.delete('/prices/cache'),
+  // Clear price cache (requires confirmation)
+  clearCache: () => api.delete('/prices/cache?confirm=true'),
 
   // Search stocks by company name
   searchStocks: (query) => api.get(`/prices/search/stocks?q=${encodeURIComponent(query)}`),
 
   // Search mutual funds
   searchMutualFunds: (query) => api.get(`/prices/search/mf?q=${encodeURIComponent(query)}`),
+
+  // Get market status (open/closed/holiday)
+  getMarketStatus: () => api.get('/prices/market-status'),
 };
 
 // Asset categories and types

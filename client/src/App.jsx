@@ -5,6 +5,7 @@ import { ThemeProvider } from './context/ThemeContext';
 import { ToastProvider } from './context/ToastContext';
 import { PageSpinner } from './components/apple';
 import { spring } from './utils/animations';
+import ErrorBoundary from './components/ErrorBoundary';
 import Layout from './components/Layout';
 import Login from './pages/Login';
 import Register from './pages/Register';
@@ -15,6 +16,7 @@ import EditAsset from './pages/EditAsset';
 import TransactionHistory from './pages/TransactionHistory';
 import Goals from './pages/Goals';
 import Insights from './pages/Insights';
+import Reports from './pages/Reports';
 
 // Page transition wrapper
 const PageTransition = ({ children }) => {
@@ -91,6 +93,7 @@ function AnimatedRoutes() {
           <Route path="assets/:id/transactions" element={<TransactionHistory />} />
           <Route path="insights" element={<Insights />} />
           <Route path="goals" element={<Goals />} />
+          <Route path="reports" element={<Reports />} />
         </Route>
       </Routes>
     </AnimatePresence>
@@ -99,15 +102,17 @@ function AnimatedRoutes() {
 
 function App() {
   return (
-    <BrowserRouter>
-      <ThemeProvider>
-        <ToastProvider>
-          <AuthProvider>
-            <AnimatedRoutes />
-          </AuthProvider>
-        </ToastProvider>
-      </ThemeProvider>
-    </BrowserRouter>
+    <ErrorBoundary>
+      <BrowserRouter>
+        <ThemeProvider>
+          <ToastProvider>
+            <AuthProvider>
+              <AnimatedRoutes />
+            </AuthProvider>
+          </ToastProvider>
+        </ThemeProvider>
+      </BrowserRouter>
+    </ErrorBoundary>
   );
 }
 

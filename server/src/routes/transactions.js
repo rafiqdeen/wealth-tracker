@@ -1,49 +1,12 @@
 import express from 'express';
 import db from '../db/database.js';
 import { authenticateToken } from '../middleware/auth.js';
+import { recalculateAssetFromTransactions, getCurrentAvgBuyPrice } from '../utils/assetCalculations.js';
 
 const router = express.Router();
 
 // Apply auth middleware to all routes
 router.use(authenticateToken);
-
-// Helper: Recalculate asset quantity and avg_buy_price from transactions
-function recalculateAsset(assetId) {
-  const transactions = db.prepare(`
-    SELECT * FROM transactions WHERE asset_id = ? ORDER BY transaction_date, id
-  `).all(assetId);
-
-  let totalQuantity = 0;
-  let totalCost = 0;
-
-  for (const txn of transactions) {
-    if (txn.type === 'BUY') {
-      totalCost += txn.total_amount;
-      totalQuantity += txn.quantity;
-    } else if (txn.type === 'SELL') {
-      // For weighted average, reduce quantity but adjust cost proportionally
-      const avgCostPerUnit = totalQuantity > 0 ? totalCost / totalQuantity : 0;
-      totalCost -= avgCostPerUnit * txn.quantity;
-      totalQuantity -= txn.quantity;
-    }
-  }
-
-  const avgBuyPrice = totalQuantity > 0 ? totalCost / totalQuantity : 0;
-  const status = totalQuantity <= 0 ? 'CLOSED' : 'ACTIVE';
-
-  db.prepare(`
-    UPDATE assets SET quantity = ?, avg_buy_price = ?, status = ?, updated_at = CURRENT_TIMESTAMP
-    WHERE id = ?
-  `).run(totalQuantity, avgBuyPrice, status, assetId);
-
-  return { quantity: totalQuantity, avg_buy_price: avgBuyPrice, status };
-}
-
-// Helper: Calculate current avg buy price for an asset
-function getCurrentAvgBuyPrice(assetId) {
-  const asset = db.prepare('SELECT quantity, avg_buy_price FROM assets WHERE id = ?').get(assetId);
-  return asset?.avg_buy_price || 0;
-}
 
 // Create a new transaction (BUY or SELL)
 router.post('/', (req, res) => {
@@ -67,60 +30,69 @@ router.post('/', (req, res) => {
       return res.status(400).json({ error: 'quantity and price must be positive numbers' });
     }
 
-    // Check asset exists and belongs to user
-    const asset = db.prepare(`
-      SELECT * FROM assets WHERE id = ? AND user_id = ?
-    `).get(asset_id, req.user.id);
-
-    if (!asset) {
-      return res.status(404).json({ error: 'Asset not found' });
-    }
-
-    // Validate asset is EQUITY category
-    if (asset.category !== 'EQUITY') {
-      return res.status(400).json({ error: 'Transactions are only supported for EQUITY assets' });
-    }
-
     const transactionType = type.toUpperCase();
     const totalAmount = quantity * price;
 
-    // For SELL, validate quantity doesn't exceed current holdings
-    if (transactionType === 'SELL') {
-      const currentQuantity = asset.quantity || 0;
-      if (quantity > currentQuantity) {
-        return res.status(400).json({
-          error: `Cannot sell ${quantity} units. Current holdings: ${currentQuantity}`
-        });
+    // Use database transaction to prevent race conditions
+    const createTransaction = db.transaction(() => {
+      // Check asset exists and belongs to user (inside transaction for consistency)
+      const asset = db.prepare(`
+        SELECT * FROM assets WHERE id = ? AND user_id = ?
+      `).get(asset_id, req.user.id);
+
+      if (!asset) {
+        throw { statusCode: 404, message: 'Asset not found' };
       }
-    }
 
-    // Calculate realized gain for SELL transactions (using weighted average)
-    let realizedGain = null;
-    if (transactionType === 'SELL') {
-      const avgBuyPrice = getCurrentAvgBuyPrice(asset_id);
-      const costBasis = avgBuyPrice * quantity;
-      realizedGain = totalAmount - costBasis;
-    }
+      // Validate asset is EQUITY category
+      if (asset.category !== 'EQUITY') {
+        throw { statusCode: 400, message: 'Transactions are only supported for EQUITY assets' };
+      }
 
-    // Insert transaction
-    const result = db.prepare(`
-      INSERT INTO transactions (
-        asset_id, user_id, type, quantity, price, total_amount,
-        transaction_date, notes, realized_gain
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(
-      asset_id, req.user.id, transactionType, quantity, price, totalAmount,
-      transaction_date, notes || null, realizedGain
-    );
+      // For SELL, validate quantity doesn't exceed current holdings
+      if (transactionType === 'SELL') {
+        const currentQuantity = asset.quantity || 0;
+        if (quantity > currentQuantity) {
+          throw {
+            statusCode: 400,
+            message: `Cannot sell ${quantity} units. Current holdings: ${currentQuantity}`
+          };
+        }
+      }
 
-    // Recalculate asset values
-    const updatedAssetValues = recalculateAsset(asset_id);
+      // Calculate realized gain for SELL transactions (using weighted average)
+      let realizedGain = null;
+      if (transactionType === 'SELL') {
+        const avgBuyPrice = getCurrentAvgBuyPrice(asset_id);
+        const costBasis = avgBuyPrice * quantity;
+        realizedGain = totalAmount - costBasis;
+      }
 
-    // Get the created transaction
-    const transaction = db.prepare('SELECT * FROM transactions WHERE id = ?').get(result.lastInsertRowid);
+      // Insert transaction
+      const result = db.prepare(`
+        INSERT INTO transactions (
+          asset_id, user_id, type, quantity, price, total_amount,
+          transaction_date, notes, realized_gain
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        asset_id, req.user.id, transactionType, quantity, price, totalAmount,
+        transaction_date, notes || null, realizedGain
+      );
 
-    // Get updated asset
-    const updatedAsset = db.prepare('SELECT * FROM assets WHERE id = ?').get(asset_id);
+      // Recalculate asset values
+      recalculateAssetFromTransactions(asset_id);
+
+      // Get the created transaction
+      const transaction = db.prepare('SELECT * FROM transactions WHERE id = ?').get(result.lastInsertRowid);
+
+      // Get updated asset
+      const updatedAsset = db.prepare('SELECT * FROM assets WHERE id = ?').get(asset_id);
+
+      return { transaction, updatedAsset };
+    });
+
+    // Execute the transaction
+    const { transaction, updatedAsset } = createTransaction();
 
     res.status(201).json({
       message: `${transactionType} transaction recorded successfully`,
@@ -128,6 +100,10 @@ router.post('/', (req, res) => {
       asset: updatedAsset
     });
   } catch (error) {
+    // Handle custom errors from transaction
+    if (error.statusCode) {
+      return res.status(error.statusCode).json({ error: error.message });
+    }
     console.error('Error creating transaction:', error);
     res.status(500).json({ error: 'Failed to create transaction' });
   }
@@ -273,7 +249,7 @@ router.put('/:id', (req, res) => {
     }
 
     // Recalculate asset values
-    recalculateAsset(transaction.asset_id);
+    recalculateAssetFromTransactions(transaction.asset_id);
 
     // Get updated transaction
     const updatedTransaction = db.prepare('SELECT * FROM transactions WHERE id = ?').get(req.params.id);
@@ -304,7 +280,7 @@ router.delete('/:id', (req, res) => {
     db.prepare('DELETE FROM transactions WHERE id = ?').run(req.params.id);
 
     // Recalculate asset values
-    const updatedAssetValues = recalculateAsset(transaction.asset_id);
+    const updatedAssetValues = recalculateAssetFromTransactions(transaction.asset_id);
 
     // Get updated asset
     const updatedAsset = db.prepare('SELECT * FROM assets WHERE id = ?').get(transaction.asset_id);

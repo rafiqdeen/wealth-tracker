@@ -1,6 +1,7 @@
 import express from 'express';
 import db from '../db/database.js';
 import { authenticateToken } from '../middleware/auth.js';
+import { recalculateAssetFromTransactions } from '../utils/assetCalculations.js';
 
 const router = express.Router();
 
@@ -65,37 +66,6 @@ router.get('/:id', (req, res) => {
     res.status(500).json({ error: 'Failed to fetch asset' });
   }
 });
-
-// Helper: Recalculate asset quantity and avg_buy_price from transactions
-function recalculateAssetFromTransactions(assetId) {
-  const transactions = db.prepare(`
-    SELECT * FROM transactions WHERE asset_id = ? ORDER BY transaction_date, id
-  `).all(assetId);
-
-  let totalQuantity = 0;
-  let totalCost = 0;
-
-  for (const txn of transactions) {
-    if (txn.type === 'BUY') {
-      totalCost += txn.total_amount;
-      totalQuantity += txn.quantity;
-    } else if (txn.type === 'SELL') {
-      const avgCostPerUnit = totalQuantity > 0 ? totalCost / totalQuantity : 0;
-      totalCost -= avgCostPerUnit * txn.quantity;
-      totalQuantity -= txn.quantity;
-    }
-  }
-
-  const avgBuyPrice = totalQuantity > 0 ? totalCost / totalQuantity : 0;
-  const status = totalQuantity <= 0 ? 'CLOSED' : 'ACTIVE';
-
-  db.prepare(`
-    UPDATE assets SET quantity = ?, avg_buy_price = ?, status = ?, updated_at = CURRENT_TIMESTAMP
-    WHERE id = ?
-  `).run(totalQuantity, avgBuyPrice, status, assetId);
-
-  return { quantity: totalQuantity, avg_buy_price: avgBuyPrice, status };
-}
 
 // Create new asset or record transaction
 router.post('/', (req, res) => {

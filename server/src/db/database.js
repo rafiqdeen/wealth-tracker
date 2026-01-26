@@ -72,13 +72,18 @@ export function initializeDb() {
     )
   `);
 
-  // Price cache table
+  // Price cache table - enhanced for holiday handling
   db.exec(`
     CREATE TABLE IF NOT EXISTS price_cache (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       symbol TEXT NOT NULL,
       price REAL NOT NULL,
+      previous_close REAL,
+      change_amount REAL DEFAULT 0,
+      change_percent REAL DEFAULT 0,
       currency TEXT DEFAULT 'INR',
+      price_date TEXT,
+      market_open INTEGER DEFAULT 1,
       fetched_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       UNIQUE(symbol)
     )
@@ -152,6 +157,18 @@ export function initializeDb() {
     db.exec(`ALTER TABLE assets ADD COLUMN appreciation_rate REAL`);
   }
 
+  // Add new columns to price_cache for improved holiday handling
+  const priceCacheColumns = db.prepare("PRAGMA table_info(price_cache)").all();
+  const hasPreviousClose = priceCacheColumns.some(col => col.name === 'previous_close');
+  if (!hasPreviousClose) {
+    db.exec(`ALTER TABLE price_cache ADD COLUMN previous_close REAL`);
+    db.exec(`ALTER TABLE price_cache ADD COLUMN change_amount REAL DEFAULT 0`);
+    db.exec(`ALTER TABLE price_cache ADD COLUMN change_percent REAL DEFAULT 0`);
+    db.exec(`ALTER TABLE price_cache ADD COLUMN price_date TEXT`);
+    db.exec(`ALTER TABLE price_cache ADD COLUMN market_open INTEGER DEFAULT 1`);
+    console.log('Migrated price_cache table with new columns for holiday handling');
+  }
+
   // Create indexes for better performance
   db.exec(`
     CREATE INDEX IF NOT EXISTS idx_assets_user_id ON assets(user_id);
@@ -161,6 +178,96 @@ export function initializeDb() {
     CREATE INDEX IF NOT EXISTS idx_transactions_user_id ON transactions(user_id);
     CREATE INDEX IF NOT EXISTS idx_transactions_date ON transactions(transaction_date);
     CREATE INDEX IF NOT EXISTS idx_portfolio_history_user_date ON portfolio_history(user_id, date);
+  `);
+
+  // Goals table - main goals storage
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS goals (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      name TEXT NOT NULL,
+      category TEXT NOT NULL,
+      target_amount REAL NOT NULL,
+      target_date TEXT,
+      progress_mode TEXT DEFAULT 'AUTO',
+      manual_current_amount REAL DEFAULT 0,
+      status TEXT DEFAULT 'ACTIVE',
+      notes TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      completed_at DATETIME,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    )
+  `);
+
+  // Goal-Asset links table - connects goals to assets with allocation
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS goal_asset_links (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      goal_id INTEGER NOT NULL,
+      asset_id INTEGER NOT NULL,
+      link_type TEXT DEFAULT 'FUNDING',
+      allocation_percent REAL DEFAULT 100,
+      allocation_mode TEXT DEFAULT 'PERCENT',
+      fixed_allocation_amount REAL,
+      initial_value_snapshot REAL,
+      link_date TEXT DEFAULT (date('now')),
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (goal_id) REFERENCES goals(id) ON DELETE CASCADE,
+      FOREIGN KEY (asset_id) REFERENCES assets(id) ON DELETE CASCADE,
+      UNIQUE(goal_id, asset_id)
+    )
+  `);
+
+  // Goal contributions table - tracks manual and auto contributions
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS goal_contributions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      goal_id INTEGER NOT NULL,
+      contribution_type TEXT NOT NULL,
+      amount REAL NOT NULL,
+      source_asset_id INTEGER,
+      description TEXT,
+      contribution_date TEXT DEFAULT (date('now')),
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (goal_id) REFERENCES goals(id) ON DELETE CASCADE,
+      FOREIGN KEY (source_asset_id) REFERENCES assets(id) ON DELETE SET NULL
+    )
+  `);
+
+  // Goal history table - daily snapshots for progress tracking
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS goal_history (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      goal_id INTEGER NOT NULL,
+      date TEXT NOT NULL,
+      current_value REAL NOT NULL,
+      progress_percent REAL NOT NULL,
+      linked_assets_value REAL DEFAULT 0,
+      manual_value REAL DEFAULT 0,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (goal_id) REFERENCES goals(id) ON DELETE CASCADE,
+      UNIQUE(goal_id, date)
+    )
+  `);
+
+  // Create indexes for goals tables
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_goals_user_id ON goals(user_id);
+    CREATE INDEX IF NOT EXISTS idx_goals_status ON goals(status);
+    CREATE INDEX IF NOT EXISTS idx_goals_user_status ON goals(user_id, status);
+    CREATE INDEX IF NOT EXISTS idx_goal_asset_links_goal_id ON goal_asset_links(goal_id);
+    CREATE INDEX IF NOT EXISTS idx_goal_asset_links_asset_id ON goal_asset_links(asset_id);
+    CREATE INDEX IF NOT EXISTS idx_goal_contributions_goal_id ON goal_contributions(goal_id);
+    CREATE INDEX IF NOT EXISTS idx_goal_history_goal_id_date ON goal_history(goal_id, date);
+  `);
+
+  // Additional performance indexes
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_price_cache_symbol_date ON price_cache(symbol, fetched_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_transactions_user_date ON transactions(user_id, transaction_date DESC);
+    CREATE INDEX IF NOT EXISTS idx_assets_user_category ON assets(user_id, category);
+    CREATE INDEX IF NOT EXISTS idx_assets_user_status ON assets(user_id, status);
   `);
 
   // Migrate existing equity assets to transactions (one-time migration)

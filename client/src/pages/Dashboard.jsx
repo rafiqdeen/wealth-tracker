@@ -4,11 +4,12 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, PieChart, Pie, Cell } from 'recharts';
 import { assetService, priceService, ASSET_CONFIG } from '../services/assets';
 import { portfolioService } from '../services/portfolio';
+import { goalService, GOAL_CATEGORIES } from '../services/goals';
 import { Card, Button, DashboardSkeleton, AnimatedNumber } from '../components/apple';
 import { spring, staggerContainer, staggerItem } from '../utils/animations';
 import { categoryColors } from '../constants/theme';
 import { formatCurrency, formatCompact, formatPercent, formatPrice } from '../utils/formatting';
-import { calculateFixedIncomeValue, getCompoundingFrequency, calculateXIRRFromTransactions, yearsBetweenDates, calculateCAGR, debugXIRR } from '../utils/interest';
+import { calculateFixedIncomeValue, getCompoundingFrequency, calculateXIRRFromTransactions, yearsBetweenDates, calculateCAGR, debugXIRR, generateRecurringDepositSchedule } from '../utils/interest';
 import { printPortfolioReport } from '../utils/export';
 import { useAuth } from '../context/AuthContext';
 
@@ -27,6 +28,7 @@ export default function Dashboard() {
   const [allTransactions, setAllTransactions] = useState([]);
   const [xirrDebugInfo, setXirrDebugInfo] = useState(null);
   const [showXirrDebug, setShowXirrDebug] = useState(false);
+  const [goals, setGoals] = useState([]);
 
   // Refs to prevent race conditions
   const fetchRequestId = useRef(0);
@@ -79,10 +81,11 @@ export default function Dashboard() {
 
     if (forceRefresh) setRefreshing(true);
     try {
-      // Step 1: Fetch assets and chart data in parallel
-      const [assetsRes, chartRes] = await Promise.all([
+      // Step 1: Fetch assets, chart data, and goals in parallel
+      const [assetsRes, chartRes, goalsRes] = await Promise.all([
         assetService.getAll(),
-        portfolioService.getCumulativeInvestments(selectedPeriod)
+        portfolioService.getCumulativeInvestments(selectedPeriod),
+        goalService.getAll().catch(() => ({ data: { goals: [] } }))
       ]);
 
       // Check if this request is still valid (no newer request started)
@@ -94,8 +97,9 @@ export default function Dashboard() {
       setAssets(assetList);
       setCumulativeData(chartRes.data.data || []);
       setInvestmentSummary(chartRes.data.summary || null);
+      setGoals(goalsRes.data?.goals || []);
 
-      // Step 2: Prepare parallel fetches for prices and transactions
+      // Step 2: Separate equity and fixed income assets
       const equityAssets = assetList.filter(a => a.category === 'EQUITY' && a.symbol);
       const fixedIncomeAssets = assetList.filter(a => a.category === 'FIXED_INCOME' && a.interest_rate);
 
@@ -104,86 +108,146 @@ export default function Dashboard() {
         await priceService.clearCache();
       }
 
-      // Price fetch promise
-      let pricePromise = Promise.resolve({ data: { prices: {} } });
+      // ===== FIXED INCOME: Fetch and process independently (don't wait for prices) =====
+      if (fixedIncomeAssets.length > 0) {
+
+        // Fetch Fixed Income transactions
+        const fixedIncomeTransactions = await Promise.all(
+          fixedIncomeAssets.map(asset =>
+            assetService.getTransactions(asset.id)
+              .then(res => ({ asset, transactions: res.data.transactions || [] }))
+              .catch(() => ({ asset, transactions: [] }))
+          )
+        );
+
+        // Check validity before processing
+        if (fetchRequestId.current === currentRequestId && isMounted.current) {
+          const recurringDepositTypes = ['PPF', 'RD', 'EPF', 'VPF', 'SSY'];
+          const calcs = {};
+
+          fixedIncomeTransactions.forEach(({ asset, transactions }) => {
+            const compoundingFreq = getCompoundingFrequency(asset.asset_type);
+            const isRecurring = recurringDepositTypes.includes(asset.asset_type);
+
+            if (transactions.length > 0) {
+              if (asset.asset_type === 'PPF') {
+                const ppfResult = generateRecurringDepositSchedule(transactions, asset.interest_rate, asset.start_date);
+                if (ppfResult) {
+                  calcs[asset.id] = {
+                    principal: ppfResult.summary.totalDeposited,
+                    currentValue: ppfResult.summary.currentValue,
+                    estimatedValue: ppfResult.summary.estimatedValue,
+                    interest: ppfResult.summary.totalInterest,
+                    interestPercent: ppfResult.summary.interestPercent,
+                    currentFYAccruedInterest: ppfResult.summary.currentFYAccruedInterest
+                  };
+                }
+              } else {
+                const calculation = calculateFixedIncomeValue(transactions, asset.interest_rate, new Date(), compoundingFreq);
+                calcs[asset.id] = calculation;
+              }
+            } else if (asset.principal) {
+              if (isRecurring) {
+                calcs[asset.id] = {
+                  principal: asset.principal,
+                  currentValue: asset.principal,
+                  interest: 0,
+                  interestPercent: 0,
+                  needsTransactions: true
+                };
+              } else {
+                const startDate = asset.start_date || asset.created_at?.split('T')[0] || new Date().toISOString().split('T')[0];
+                const fakeTransaction = [{
+                  type: 'BUY',
+                  total_amount: asset.principal,
+                  transaction_date: startDate
+                }];
+                const calculation = calculateFixedIncomeValue(fakeTransaction, asset.interest_rate, new Date(), compoundingFreq);
+                calcs[asset.id] = calculation;
+              }
+            }
+          });
+
+          setFixedIncomeCalcs(calcs);
+        }
+      }
+
+      // ===== EQUITY: Fetch prices and transactions (can be slow due to rate limiting) =====
+      let transactionMap = {};
       if (equityAssets.length > 0) {
+
+        // Fetch equity transactions
+        const equityTransactionPromises = equityAssets.map(asset =>
+          assetService.getTransactions(asset.id)
+            .then(res => ({ id: asset.id, transactions: res.data.transactions || [] }))
+            .catch(() => ({ id: asset.id, transactions: [] }))
+        );
+
+        // Fetch prices with timeout
+        const PRICE_TIMEOUT = 30000;
         const symbols = equityAssets.map(a => ({
           symbol: a.asset_type === 'MUTUAL_FUND' ? a.symbol : `${a.symbol}.${a.exchange === 'BSE' ? 'BO' : 'NS'}`,
           type: a.asset_type === 'MUTUAL_FUND' ? 'mf' : 'stock'
         }));
-        pricePromise = priceService.getBulkPrices(symbols, forceRefresh);
-      }
+        const timeoutPromise = new Promise((_, reject) =>
+          setTimeout(() => reject(new Error('Price fetch timeout')), PRICE_TIMEOUT)
+        );
 
-      // Fetch ALL transactions in parallel (both equity and fixed income)
-      const allAssetIds = [...equityAssets, ...fixedIncomeAssets].map(a => a.id);
-      const transactionPromises = allAssetIds.map(id =>
-        assetService.getTransactions(id).then(res => ({ id, transactions: res.data.transactions || [] }))
-      );
+        const pricePromise = Promise.race([
+          priceService.getBulkPrices(symbols, forceRefresh),
+          timeoutPromise
+        ]).catch(() => ({ data: { prices: {} } }));
 
-      // Execute prices and all transactions in parallel
-      const [priceRes, ...transactionResults] = await Promise.all([
-        pricePromise,
-        ...transactionPromises
-      ]);
+        // Wait for both
+        const [priceRes, ...transactionResults] = await Promise.all([
+          pricePromise,
+          ...equityTransactionPromises
+        ]);
 
-      // Check again if this request is still valid after second batch of fetches
-      if (fetchRequestId.current !== currentRequestId || !isMounted.current) {
-        return; // Discard stale response
-      }
+        // Check validity
+        if (fetchRequestId.current !== currentRequestId || !isMounted.current) {
+          return;
+        }
 
-      // Process price data
-      const priceData = priceRes.data.prices || {};
-      setPrices(priceData);
-      if (equityAssets.length > 0) {
-        setLastUpdated(new Date());
-      }
+        // Process prices
+        const priceData = priceRes.data?.prices || {};
+        const marketStatus = priceRes.data?.marketStatus;
 
-      // Build transaction map
-      const transactionMap = {};
-      transactionResults.forEach(({ id, transactions }) => {
-        transactionMap[id] = transactions;
-      });
+        // Save valid prices to localStorage as backup
+        const validPriceEntries = Object.entries(priceData).filter(([_, p]) => p && typeof p.price === 'number' && p.price > 0);
+        if (validPriceEntries.length > 0) {
+          const priceBackup = {
+            prices: Object.fromEntries(validPriceEntries),
+            timestamp: Date.now()
+          };
+          localStorage.setItem('price_backup', JSON.stringify(priceBackup));
+        }
 
-      // Process Fixed Income calculations
-      if (fixedIncomeAssets.length > 0) {
-        const recurringDepositTypes = ['PPF', 'RD', 'EPF', 'VPF', 'SSY'];
-        const calcs = {};
-        fixedIncomeAssets.forEach(asset => {
-          const transactions = transactionMap[asset.id] || [];
-          const compoundingFreq = getCompoundingFrequency(asset.asset_type);
-          const isRecurring = recurringDepositTypes.includes(asset.asset_type);
-
-          if (transactions.length > 0) {
-            const calculation = calculateFixedIncomeValue(transactions, asset.interest_rate, new Date(), compoundingFreq);
-            calcs[asset.id] = calculation;
-          } else if (asset.principal) {
-            // For recurring deposits without transactions, can't accurately calculate interest
-            if (isRecurring) {
-              calcs[asset.id] = {
-                principal: asset.principal,
-                currentValue: asset.principal,
-                interest: 0,
-                interestPercent: 0,
-                needsTransactions: true
-              };
-            } else {
-              // For lump-sum deposits, use asset's principal and start_date
-              const startDate = asset.start_date || asset.created_at?.split('T')[0] || new Date().toISOString().split('T')[0];
-              const fakeTransaction = [{
-                type: 'BUY',
-                total_amount: asset.principal,
-                transaction_date: startDate
-              }];
-              const calculation = calculateFixedIncomeValue(fakeTransaction, asset.interest_rate, new Date(), compoundingFreq);
-              calcs[asset.id] = calculation;
+        // Merge with localStorage backup for any missing prices
+        const backupStr = localStorage.getItem('price_backup');
+        if (backupStr) {
+          try {
+            const backup = JSON.parse(backupStr);
+            // Use backup prices for symbols that are unavailable (max 24 hours old)
+            if (Date.now() - backup.timestamp < 24 * 60 * 60 * 1000) {
+              for (const [symbol, data] of Object.entries(backup.prices)) {
+                if (!priceData[symbol] || priceData[symbol].unavailable) {
+                  priceData[symbol] = { ...data, fromBackup: true };
+                }
+              }
             }
-          }
-        });
-        setFixedIncomeCalcs(calcs);
-      }
+          } catch (e) { /* ignore parse errors */ }
+        }
 
-      // Process XIRR calculation
-      if (equityAssets.length > 0) {
+        setPrices(priceData);
+        setLastUpdated(new Date());
+
+        // Build transaction map for XIRR
+        transactionResults.forEach(({ id, transactions }) => {
+          transactionMap[id] = transactions;
+        });
+
+        // Process XIRR calculation
         const allTxns = [];
         equityAssets.forEach(asset => {
           const transactions = transactionMap[asset.id] || [];
@@ -315,11 +379,21 @@ export default function Dashboard() {
     return Math.round(purchasePrice * Math.pow(1 + rate, years));
   };
 
+  // Helper to get price key for an asset
+  const getPriceKey = (asset) => {
+    if (asset.category !== 'EQUITY' || !asset.symbol) return null;
+    return asset.asset_type === 'MUTUAL_FUND' ? asset.symbol : `${asset.symbol}.${asset.exchange === 'BSE' ? 'BO' : 'NS'}`;
+  };
+
   const getAssetValue = (asset) => {
     if (asset.category === 'EQUITY' && asset.quantity && asset.symbol) {
-      const priceKey = asset.asset_type === 'MUTUAL_FUND' ? asset.symbol : `${asset.symbol}.${asset.exchange === 'BSE' ? 'BO' : 'NS'}`;
-      const priceData = prices[priceKey];
-      if (priceData?.price) return asset.quantity * priceData.price;
+      const priceKey = getPriceKey(asset);
+      const priceData = priceKey ? prices[priceKey] : null;
+      // Use price if available (check for number, as 0 is falsy but could be valid)
+      if (priceData && typeof priceData.price === 'number' && priceData.price > 0) {
+        return asset.quantity * priceData.price;
+      }
+      // Fallback to avg_buy_price only if price is unavailable
       if (asset.avg_buy_price) return asset.quantity * asset.avg_buy_price;
     }
     // For Fixed Income, use transaction-based calculation if available
@@ -356,36 +430,42 @@ export default function Dashboard() {
   };
 
   const getCurrentPrice = (asset) => {
-    if (asset.category === 'EQUITY' && asset.symbol) {
-      const priceKey = asset.asset_type === 'MUTUAL_FUND' ? asset.symbol : `${asset.symbol}.${asset.exchange === 'BSE' ? 'BO' : 'NS'}`;
-      return prices[priceKey]?.price || asset.avg_buy_price || 0;
+    const priceKey = getPriceKey(asset);
+    const priceData = priceKey ? prices[priceKey] : null;
+    if (priceData && typeof priceData.price === 'number' && priceData.price > 0) {
+      return priceData.price;
     }
     return asset.avg_buy_price || 0;
   };
 
   const getPriceChange = (asset) => {
-    if (asset.category === 'EQUITY' && asset.symbol) {
-      const priceKey = asset.asset_type === 'MUTUAL_FUND' ? asset.symbol : `${asset.symbol}.${asset.exchange === 'BSE' ? 'BO' : 'NS'}`;
-      return prices[priceKey]?.changePercent || 0;
+    const priceKey = getPriceKey(asset);
+    const priceData = priceKey ? prices[priceKey] : null;
+    if (priceData && typeof priceData.changePercent === 'number') {
+      return priceData.changePercent;
     }
     return 0;
   };
 
-  // Calculate totals
-  const totalValue = assets.reduce((sum, asset) => sum + getAssetValue(asset), 0);
-  const totalInvested = assets.reduce((sum, asset) => sum + getInvestedValue(asset), 0);
+  // Calculate totals with null safety
+  const totalValue = assets.reduce((sum, asset) => sum + (getAssetValue(asset) ?? 0), 0);
+  const totalInvested = assets.reduce((sum, asset) => sum + (getInvestedValue(asset) ?? 0), 0);
   const totalPnL = totalValue - totalInvested;
-  const totalPnLPercent = totalInvested > 0 ? (totalPnL / totalInvested) * 100 : 0;
+  const totalPnLPercent = totalInvested > 0 && isFinite(totalPnL / totalInvested)
+    ? (totalPnL / totalInvested) * 100
+    : 0;
 
   // Day's change (estimated from equity assets)
   const dayChange = assets
     .filter(a => a.category === 'EQUITY')
     .reduce((sum, asset) => {
-      const value = getAssetValue(asset);
-      const changePercent = getPriceChange(asset);
+      const value = getAssetValue(asset) ?? 0;
+      const changePercent = getPriceChange(asset) ?? 0;
       return sum + (value * changePercent / 100);
     }, 0);
-  const dayChangePercent = totalValue > 0 ? (dayChange / (totalValue - dayChange)) * 100 : 0;
+  const dayChangePercent = totalValue > 0 && isFinite(dayChange / totalValue)
+    ? (dayChange / totalValue) * 100
+    : 0;
 
   // Holdings sorted by value
   const holdings = [...assets]
@@ -506,6 +586,54 @@ export default function Dashboard() {
       dayChangePercent: data.current > 0 ? (data.dayChange / (data.current - data.dayChange)) * 100 : 0,
     };
   }).sort((a, b) => b.current - a.current);
+
+  // ===== Goals Summary for Progress Card =====
+  const activeGoals = goals.filter(g => g.status === 'ACTIVE');
+  const completedGoals = goals.filter(g => g.status === 'COMPLETED');
+  const goalsThisYear = completedGoals.filter(g => {
+    const completedDate = g.completed_at ? new Date(g.completed_at) : null;
+    return completedDate && completedDate.getFullYear() === new Date().getFullYear();
+  });
+
+  // ===== Upcoming Maturities =====
+  const upcomingMaturities = assets
+    .filter(asset => {
+      if (!asset.maturity_date) return false;
+      const maturityDate = new Date(asset.maturity_date);
+      const today = new Date();
+      const daysUntilMaturity = Math.ceil((maturityDate - today) / (1000 * 60 * 60 * 24));
+      // Show maturities within next 180 days (6 months)
+      return daysUntilMaturity > 0 && daysUntilMaturity <= 180;
+    })
+    .map(asset => {
+      const maturityDate = new Date(asset.maturity_date);
+      const today = new Date();
+      const daysUntilMaturity = Math.ceil((maturityDate - today) / (1000 * 60 * 60 * 24));
+
+      // Calculate actual maturity value (principal + interest at maturity date)
+      let maturityValue = asset.principal || 0;
+      if (asset.principal && asset.interest_rate && asset.start_date && asset.maturity_date) {
+        const principal = parseFloat(asset.principal);
+        const rate = parseFloat(asset.interest_rate) / 100;
+        const startDate = new Date(asset.start_date);
+        const endDate = new Date(asset.maturity_date);
+        const years = (endDate - startDate) / (365.25 * 24 * 60 * 60 * 1000);
+
+        // Use quarterly compounding for FDs (most common in India)
+        const n = asset.asset_type === 'FD' ? 4 : 1;
+        maturityValue = principal * Math.pow(1 + rate / n, n * years);
+      }
+
+      return {
+        ...asset,
+        daysUntilMaturity,
+        maturityValue: Math.round(maturityValue),
+        formattedDate: maturityDate.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
+      };
+    })
+    .sort((a, b) => a.daysUntilMaturity - b.daysUntilMaturity);
+
+  const totalMaturityValue = upcomingMaturities.reduce((sum, m) => sum + m.maturityValue, 0);
 
   // Record snapshot when data is loaded with debouncing
   useEffect(() => {
@@ -783,6 +911,289 @@ export default function Dashboard() {
                   )}
                 </div>
               </Card>
+
+              {/* Goals Progress Card - Modern Stacked List */}
+              {activeGoals.length > 0 && (
+                <Card padding="p-0" className="overflow-hidden">
+                  {/* Header */}
+                  <Link to="/goals" className="block">
+                    <div className="flex items-center gap-3 py-3.5 px-4 bg-gradient-to-r from-[#FF9500]/10 via-[#FF9500]/5 to-transparent">
+                      <div className="w-9 h-9 rounded-xl bg-[#FF9500] flex items-center justify-center shadow-sm">
+                        <svg className="w-[18px] h-[18px] text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12c0 1.268-.63 2.39-1.593 3.068a3.745 3.745 0 01-1.043 3.296 3.745 3.745 0 01-3.296 1.043A3.745 3.745 0 0112 21c-1.268 0-2.39-.63-3.068-1.593a3.746 3.746 0 01-3.296-1.043 3.745 3.745 0 01-1.043-3.296A3.745 3.745 0 013 12c0-1.268.63-2.39 1.593-3.068a3.745 3.745 0 011.043-3.296 3.746 3.746 0 013.296-1.043A3.746 3.746 0 0112 3c1.268 0 2.39.63 3.068 1.593a3.746 3.746 0 013.296 1.043 3.746 3.746 0 011.043 3.296A3.745 3.745 0 0121 12z" />
+                        </svg>
+                      </div>
+                      <span className="text-[15px] font-semibold text-[var(--label-primary)]">Goals</span>
+                      <div className="flex items-center gap-1.5 ml-auto">
+                        <span className="text-[12px] font-medium text-[var(--label-tertiary)]">{activeGoals.length} Active</span>
+                        <svg className="w-4 h-4 text-[var(--label-quaternary)]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
+                        </svg>
+                      </div>
+                    </div>
+                  </Link>
+
+                  {/* Goals List */}
+                  <div className="divide-y divide-[var(--separator-opaque)]/50">
+                    {activeGoals.slice(0, 3).map((goal) => {
+                      const progressPercent = goal.target_amount > 0
+                        ? Math.min(100, ((goal.current_value || 0) / goal.target_amount) * 100)
+                        : 0;
+                      const categoryConfig = GOAL_CATEGORIES[goal.category] || GOAL_CATEGORIES.CUSTOM;
+
+                      // Calculate status based on target date and progress (only show if notable)
+                      const getGoalStatus = () => {
+                        if (!goal.target_date) {
+                          if (progressPercent >= 100) return { text: 'Completed', icon: '✓', color: '#10B981' };
+                          if (progressPercent >= 75) return { text: 'Almost there', icon: '✓', color: '#10B981' };
+                          return null; // No status for regular progress
+                        }
+
+                        const targetDate = new Date(goal.target_date);
+                        const today = new Date();
+                        const totalDays = (targetDate - new Date(goal.created_at)) / (1000 * 60 * 60 * 24);
+                        const elapsedDays = (today - new Date(goal.created_at)) / (1000 * 60 * 60 * 24);
+                        const expectedProgress = totalDays > 0 ? (elapsedDays / totalDays) * 100 : 0;
+                        const daysLeft = Math.ceil((targetDate - today) / (1000 * 60 * 60 * 24));
+
+                        // Format time remaining
+                        let timeText = '';
+                        if (daysLeft < 0) {
+                          timeText = 'Overdue';
+                        } else if (daysLeft === 0) {
+                          timeText = 'Due today';
+                        } else if (daysLeft < 30) {
+                          timeText = `${daysLeft}d left`;
+                        } else if (daysLeft < 365) {
+                          const months = Math.floor(daysLeft / 30);
+                          timeText = `${months}mo left`;
+                        } else {
+                          const years = Math.floor(daysLeft / 365);
+                          const months = Math.floor((daysLeft % 365) / 30);
+                          timeText = months > 0 ? `${years}y ${months}mo` : `${years}y left`;
+                        }
+
+                        if (progressPercent >= 100) {
+                          return { text: 'Completed', icon: '✓', color: '#10B981' };
+                        } else if (daysLeft < 0) {
+                          return { text: timeText, icon: '⚠', color: '#EF4444' };
+                        } else if (progressPercent >= expectedProgress + 10) {
+                          return { text: `Ahead · ${timeText}`, icon: '✓', color: '#10B981' };
+                        } else if (progressPercent < expectedProgress - 10) {
+                          return { text: `Behind · ${timeText}`, icon: '⚠', color: '#F59E0B' };
+                        }
+                        // On track - just show time remaining
+                        return { text: timeText, icon: '→', color: 'var(--label-tertiary)' };
+                      };
+
+                      const status = getGoalStatus();
+
+                      // Category icons (SVG)
+                      const getCategoryIcon = () => {
+                        const iconClass = "w-4 h-4";
+                        switch (goal.category) {
+                          case 'EMERGENCY_FUND':
+                            return (
+                              <svg className={iconClass} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z" />
+                              </svg>
+                            );
+                          case 'RETIREMENT':
+                            return (
+                              <svg className={iconClass} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M12 3v2.25m6.364.386l-1.591 1.591M21 12h-2.25m-.386 6.364l-1.591-1.591M12 18.75V21m-4.773-4.227l-1.591 1.591M5.25 12H3m4.227-4.773L5.636 5.636M15.75 12a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0z" />
+                              </svg>
+                            );
+                          case 'FIRE':
+                            return (
+                              <svg className={iconClass} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M15.362 5.214A8.252 8.252 0 0112 21 8.25 8.25 0 016.038 7.048 8.287 8.287 0 009 9.6a8.983 8.983 0 013.361-6.867 8.21 8.21 0 003 2.48z" />
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M12 18a3.75 3.75 0 00.495-7.467 5.99 5.99 0 00-1.925 3.546 5.974 5.974 0 01-2.133-1A3.75 3.75 0 0012 18z" />
+                              </svg>
+                            );
+                          case 'HOME':
+                            return (
+                              <svg className={iconClass} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 12l8.954-8.955c.44-.439 1.152-.439 1.591 0L21.75 12M4.5 9.75v10.125c0 .621.504 1.125 1.125 1.125H9.75v-4.875c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21h4.125c.621 0 1.125-.504 1.125-1.125V9.75M8.25 21h8.25" />
+                              </svg>
+                            );
+                          case 'EDUCATION':
+                            return (
+                              <svg className={iconClass} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M4.26 10.147a60.436 60.436 0 00-.491 6.347A48.627 48.627 0 0112 20.904a48.627 48.627 0 018.232-4.41 60.46 60.46 0 00-.491-6.347m-15.482 0a50.57 50.57 0 00-2.658-.813A59.905 59.905 0 0112 3.493a59.902 59.902 0 0110.399 5.84c-.896.248-1.783.52-2.658.814m-15.482 0A50.697 50.697 0 0112 13.489a50.702 50.702 0 017.74-3.342M6.75 15a.75.75 0 100-1.5.75.75 0 000 1.5zm0 0v-3.675A55.378 55.378 0 0112 8.443m-7.007 11.55A5.981 5.981 0 006.75 15.75v-1.5" />
+                              </svg>
+                            );
+                          case 'VACATION':
+                            return (
+                              <svg className={iconClass} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.876L5.999 12zm0 0h7.5" />
+                              </svg>
+                            );
+                          case 'CAR':
+                            return (
+                              <svg className={iconClass} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 18.75a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m3 0h6m-9 0H3.375a1.125 1.125 0 01-1.125-1.125V14.25m17.25 4.5a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m3 0h1.125c.621 0 1.129-.504 1.09-1.124a17.902 17.902 0 00-3.213-9.193 2.056 2.056 0 00-1.58-.86H14.25M16.5 18.75h-2.25m0-11.177v-.958c0-.568-.422-1.048-.987-1.106a48.554 48.554 0 00-10.026 0 1.106 1.106 0 00-.987 1.106v7.635m12-6.677v6.677m0 4.5v-4.5m0 0h-12" />
+                              </svg>
+                            );
+                          case 'WEDDING':
+                            return (
+                              <svg className={iconClass} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M21 8.25c0-2.485-2.099-4.5-4.688-4.5-1.935 0-3.597 1.126-4.312 2.733-.715-1.607-2.377-2.733-4.313-2.733C5.1 3.75 3 5.765 3 8.25c0 7.22 9 12 9 12s9-4.78 9-12z" />
+                              </svg>
+                            );
+                          default:
+                            return (
+                              <svg className={iconClass} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                              </svg>
+                            );
+                        }
+                      };
+
+                      return (
+                        <div key={goal.id} className="px-4 py-2.5 hover:bg-[var(--fill-tertiary)]/30 transition-colors">
+                          <div className="flex gap-2.5 items-center">
+                            {/* Icon Badge */}
+                            <div
+                              className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0"
+                              style={{ backgroundColor: `${categoryConfig.color}15`, color: categoryConfig.color }}
+                            >
+                              {getCategoryIcon()}
+                            </div>
+
+                            {/* Content */}
+                            <div className="flex-1 min-w-0">
+                              {/* Name and Amount */}
+                              <div className="flex items-center justify-between">
+                                <span className="text-[13px] font-semibold text-[var(--label-primary)] truncate">
+                                  {goal.name}
+                                </span>
+                                <span className="text-[11px] ml-2 shrink-0">
+                                  <span className="font-semibold text-[var(--label-primary)]">{formatCompact(goal.current_value || 0)}</span>
+                                  <span className="font-medium text-[var(--label-quaternary)] mx-0.5">/</span>
+                                  <span className="font-semibold text-[var(--label-secondary)]">{formatCompact(goal.target_amount)}</span>
+                                </span>
+                              </div>
+
+                              {/* Progress Bar + Percentage */}
+                              <div className="flex items-center gap-2 mt-1">
+                                <div className="flex-1 h-[5px] bg-[var(--fill-tertiary)] rounded-full overflow-hidden">
+                                  <div
+                                    className="h-full rounded-full transition-all duration-700 ease-out"
+                                    style={{
+                                      width: `${progressPercent}%`,
+                                      backgroundColor: categoryConfig.color
+                                    }}
+                                  />
+                                </div>
+                                <span
+                                  className="text-[12px] font-bold shrink-0 w-9 text-right"
+                                  style={{ color: categoryConfig.color }}
+                                >
+                                  {progressPercent.toFixed(0)}%
+                                </span>
+                              </div>
+
+                              {/* Status - only if notable */}
+                              {status && (
+                                <div className="mt-1">
+                                  <span
+                                    className="text-[10px] font-medium"
+                                    style={{ color: status.color }}
+                                  >
+                                    {status.icon} {status.text}
+                                  </span>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {/* Footer - More Goals */}
+                  {activeGoals.length > 3 && (
+                    <Link to="/goals" className="block px-4 py-2.5 border-t border-[var(--separator-opaque)]/50 bg-[var(--fill-tertiary)]/20 hover:bg-[var(--fill-tertiary)]/40 transition-colors">
+                      <p className="text-[12px] font-medium text-[var(--chart-primary)] text-center">
+                        +{activeGoals.length - 3} more goals →
+                      </p>
+                    </Link>
+                  )}
+                </Card>
+              )}
+
+              {/* Upcoming Maturities Card */}
+              {upcomingMaturities.length > 0 && (
+                <Card padding="p-0" className="overflow-hidden">
+                  <div className="flex items-center gap-3 py-3.5 px-4 bg-gradient-to-r from-[#EC4899]/10 via-[#EC4899]/5 to-transparent">
+                    <div className="w-9 h-9 rounded-xl bg-[#EC4899] flex items-center justify-center shadow-sm">
+                      <svg className="w-[18px] h-[18px] text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 11.25v7.5" />
+                      </svg>
+                    </div>
+                    <span className="text-[15px] font-semibold text-[var(--label-primary)]">Maturities</span>
+                  </div>
+
+                  {/* Maturity List */}
+                  <div className="divide-y divide-[var(--separator-opaque)]/50">
+                    {upcomingMaturities.slice(0, 3).map((asset) => {
+                      const isUrgent = asset.daysUntilMaturity <= 30;
+                      const isSoon = asset.daysUntilMaturity <= 60;
+                      return (
+                        <div key={asset.id} className="px-4 py-2.5 hover:bg-[var(--fill-tertiary)]/30 transition-colors">
+                          <div className="flex items-center gap-2.5">
+                            {/* Days Badge */}
+                            <div className={`w-10 h-10 rounded-lg flex flex-col items-center justify-center shrink-0 ${
+                              isUrgent ? 'bg-[#EF4444]/10' : isSoon ? 'bg-[#F59E0B]/10' : 'bg-[var(--fill-tertiary)]'
+                            }`}>
+                              <span className={`text-[13px] font-bold leading-none ${
+                                isUrgent ? 'text-[#EF4444]' : isSoon ? 'text-[#F59E0B]' : 'text-[var(--label-primary)]'
+                              }`}>
+                                {asset.daysUntilMaturity}
+                              </span>
+                              <span className={`text-[9px] font-medium ${
+                                isUrgent ? 'text-[#EF4444]' : isSoon ? 'text-[#F59E0B]' : 'text-[var(--label-tertiary)]'
+                              }`}>
+                                days
+                              </span>
+                            </div>
+
+                            {/* Content */}
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center justify-between">
+                                <span className="text-[13px] font-semibold text-[var(--label-primary)] truncate">
+                                  {asset.name}
+                                </span>
+                                <span className="text-[12px] font-semibold text-[var(--label-primary)] ml-2 shrink-0">
+                                  {formatCompact(asset.maturityValue)}
+                                </span>
+                              </div>
+                              <div className="flex items-center justify-between mt-0.5">
+                                <span className="text-[11px] text-[var(--label-tertiary)]">
+                                  {asset.asset_type} • {asset.institution || 'N/A'}
+                                </span>
+                                <span className="text-[10px] text-[var(--label-tertiary)]">
+                                  {asset.formattedDate}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {/* Footer */}
+                  {upcomingMaturities.length > 3 && (
+                    <Link to="/assets" className="block px-4 py-2.5 border-t border-[var(--separator-opaque)]/50 bg-[var(--fill-tertiary)]/20 hover:bg-[var(--fill-tertiary)]/40 transition-colors">
+                      <p className="text-[12px] font-medium text-[var(--chart-primary)] text-center">
+                        +{upcomingMaturities.length - 3} more →
+                      </p>
+                    </Link>
+                  )}
+                </Card>
+              )}
             </motion.div>
 
             {/* Right Column - Chart + Category Performance */}

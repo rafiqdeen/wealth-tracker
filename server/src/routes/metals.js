@@ -1,6 +1,10 @@
 import express from 'express';
+import dns from 'dns';
 import db from '../db/database.js';
 import { authenticateToken } from '../middleware/auth.js';
+
+// Force IPv4 first to avoid IPv6 connection issues
+dns.setDefaultResultOrder('ipv4first');
 
 const router = express.Router();
 
@@ -41,15 +45,22 @@ const SILVER_PURITY_FACTORS = {
 const FETCH_HOUR = 11;
 const FETCH_MINUTE = 30;
 
-// Fetch price from Yahoo Finance
+// Fetch price from Yahoo Finance with timeout
+const FETCH_TIMEOUT_MS = 15000; // 15 seconds
+
 async function fetchYahooPrice(symbol) {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+
   try {
     const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?interval=1d&range=1d`;
     const response = await fetch(url, {
+      signal: controller.signal,
       headers: {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
       }
     });
+    clearTimeout(timeoutId);
 
     if (!response.ok) {
       throw new Error(`Yahoo Finance API error: ${response.status}`);
@@ -71,8 +82,10 @@ async function fetchYahooPrice(symbol) {
       timestamp: new Date().toISOString()
     };
   } catch (error) {
-    console.error(`Error fetching Yahoo price for ${symbol}:`, error.message);
-    throw error;
+    clearTimeout(timeoutId);
+    const errorType = error.name === 'AbortError' ? 'Request timed out' : error.message;
+    console.error(`Error fetching Yahoo price for ${symbol}: ${errorType}`);
+    throw new Error(errorType);
   }
 }
 
@@ -113,12 +126,22 @@ async function fetchMetalPriceINR(metal = 'gold') {
   };
 }
 
-// Check if we should fetch new price (after 11:30 AM and no fetch today after 11:30)
-function shouldFetchNewPrice(metal) {
+// Get current time in IST (UTC+5:30)
+function getISTTime() {
   const now = new Date();
-  const currentHour = now.getHours();
-  const currentMinute = now.getMinutes();
-  const today = now.toISOString().split('T')[0];
+  // Convert to IST by adding 5 hours 30 minutes to UTC
+  const istOffset = 5.5 * 60 * 60 * 1000; // 5.5 hours in milliseconds
+  const istTime = new Date(now.getTime() + istOffset + (now.getTimezoneOffset() * 60 * 1000));
+  return istTime;
+}
+
+// Check if we should fetch new price (after 11:30 AM IST and no fetch today after 11:30)
+function shouldFetchNewPrice(metal) {
+  const istNow = getISTTime();
+  const currentHour = istNow.getUTCHours();
+  const currentMinute = istNow.getUTCMinutes();
+  // Use IST date for comparison
+  const today = istNow.toISOString().split('T')[0];
 
   // If before 11:30 AM, don't auto-fetch
   if (currentHour < FETCH_HOUR || (currentHour === FETCH_HOUR && currentMinute < FETCH_MINUTE)) {
@@ -194,7 +217,6 @@ router.get('/price/:metal', authenticateToken, async (req, res) => {
     // Check if we should auto-fetch new price
     if (shouldFetchNewPrice(metal)) {
       try {
-        console.log(`[Metals] Auto-fetching fresh ${metal} price from Yahoo Finance...`);
         const freshData = await fetchMetalPriceINR(metal);
         const saved = savePrice(metal, freshData.pricePerGram24K, freshData.metalPriceUSD, freshData.usdToInr);
 
@@ -220,7 +242,6 @@ router.get('/price/:metal', authenticateToken, async (req, res) => {
     if (!cached) {
       // No cached price - try to fetch
       try {
-        console.log(`[Metals] No cached price for ${metal}, fetching from Yahoo Finance...`);
         const freshData = await fetchMetalPriceINR(metal);
         const saved = savePrice(metal, freshData.pricePerGram24K, freshData.metalPriceUSD, freshData.usdToInr);
 
@@ -265,7 +286,6 @@ router.post('/price/:metal/refresh', authenticateToken, async (req, res) => {
       return res.status(400).json({ error: 'Invalid metal. Use "gold" or "silver"' });
     }
 
-    console.log(`[Metals] Force refreshing ${metal} price from Yahoo Finance...`);
     const freshData = await fetchMetalPriceINR(metal);
     const saved = savePrice(metal, freshData.pricePerGram24K, freshData.metalPriceUSD, freshData.usdToInr);
 

@@ -1,5 +1,5 @@
 /**
- * Export utilities for generating reports
+ * Export utilities for generating reports and backups
  */
 
 import { formatCurrency, formatCompact, formatDate, formatNumber } from './formatting';
@@ -18,8 +18,6 @@ export function generatePortfolioReportHTML(data) {
     assets,
     generatedAt,
   } = data;
-
-  const pnlColor = totalPnL >= 0 ? '#34C759' : '#FF3B30';
 
   return `
     <!DOCTYPE html>
@@ -269,7 +267,7 @@ export function printPortfolioReport(data) {
 }
 
 /**
- * Download portfolio data as JSON
+ * Download data as JSON file
  */
 export function downloadJSON(data, filename = 'portfolio-backup.json') {
   const json = JSON.stringify(data, null, 2);
@@ -285,17 +283,19 @@ export function downloadJSON(data, filename = 'portfolio-backup.json') {
 }
 
 /**
- * Download data as CSV
+ * Download data as CSV file
  */
 export function downloadCSV(data, filename = 'portfolio.csv') {
+  if (!data || data.length === 0) return;
+
   const headers = Object.keys(data[0] || {});
   const csvRows = [
     headers.join(','),
     ...data.map(row =>
       headers.map(header => {
         const value = row[header];
-        // Escape quotes and wrap in quotes if contains comma
-        if (typeof value === 'string' && (value.includes(',') || value.includes('"'))) {
+        // Escape quotes and wrap in quotes if contains comma, quotes, or newlines
+        if (typeof value === 'string' && (value.includes(',') || value.includes('"') || value.includes('\n'))) {
           return `"${value.replace(/"/g, '""')}"`;
         }
         return value ?? '';
@@ -316,18 +316,134 @@ export function downloadCSV(data, filename = 'portfolio.csv') {
 }
 
 /**
- * Export all data for backup
+ * Export assets to CSV with all category-specific fields
+ * @param {Array} assets - Assets array from server
+ * @param {string} filename - Output filename
  */
-export function exportAllData(assets, transactions, goals) {
-  const exportData = {
-    version: '1.0',
-    exportedAt: new Date().toISOString(),
-    data: {
-      assets: assets || [],
-      transactions: transactions || [],
-      goals: goals || [],
-    }
-  };
+export function exportAssetsToCSV(assets, filename = 'wealthtracker-assets.csv') {
+  if (!assets || assets.length === 0) return;
 
-  downloadJSON(exportData, `wealthtracker-backup-${formatDate(new Date()).replace(/\s/g, '-')}.json`);
+  const csvData = assets.map(asset => {
+    const base = {
+      ID: asset.id,
+      Name: asset.name,
+      Category: asset.category,
+      'Asset Type': asset.asset_type,
+      Status: asset.status || 'ACTIVE',
+    };
+
+    // Add category-specific fields
+    switch (asset.category) {
+      case 'EQUITY':
+      case 'CRYPTO':
+        return {
+          ...base,
+          Symbol: asset.symbol || '',
+          Exchange: asset.exchange || '',
+          Quantity: asset.quantity || 0,
+          'Avg Buy Price': asset.avg_buy_price || 0,
+          'Purchase Date': asset.purchase_date || '',
+          'Invested Value': (asset.quantity || 0) * (asset.avg_buy_price || 0),
+          Notes: asset.notes || '',
+        };
+
+      case 'FIXED_INCOME':
+        return {
+          ...base,
+          Principal: asset.principal || 0,
+          'Interest Rate (%)': asset.interest_rate || 0,
+          'Start Date': asset.start_date || '',
+          'Maturity Date': asset.maturity_date || '',
+          Institution: asset.institution || '',
+          Notes: asset.notes || '',
+        };
+
+      case 'REAL_ESTATE':
+        return {
+          ...base,
+          'Purchase Price': asset.purchase_price || 0,
+          'Current Value': asset.current_value || 0,
+          Location: asset.location || '',
+          'Area (sqft)': asset.area_sqft || '',
+          'Appreciation Rate (%)': asset.appreciation_rate || '',
+          'Purchase Date': asset.purchase_date || '',
+          Notes: asset.notes || '',
+        };
+
+      case 'PHYSICAL':
+        return {
+          ...base,
+          'Weight (grams)': asset.weight_grams || '',
+          Purity: asset.purity || '',
+          'Purchase Price': asset.purchase_price || 0,
+          'Purchase Date': asset.purchase_date || '',
+          Notes: asset.notes || '',
+        };
+
+      case 'SAVINGS':
+        return {
+          ...base,
+          Balance: asset.balance || 0,
+          'Interest Rate (%)': asset.interest_rate || '',
+          Institution: asset.institution || '',
+          Notes: asset.notes || '',
+        };
+
+      case 'INSURANCE':
+        return {
+          ...base,
+          Premium: asset.premium || 0,
+          'Sum Assured': asset.sum_assured || 0,
+          'Policy Number': asset.policy_number || '',
+          'Start Date': asset.start_date || '',
+          'Maturity Date': asset.maturity_date || '',
+          Notes: asset.notes || '',
+        };
+
+      default:
+        return {
+          ...base,
+          'Purchase Price': asset.purchase_price || asset.principal || 0,
+          'Current Value': asset.current_value || asset.balance || 0,
+          'Purchase Date': asset.purchase_date || '',
+          Notes: asset.notes || '',
+        };
+    }
+  });
+
+  // Get all unique headers
+  const allHeaders = new Set();
+  csvData.forEach(row => Object.keys(row).forEach(key => allHeaders.add(key)));
+  const headers = Array.from(allHeaders);
+
+  downloadCSV(csvData.map(row => {
+    const normalized = {};
+    headers.forEach(h => normalized[h] = row[h] ?? '');
+    return normalized;
+  }), filename);
+}
+
+/**
+ * Export transactions to CSV
+ * @param {Array} transactions - Transactions array from server
+ * @param {string} filename - Output filename
+ */
+export function exportTransactionsToCSV(transactions, filename = 'wealthtracker-transactions.csv') {
+  if (!transactions || transactions.length === 0) return;
+
+  const csvData = transactions.map(txn => ({
+    ID: txn.id,
+    'Asset Name': txn.asset_name || '',
+    Symbol: txn.symbol || '',
+    Category: txn.asset_category || '',
+    Type: txn.type,
+    Quantity: txn.quantity,
+    Price: txn.price,
+    'Total Amount': txn.total_amount,
+    'Transaction Date': txn.transaction_date,
+    'Realized Gain': txn.realized_gain || '',
+    Notes: txn.notes || '',
+  }));
+
+  downloadCSV(csvData, filename);
 }

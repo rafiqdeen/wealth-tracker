@@ -8,6 +8,7 @@ import { useKeyboardShortcuts } from '../hooks/useKeyboardShortcuts';
 import KeyboardShortcutsHelp from './KeyboardShortcutsHelp';
 import DataBackup from './DataBackup';
 import SearchModal from './SearchModal';
+import { priceService } from '../services/assets';
 
 export default function Layout() {
   const { user, logout } = useAuth();
@@ -17,7 +18,21 @@ export default function Layout() {
   const [showBackup, setShowBackup] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
   const [showProfilePopover, setShowProfilePopover] = useState(false);
+  const [marketStatus, setMarketStatus] = useState(null);
   const profilePopoverRef = useRef(null);
+
+  // Fetch market status on mount
+  useEffect(() => {
+    const fetchMarketStatus = async () => {
+      try {
+        const response = await priceService.getMarketStatus();
+        setMarketStatus(response.data);
+      } catch (error) {
+        console.error('Failed to fetch market status:', error);
+      }
+    };
+    fetchMarketStatus();
+  }, []);
 
   // Close profile popover when clicking outside
   useEffect(() => {
@@ -79,6 +94,15 @@ export default function Layout() {
       icon: (
         <svg className="w-[22px] h-[22px]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
           <path strokeLinecap="round" strokeLinejoin="round" d="M3 3v1.5M3 21v-6m0 0l2.77-.693a9 9 0 016.208.682l.108.054a9 9 0 006.086.71l3.114-.732a48.524 48.524 0 01-.005-10.499l-3.11.732a9 9 0 01-6.085-.711l-.108-.054a9 9 0 00-6.208-.682L3 4.5M3 15V4.5" />
+        </svg>
+      )
+    },
+    {
+      path: '/reports',
+      label: 'Reports',
+      icon: (
+        <svg className="w-[22px] h-[22px]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
         </svg>
       )
     },
@@ -233,12 +257,28 @@ export default function Layout() {
         <div className="bg-[var(--bg-primary)] rounded-2xl md:rounded-[24px] h-full flex flex-col shadow-sm">
           {/* Top Header */}
           <header className="h-[72px] px-4 md:px-12 flex items-center justify-between border-b border-[var(--separator-opaque)] shrink-0">
-            {/* Left: Greeting */}
+            {/* Left: Greeting + Market Status */}
             <div>
               <h1 className="text-[17px] font-semibold text-[var(--label-primary)]">
                 Hi, {user?.name?.split(' ')[0] || 'there'}!
               </h1>
-              <p className="text-[13px] text-[var(--label-tertiary)]">{dateStr}</p>
+              <div className="flex items-center gap-2">
+                <p className="text-[13px] text-[var(--label-tertiary)]">{dateStr}</p>
+                {/* Market Status Badge - Compact pill with tooltip */}
+                {marketStatus && !marketStatus.isOpen && (
+                  <span
+                    className="group relative inline-flex items-center gap-1.5 px-2 py-0.5 bg-amber-500/10 text-amber-600 dark:text-amber-400 text-[11px] font-medium rounded-full cursor-help"
+                    title="Stock & mutual fund prices may be outdated"
+                  >
+                    <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse"></span>
+                    {marketStatus.reason === 'Market Holiday' ? 'Market Holiday' :
+                     marketStatus.reason === 'Weekend' ? 'Weekend' :
+                     marketStatus.reason === 'Pre-market' ? 'Pre-market' :
+                     marketStatus.reason === 'After-hours' ? 'After Hours' :
+                     'Market Closed'} · Prices may be stale
+                  </span>
+                )}
+              </div>
             </div>
 
             {/* Center: Search */}

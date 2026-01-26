@@ -130,7 +130,7 @@ export default function TransactionHistory() {
             setCurrentPrice(fetchedPrice);
           }
         } catch (priceErr) {
-          console.log('Could not fetch current price');
+          // Price fetch failed, continue without current price
         }
       }
     } catch (err) {
@@ -479,11 +479,11 @@ export default function TransactionHistory() {
                     whileHover={{ scale: 1.02 }}
                     whileTap={{ scale: 0.98 }}
                     onClick={handleExportCSV}
-                    className="flex items-center gap-1.5 px-3 py-2 bg-[var(--bg-primary)] border border-[var(--separator-opaque)] hover:bg-[var(--fill-tertiary)] text-[var(--label-primary)] rounded-lg text-[13px] font-medium transition-colors"
+                    className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-[var(--fill-tertiary)] border border-[var(--separator-opaque)] text-[var(--label-primary)] hover:bg-[var(--fill-secondary)] transition-colors text-[13px] font-semibold"
                     title="Export to CSV (E)"
                   >
                     <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
                     </svg>
                     <span className="hidden sm:inline">Export</span>
                   </motion.button>
@@ -493,7 +493,7 @@ export default function TransactionHistory() {
                     whileHover={{ scale: 1.02 }}
                     whileTap={{ scale: 0.98 }}
                     onClick={() => setShowCSVImport(true)}
-                    className="flex items-center gap-1.5 px-3 py-2 bg-[var(--bg-primary)] border border-[var(--separator-opaque)] hover:bg-[var(--fill-tertiary)] text-[var(--label-primary)] rounded-lg text-[13px] font-medium transition-colors"
+                    className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-[var(--fill-tertiary)] border border-[var(--separator-opaque)] text-[var(--label-primary)] hover:bg-[var(--fill-secondary)] transition-colors text-[13px] font-semibold"
                   >
                     <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                       <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />

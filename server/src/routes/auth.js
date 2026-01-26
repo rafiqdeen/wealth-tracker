@@ -6,8 +6,56 @@ import { authenticateToken } from '../middleware/auth.js';
 
 const router = express.Router();
 
-// Register new user
-router.post('/register', async (req, res) => {
+// Simple in-memory rate limiter for auth endpoints
+const rateLimitStore = new Map();
+const RATE_LIMIT_WINDOW_MS = 15 * 60 * 1000; // 15 minutes
+const MAX_ATTEMPTS = 5; // 5 attempts per window
+
+// Clean up expired entries every 5 minutes (prevents memory leak)
+setInterval(() => {
+  const now = Date.now();
+  for (const [key, record] of rateLimitStore.entries()) {
+    if (now - record.windowStart > RATE_LIMIT_WINDOW_MS) {
+      rateLimitStore.delete(key);
+    }
+  }
+}, 5 * 60 * 1000).unref(); // unref() prevents interval from keeping process alive
+
+function rateLimit(req, res, next) {
+  const ip = req.ip || req.connection.remoteAddress;
+  const key = `${ip}:${req.path}`;
+  const now = Date.now();
+
+  const record = rateLimitStore.get(key);
+
+  if (!record) {
+    rateLimitStore.set(key, { attempts: 1, windowStart: now });
+    return next();
+  }
+
+  // Reset if window has passed
+  if (now - record.windowStart > RATE_LIMIT_WINDOW_MS) {
+    rateLimitStore.set(key, { attempts: 1, windowStart: now });
+    return next();
+  }
+
+  // Check if over limit
+  if (record.attempts >= MAX_ATTEMPTS) {
+    const retryAfter = Math.ceil((RATE_LIMIT_WINDOW_MS - (now - record.windowStart)) / 1000);
+    res.set('Retry-After', retryAfter);
+    return res.status(429).json({
+      error: 'Too many attempts. Please try again later.',
+      retryAfter: retryAfter
+    });
+  }
+
+  // Increment attempts
+  record.attempts++;
+  next();
+}
+
+// Register new user (rate limited)
+router.post('/register', rateLimit, async (req, res) => {
   try {
     const { email, password, name } = req.body;
 
@@ -21,9 +69,9 @@ router.post('/register', async (req, res) => {
       return res.status(409).json({ error: 'User with this email already exists' });
     }
 
-    // Hash password
-    const salt = await bcrypt.genSalt(10);
-    const passwordHash = await bcrypt.hash(password, salt);
+    // Hash password with 12 rounds for better security
+    const saltRounds = 12;
+    const passwordHash = await bcrypt.hash(password, saltRounds);
 
     // Create user
     const result = db.prepare(
@@ -48,8 +96,8 @@ router.post('/register', async (req, res) => {
   }
 });
 
-// Login
-router.post('/login', async (req, res) => {
+// Login (rate limited)
+router.post('/login', rateLimit, async (req, res) => {
   try {
     const { email, password } = req.body;
 
