@@ -3,6 +3,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { ThemeProvider } from './context/ThemeContext';
 import { ToastProvider } from './context/ToastContext';
+import { PriceProvider } from './context/PriceContext';
 import { PageSpinner } from './components/apple';
 import { spring } from './utils/animations';
 import ErrorBoundary from './components/ErrorBoundary';
@@ -107,7 +108,9 @@ function App() {
         <ThemeProvider>
           <ToastProvider>
             <AuthProvider>
-              <AnimatedRoutes />
+              <PriceProvider>
+                <AnimatedRoutes />
+              </PriceProvider>
             </AuthProvider>
           </ToastProvider>
         </ThemeProvider>

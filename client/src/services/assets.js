@@ -30,8 +30,9 @@ export const priceService = {
   // Get price for symbol
   getPrice: (symbol, type = 'stock') => api.get(`/prices/${symbol}?type=${type}`),
 
-  // Get bulk prices (forceRefresh bypasses cache)
-  getBulkPrices: (symbols, forceRefresh = false) => api.post('/prices/bulk', { symbols, forceRefresh }),
+  // Get bulk prices - always fetches fresh from APIs
+  // Server fetches all symbols with 60s timeout
+  getBulkPrices: (symbols, forceRefresh = false) => api.post('/prices/bulk', { symbols, forceRefresh }, { timeout: 65000 }),
 
   // Clear price cache (requires confirmation)
   clearCache: () => api.delete('/prices/cache?confirm=true'),

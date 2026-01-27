@@ -8,43 +8,168 @@ dns.setDefaultResultOrder('ipv4first');
 
 const router = express.Router();
 
+// Modern browser User-Agent strings for rotation (from yfinance PR #2277)
+const USER_AGENTS = [
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36',
+  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36',
+  'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36',
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:134.0) Gecko/20100101 Firefox/134.0',
+  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:134.0) Gecko/20100101 Firefox/134.0',
+  'Mozilla/5.0 (X11; Linux x86_64; rv:134.0) Gecko/20100101 Firefox/134.0',
+  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.3 Safari/605.1.15',
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36 Edg/133.0.0.0',
+];
+
+// Get random User-Agent
+function getRandomUserAgent() {
+  return USER_AGENTS[Math.floor(Math.random() * USER_AGENTS.length)];
+}
+
 // Cache duration in milliseconds (30 minutes - balances freshness vs API limits)
 const CACHE_DURATION = 30 * 60 * 1000;
 
+// Yahoo session management - cookie + crumb for bypassing rate limits
+let yahooSession = {
+  cookie: null,
+  crumb: null,
+  fetchedAt: 0
+};
+const YAHOO_SESSION_DURATION = 30 * 60 * 1000; // 30 minutes
+
+// Lock to prevent multiple concurrent session fetches
+let sessionFetchPromise = null;
+
+async function getYahooSession() {
+  const now = Date.now();
+
+  // Return cached session if still valid
+  if (yahooSession.cookie && yahooSession.crumb && (now - yahooSession.fetchedAt) < YAHOO_SESSION_DURATION) {
+    return yahooSession;
+  }
+
+  // If already fetching, wait for that result
+  if (sessionFetchPromise) {
+    return sessionFetchPromise;
+  }
+
+  // Start new fetch
+  sessionFetchPromise = (async () => {
+    try {
+      // Get A3 cookie from fc.yahoo.com
+      const fcRes = await fetch('https://fc.yahoo.com/', {
+        redirect: 'manual',
+        headers: {
+          'User-Agent': getRandomUserAgent()
+        }
+      });
+
+      const cookies = fcRes.headers.getSetCookie();
+      const a3Cookie = cookies.find(c => c.startsWith('A3='));
+
+      if (!a3Cookie) {
+        console.log('[Yahoo] Failed to get A3 cookie');
+        return yahooSession.cookie ? yahooSession : null; // Return existing if any
+      }
+
+      const cookieStr = a3Cookie.split(';')[0];
+
+      // Small delay before crumb request
+      await new Promise(r => setTimeout(r, 500));
+
+      // Get crumb using the cookie
+      const crumbRes = await fetch('https://query1.finance.yahoo.com/v1/test/getcrumb', {
+        headers: {
+          'User-Agent': getRandomUserAgent(),
+          'Cookie': cookieStr
+        }
+      });
+
+      if (!crumbRes.ok) {
+        console.log('[Yahoo] Failed to get crumb:', crumbRes.status);
+        return yahooSession.cookie ? yahooSession : null; // Return existing if any
+      }
+
+      const crumb = await crumbRes.text();
+
+      // Cache the session
+      yahooSession = {
+        cookie: cookieStr,
+        crumb: crumb,
+        fetchedAt: now
+      };
+
+      console.log('[Yahoo] Session established successfully');
+      return yahooSession;
+    } catch (error) {
+      console.error('[Yahoo] Session error:', error.message);
+      return yahooSession.cookie ? yahooSession : null;
+    } finally {
+      sessionFetchPromise = null;
+    }
+  })();
+
+  return sessionFetchPromise;
+}
+
 // Fetch stock/ETF price from Yahoo Finance with timeout and retry
-// Returns comprehensive price data including previousClose for holiday handling
+// Uses cookie + crumb for bypassing rate limits
 async function fetchYahooPrice(symbol, retries = 2) {
   let rateLimitRetries = 0;
-  const maxRateLimitRetries = 3; // Max 3 rate limit retries
+  const maxRateLimitRetries = 4; // More retries for rate limiting
+
+  // Get session with cookie + crumb
+  const session = await getYahooSession();
+
+  // Add random initial delay to avoid pattern detection (100-500ms)
+  const initialDelay = 100 + Math.random() * 400;
+  await new Promise(r => setTimeout(r, initialDelay));
 
   for (let attempt = 0; attempt <= retries; attempt++) {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 15000); // 15 second timeout
+    const timeoutId = setTimeout(() => controller.abort(), 15000); // 15 second timeout per request
 
     try {
-      const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?interval=1d&range=1d`;
+      // Build URL with crumb if available
+      let url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?interval=1d&range=1d`;
+      if (session?.crumb) {
+        url += `&crumb=${encodeURIComponent(session.crumb)}`;
+      }
+
+      const userAgent = getRandomUserAgent();
+      const headers = {
+        'User-Agent': userAgent,
+        'Accept': 'application/json,text/html,application/xhtml+xml',
+        'Accept-Language': 'en-US,en;q=0.9',
+      };
+
+      // Add cookie if available
+      if (session?.cookie) {
+        headers['Cookie'] = session.cookie;
+      }
+
       const response = await fetch(url, {
         signal: controller.signal,
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-          'Accept': 'application/json',
-          'Accept-Language': 'en-US,en;q=0.9',
-        }
+        headers
       });
       clearTimeout(timeoutId);
 
-      // Handle rate limiting (429) with max retries
+      // Handle rate limiting (429) with minimal retries
       if (response.status === 429) {
         rateLimitRetries++;
+        console.log(`[Yahoo] ${symbol}: Rate limited (429), retry ${rateLimitRetries}/${maxRateLimitRetries}`);
         if (rateLimitRetries > maxRateLimitRetries) {
+          console.log(`[Yahoo] ${symbol}: Max rate limit retries exceeded`);
           return null;
         }
-        const retryAfter = Math.min(response.headers.get('Retry-After') || (rateLimitRetries) * 5, 15);
+        // Exponential backoff for rate limiting (3s, 6s, 12s)
+        const retryAfter = 3 * Math.pow(2, rateLimitRetries - 1);
+        console.log(`[Yahoo] ${symbol}: Waiting ${retryAfter}s before retry`);
         await new Promise(resolve => setTimeout(resolve, retryAfter * 1000));
-        continue; // Retry without counting this attempt
+        continue;
       }
 
       if (!response.ok) {
+        console.log(`[Yahoo] ${symbol}: HTTP ${response.status}`);
         throw new Error(`Yahoo Finance API error: ${response.status}`);
       }
 
@@ -52,6 +177,7 @@ async function fetchYahooPrice(symbol, retries = 2) {
       const result = data.chart.result?.[0];
 
       if (!result) {
+        console.log(`[Yahoo] ${symbol}: No result in response - ${JSON.stringify(data.chart?.error || 'no error')}`);
         throw new Error('No data found for symbol');
       }
 
@@ -104,8 +230,8 @@ async function fetchYahooPrice(symbol, retries = 2) {
         return null;
       }
 
-      // Wait before retry (exponential backoff)
-      await new Promise(resolve => setTimeout(resolve, 2000 * (attempt + 1)));
+      // Quick retry (500ms)
+      await new Promise(resolve => setTimeout(resolve, 500));
     }
   }
   return null;
@@ -115,7 +241,7 @@ async function fetchYahooPrice(symbol, retries = 2) {
 // MF NAVs update once daily, typically by 11 PM IST
 async function fetchMutualFundNAV(schemeCode) {
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 15000); // 15 second timeout
+  const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 second timeout (aggressive for bulk)
 
   try {
     const url = `https://api.mfapi.in/mf/${schemeCode}`;
@@ -169,30 +295,7 @@ async function fetchMutualFundNAV(schemeCode) {
   }
 }
 
-// Check cache for price (respects cache duration during market hours)
-function getCachedPrice(symbol) {
-  const cached = db.prepare(`
-    SELECT * FROM price_cache WHERE symbol = ?
-  `).get(symbol);
-
-  if (cached) {
-    const age = Date.now() - new Date(cached.fetched_at).getTime();
-    if (age < CACHE_DURATION) {
-      return cached;
-    }
-  }
-  return null;
-}
-
-// Get cached price regardless of age (for use outside market hours)
-// Returns complete price data including previousClose for P&L calculation
-function getAnyCachedPrice(symbol) {
-  return db.prepare(`
-    SELECT * FROM price_cache WHERE symbol = ?
-  `).get(symbol);
-}
-
-// BATCH: Get multiple cached prices in one query (much faster than individual lookups)
+// Get cached prices for multiple symbols
 function getBulkCachedPrices(symbols) {
   if (!symbols || symbols.length === 0) return {};
 
@@ -201,63 +304,45 @@ function getBulkCachedPrices(symbols) {
     SELECT * FROM price_cache WHERE symbol IN (${placeholders})
   `).all(...symbols);
 
-  // Convert to map for O(1) lookup
   return rows.reduce((acc, row) => {
     acc[row.symbol] = row;
     return acc;
   }, {});
 }
 
-// Save comprehensive price data to cache
-// Stores price, previousClose, change data for proper holiday handling
-function cachePrice(symbol, priceData, marketOpen = true) {
-  const {
-    price,
-    previousClose = null,
-    change = 0,
-    changePercent = 0,
-    currency = 'INR',
-    priceDate = new Date().toISOString().split('T')[0]
-  } = typeof priceData === 'object' ? priceData : { price: priceData };
+// Save price to cache (only successful fetches)
+// source: 'live' (during market hours) or 'close' (after market hours)
+function cachePrice(symbol, priceData, source) {
+  try {
+    const {
+      price,
+      previousClose = null,
+      change = 0,
+      changePercent = 0,
+      currency = 'INR'
+    } = priceData;
 
-  db.prepare(`
-    INSERT OR REPLACE INTO price_cache
-    (symbol, price, previous_close, change_amount, change_percent, currency, price_date, market_open, fetched_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-  `).run(
-    symbol,
-    price,
-    previousClose,
-    change,
-    changePercent,
-    currency,
-    priceDate,
-    marketOpen ? 1 : 0
-  );
+    db.prepare(`
+      INSERT OR REPLACE INTO price_cache
+      (symbol, price, previous_close, change_amount, change_percent, currency, source, fetched_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+    `).run(symbol, price, previousClose, change, changePercent, currency, source);
+    console.log(`[Cache] Saved ${symbol} = ${price}`);
+  } catch (error) {
+    console.error(`[Cache] Error saving ${symbol}:`, error.message);
+  }
 }
 
-// Get effective price for display (handles holidays properly)
-// Returns price with proper change data even on holidays
-function getEffectivePrice(cached, marketStatus) {
-  if (!cached) return null;
-
-  // On holidays/weekends, use cached price but change is 0 for the day
-  // The cached change_percent reflects last trading day's movement
-  const isMarketOpen = marketStatus?.isOpen ?? false;
-
+// Format cached data for API response
+function formatCachedPrice(cached) {
   return {
     price: cached.price,
     previousClose: cached.previous_close,
-    change: isMarketOpen ? cached.change_amount : 0,
-    changePercent: isMarketOpen ? cached.change_percent : 0,
-    // Store the actual last change for reference
-    lastChange: cached.change_amount,
-    lastChangePercent: cached.change_percent,
-    currency: cached.currency,
-    priceDate: cached.price_date,
-    fetchedAt: cached.fetched_at,
-    cached: true,
-    priceType: isMarketOpen ? 'CACHED' : 'LAST_CLOSE'
+    change: cached.change_amount || 0,
+    changePercent: cached.change_percent || 0,
+    currency: cached.currency || 'INR',
+    source: cached.source,
+    fetchedAt: cached.fetched_at
   };
 }
 
@@ -496,195 +581,144 @@ router.delete('/cache', authenticateToken, (req, res) => {
 });
 
 // Helper to process items in batches with concurrency limit
-async function processBatch(items, processor, concurrency = 3, delayMs = 200) {
+// Optimized to avoid Yahoo rate limiting
+async function processBatch(items, processor, concurrency = 5, delayMs = 100) {
   const results = [];
   for (let i = 0; i < items.length; i += concurrency) {
     const batch = items.slice(i, i + concurrency);
     const batchResults = await Promise.all(batch.map(processor));
     results.push(...batchResults);
 
-    // Add delay between batches to avoid rate limiting
+    // Add randomized delay between batches to avoid pattern detection
     if (i + concurrency < items.length) {
-      await new Promise(resolve => setTimeout(resolve, delayMs));
+      const randomDelay = delayMs + Math.random() * 1000; // Add 0-1s random jitter
+      await new Promise(resolve => setTimeout(resolve, randomDelay));
     }
   }
   return results;
 }
 
-// Bulk price fetch - with proper holiday handling
-// Returns prices with correct P&L data even on holidays/weekends
-// CRITICAL: Never returns error objects - always returns a price if any cache exists
+// Bulk price fetch with smart caching
+// Market OPEN: Fetch fresh, cache as 'live', failed = unavailable
+// Market CLOSED: Use cache, if no cache fetch once and cache as 'close'
 router.post('/bulk', authenticateToken, async (req, res) => {
   try {
-    const { symbols, forceRefresh } = req.body;
+    const { symbols } = req.body;
 
     if (!symbols || !Array.isArray(symbols)) {
       return res.status(400).json({ error: 'symbols array is required' });
     }
 
-    const market = await checkMarketStatus();
-    const results = {};
-    const toFetch = [];
-
-    // OPTIMIZATION: Batch fetch all cached prices in ONE query instead of N queries
-    const allSymbols = symbols.map(s => s.symbol);
-    const cachedPrices = getBulkCachedPrices(allSymbols);
-
-    // First pass: process all symbols using cached data
-    for (const item of symbols) {
-      const { symbol, type } = item;
-      const cached = cachedPrices[symbol];
-
-      // Skip cache entirely if force refresh requested
-      if (forceRefresh) {
-        toFetch.push({ symbol, type, fallbackCache: cached });
-        continue;
-      }
-
-      // During market hours: check cache freshness
-      if (market.isOpen) {
-        if (cached) {
-          const age = Date.now() - new Date(cached.fetched_at).getTime();
-          const isFresh = age < CACHE_DURATION;
-
-          if (isFresh && cached.price) {
-            results[symbol] = {
-              price: cached.price,
-              previousClose: cached.previous_close,
-              currency: cached.currency || 'INR',
-              change: cached.change_amount || 0,
-              changePercent: cached.change_percent || 0,
-              lastChange: cached.change_amount || 0,
-              lastChangePercent: cached.change_percent || 0,
-              priceDate: cached.price_date,
-              cached: true,
-              priceType: 'CACHED',
-              marketStatus: market.reason
-            };
-            continue;
-          }
-        }
-        // Cache expired or missing - need to fetch
-        toFetch.push({ symbol, type, fallbackCache: cached });
-        continue;
-      }
-
-      // Outside market hours: ALWAYS use cached price if available (no fetching needed)
-      if (cached && cached.price) {
-        results[symbol] = {
-          price: cached.price,
-          previousClose: cached.previous_close,
-          currency: cached.currency || 'INR',
-          change: 0,
-          changePercent: 0,
-          lastChange: cached.change_amount || 0,
-          lastChangePercent: cached.change_percent || 0,
-          priceDate: cached.price_date,
-          cached: true,
-          priceType: 'LAST_CLOSE',
-          marketStatus: market.reason
-        };
-        continue;
-      }
-
-      // No cache at all - need to fetch
-      toFetch.push({ symbol, type, fallbackCache: null });
+    // Get market status
+    let market;
+    try {
+      market = await checkMarketStatus();
+    } catch {
+      market = { isOpen: false, reason: 'Status check failed' };
     }
 
-    // Second pass: fetch uncached/stale prices
-    if (toFetch.length > 0) {
-      const isMarketClosed = !market.isOpen;
+    const results = {};
+    const allSymbols = symbols.map(s => s.symbol);
 
-      // IMPORTANT: When market is closed, DON'T fetch - just mark as unavailable
-      // This prevents slow responses due to API timeouts on holidays
-      if (isMarketClosed) {
-        for (const { symbol, fallbackCache } of toFetch) {
-          if (fallbackCache && fallbackCache.price) {
-            results[symbol] = {
-              price: fallbackCache.price,
-              previousClose: fallbackCache.previous_close,
-              currency: fallbackCache.currency || 'INR',
-              change: 0,
-              changePercent: 0,
-              lastChange: fallbackCache.change_amount || 0,
-              lastChangePercent: fallbackCache.change_percent || 0,
-              priceDate: fallbackCache.price_date,
-              cached: true,
-              stale: true,
-              priceType: 'FALLBACK',
-              marketStatus: market.reason
-            };
-          } else {
-            results[symbol] = {
-              price: null,
-              unavailable: true,
-              reason: 'No cached price (market closed)',
-              marketStatus: market.reason
-            };
-          }
-        }
-      } else {
-        // Market is open - fetch fresh prices
-        const fetchResults = await processBatch(toFetch, async (item) => {
-          const { symbol, type, fallbackCache } = item;
-          let priceData = null;
+    if (market.isOpen) {
+      // === MARKET OPEN: Fetch ALL fresh, cache as 'live' ===
+      console.log(`[Price] Market OPEN - fetching ${symbols.length} symbols fresh`);
 
-          try {
-            if (type === 'mf') {
-              priceData = await fetchMutualFundNAV(symbol);
-            } else {
-              priceData = await fetchYahooPrice(symbol);
-            }
-          } catch (fetchError) {
-            console.error(`[Price] Fetch error for ${symbol}:`, fetchError.message);
-          }
+      // Pre-fetch Yahoo session to avoid rate limits on crumb endpoint
+      await getYahooSession();
 
-          return { symbol, priceData, fallbackCache };
-        }, 2, 500);
-
-        for (const { symbol, priceData, fallbackCache } of fetchResults) {
+      await processBatch(symbols, async (item) => {
+        const { symbol, type } = item;
+        try {
+          const priceData = type === 'mf'
+            ? await fetchMutualFundNAV(symbol)
+            : await fetchYahooPrice(symbol);
           if (priceData && priceData.price) {
-            cachePrice(symbol, priceData, true);
+            // Cache immediately as price is fetched
+            cachePrice(symbol, priceData, 'live');
+            console.log(`[Price] OK: ${symbol} = ${priceData.price}`);
             results[symbol] = {
               price: priceData.price,
               previousClose: priceData.previousClose,
-              currency: priceData.currency || 'INR',
               change: priceData.change || 0,
               changePercent: priceData.changePercent || 0,
-              lastChange: priceData.change || 0,
-              lastChangePercent: priceData.changePercent || 0,
-              priceDate: priceData.priceDate,
-              cached: false,
-              priceType: priceData.priceType || 'LIVE',
-              marketStatus: market.reason
-            };
-          } else if (fallbackCache && fallbackCache.price) {
-            results[symbol] = {
-              price: fallbackCache.price,
-              previousClose: fallbackCache.previous_close,
-              currency: fallbackCache.currency || 'INR',
-              change: fallbackCache.change_amount || 0,
-              changePercent: fallbackCache.change_percent || 0,
-              lastChange: fallbackCache.change_amount || 0,
-              lastChangePercent: fallbackCache.change_percent || 0,
-              priceDate: fallbackCache.price_date,
-              cached: true,
-              stale: true,
-              priceType: 'FALLBACK',
-              marketStatus: market.reason
+              currency: priceData.currency || 'INR',
+              source: 'live'
             };
           } else {
-            results[symbol] = {
-              price: null,
-              unavailable: true,
-              reason: 'Price fetch failed',
-              marketStatus: market.reason
-            };
+            console.log(`[Price] FAIL: ${symbol} - no data returned`);
+            results[symbol] = { unavailable: true, reason: 'Fetch failed' };
           }
+        } catch (err) {
+          console.error(`[Price] FAIL: ${symbol} - ${err.message}`);
+          results[symbol] = { unavailable: true, reason: 'Fetch failed' };
         }
+      }, 1, 3000); // Sequential requests with 3s delay to avoid rate limiting
+    } else {
+      // === MARKET CLOSED: Use cache, fetch missing symbols once ===
+      console.log(`[Price] Market CLOSED - checking cache for ${symbols.length} symbols`);
+
+      const cachedPrices = getBulkCachedPrices(allSymbols);
+      const uncachedSymbols = [];
+
+      // First pass: use cache where available
+      for (const item of symbols) {
+        const cached = cachedPrices[item.symbol];
+        if (cached) {
+          results[item.symbol] = formatCachedPrice(cached);
+        } else {
+          uncachedSymbols.push(item);
+        }
+      }
+
+      // Second pass: fetch uncached symbols (initial fetch for first-time users)
+      if (uncachedSymbols.length > 0) {
+        console.log(`[Price] Fetching ${uncachedSymbols.length} uncached symbols`);
+
+        // Pre-fetch Yahoo session to avoid rate limits on crumb endpoint
+        await getYahooSession();
+
+        let fetchedCount = 0;
+        let failedCount = 0;
+        const fetchResults = await processBatch(uncachedSymbols, async (item) => {
+          const { symbol, type } = item;
+          try {
+            const priceData = type === 'mf'
+              ? await fetchMutualFundNAV(symbol)
+              : await fetchYahooPrice(symbol);
+            if (priceData && priceData.price) {
+              fetchedCount++;
+              // Cache immediately as price is fetched
+              cachePrice(symbol, priceData, 'close');
+              console.log(`[Price] OK: ${symbol} = ${priceData.price}`);
+              // Also add to results immediately
+              results[symbol] = {
+                price: priceData.price,
+                previousClose: priceData.previousClose,
+                change: priceData.change || 0,
+                changePercent: priceData.changePercent || 0,
+                currency: priceData.currency || 'INR',
+                source: 'close'
+              };
+            } else {
+              failedCount++;
+              console.log(`[Price] FAIL: ${symbol} - no data returned`);
+              results[symbol] = { unavailable: true, reason: 'No cached price available' };
+            }
+            return { symbol, priceData };
+          } catch (err) {
+            failedCount++;
+            console.error(`[Price] FAIL: ${symbol} - ${err.message}`);
+            results[symbol] = { unavailable: true, reason: 'Fetch error' };
+            return { symbol, priceData: null };
+          }
+        }, 1, 3000); // Sequential requests with 3s delay to avoid rate limiting
+
+        console.log(`[Price] Fetch complete: ${fetchedCount} success, ${failedCount} failed`);
       }
     }
 
+    console.log(`[Price] Returning ${Object.keys(results).length} prices`);
     res.json({ prices: results, marketStatus: market });
   } catch (error) {
     console.error('Error fetching bulk prices:', error);

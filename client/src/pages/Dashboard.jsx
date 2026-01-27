@@ -12,13 +12,13 @@ import { formatCurrency, formatCompact, formatPercent, formatPrice } from '../ut
 import { calculateFixedIncomeValue, getCompoundingFrequency, calculateXIRRFromTransactions, yearsBetweenDates, calculateCAGR, debugXIRR, generateRecurringDepositSchedule } from '../utils/interest';
 import { printPortfolioReport } from '../utils/export';
 import { useAuth } from '../context/AuthContext';
+import { usePrices } from '../context/PriceContext';
 
 export default function Dashboard() {
   const { user } = useAuth();
+  const { prices, loading: pricesLoading, lastUpdated, fetchPrices, refreshPrices } = usePrices();
   const [assets, setAssets] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [prices, setPrices] = useState({});
-  const [lastUpdated, setLastUpdated] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
   const [cumulativeData, setCumulativeData] = useState([]);
   const [selectedPeriod, setSelectedPeriod] = useState('ALL');
@@ -29,6 +29,7 @@ export default function Dashboard() {
   const [xirrDebugInfo, setXirrDebugInfo] = useState(null);
   const [showXirrDebug, setShowXirrDebug] = useState(false);
   const [goals, setGoals] = useState([]);
+  const [pricesLoaded, setPricesLoaded] = useState(false);
 
   // Refs to prevent race conditions
   const fetchRequestId = useRef(0);
@@ -79,7 +80,10 @@ export default function Dashboard() {
     // Increment request ID to track this specific request
     const currentRequestId = ++fetchRequestId.current;
 
-    if (forceRefresh) setRefreshing(true);
+    if (forceRefresh) {
+      setRefreshing(true);
+      setPricesLoaded(false);
+    }
     try {
       // Step 1: Fetch assets, chart data, and goals in parallel
       const [assetsRes, chartRes, goalsRes] = await Promise.all([
@@ -183,23 +187,11 @@ export default function Dashboard() {
             .catch(() => ({ id: asset.id, transactions: [] }))
         );
 
-        // Fetch prices with timeout
-        const PRICE_TIMEOUT = 30000;
-        const symbols = equityAssets.map(a => ({
-          symbol: a.asset_type === 'MUTUAL_FUND' ? a.symbol : `${a.symbol}.${a.exchange === 'BSE' ? 'BO' : 'NS'}`,
-          type: a.asset_type === 'MUTUAL_FUND' ? 'mf' : 'stock'
-        }));
-        const timeoutPromise = new Promise((_, reject) =>
-          setTimeout(() => reject(new Error('Price fetch timeout')), PRICE_TIMEOUT)
-        );
+        // Fetch prices using PriceContext (handles caching, backup, rate limiting)
+        const pricePromise = fetchPrices(equityAssets, forceRefresh);
 
-        const pricePromise = Promise.race([
-          priceService.getBulkPrices(symbols, forceRefresh),
-          timeoutPromise
-        ]).catch(() => ({ data: { prices: {} } }));
-
-        // Wait for both
-        const [priceRes, ...transactionResults] = await Promise.all([
+        // Wait for both prices and transactions
+        const [fetchedPrices, ...transactionResults] = await Promise.all([
           pricePromise,
           ...equityTransactionPromises
         ]);
@@ -209,38 +201,10 @@ export default function Dashboard() {
           return;
         }
 
-        // Process prices
-        const priceData = priceRes.data?.prices || {};
-        const marketStatus = priceRes.data?.marketStatus;
-
-        // Save valid prices to localStorage as backup
-        const validPriceEntries = Object.entries(priceData).filter(([_, p]) => p && typeof p.price === 'number' && p.price > 0);
-        if (validPriceEntries.length > 0) {
-          const priceBackup = {
-            prices: Object.fromEntries(validPriceEntries),
-            timestamp: Date.now()
-          };
-          localStorage.setItem('price_backup', JSON.stringify(priceBackup));
-        }
-
-        // Merge with localStorage backup for any missing prices
-        const backupStr = localStorage.getItem('price_backup');
-        if (backupStr) {
-          try {
-            const backup = JSON.parse(backupStr);
-            // Use backup prices for symbols that are unavailable (max 24 hours old)
-            if (Date.now() - backup.timestamp < 24 * 60 * 60 * 1000) {
-              for (const [symbol, data] of Object.entries(backup.prices)) {
-                if (!priceData[symbol] || priceData[symbol].unavailable) {
-                  priceData[symbol] = { ...data, fromBackup: true };
-                }
-              }
-            }
-          } catch (e) { /* ignore parse errors */ }
-        }
-
-        setPrices(priceData);
-        setLastUpdated(new Date());
+        // Prices are now available from context (merged with any fetched prices)
+        // Use fetchedPrices for immediate calculation, context's prices for render
+        const priceData = { ...prices, ...fetchedPrices };
+        setPricesLoaded(true);
 
         // Build transaction map for XIRR
         transactionResults.forEach(({ id, transactions }) => {
@@ -277,6 +241,9 @@ export default function Dashboard() {
         } else {
           setPortfolioXIRR(null);
         }
+      } else {
+        // No equity assets, mark prices as loaded
+        setPricesLoaded(true);
       }
     } catch (error) {
       console.error('Error fetching data:', error);
@@ -286,8 +253,9 @@ export default function Dashboard() {
     }
   };
 
-  const handleRefresh = () => {
-    fetchData(true);
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    await fetchData(true);
   };
 
   const handleExportPDF = () => {
@@ -573,6 +541,7 @@ export default function Dashboard() {
       label = `Fixed Income (${type})`;
     }
 
+    const isEquityCategory = groupKey === 'EQUITY_STOCKS' || groupKey === 'EQUITY_MF';
     return {
       category: groupKey,
       label: label || ASSET_CONFIG[groupKey]?.label || groupKey,
@@ -584,6 +553,7 @@ export default function Dashboard() {
       pnlPercent: data.invested > 0 ? ((data.current - data.invested) / data.invested) * 100 : 0,
       dayChange: data.dayChange,
       dayChangePercent: data.current > 0 ? (data.dayChange / (data.current - data.dayChange)) * 100 : 0,
+      isEquity: isEquityCategory,
     };
   }).sort((a, b) => b.current - a.current);
 
@@ -719,9 +689,16 @@ export default function Dashboard() {
                       className="p-1.5 rounded-lg text-[var(--label-tertiary)] hover:bg-[var(--bg-primary)]/50 transition-colors disabled:opacity-50"
                       title="Sync prices"
                     >
-                      <svg className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" />
-                      </svg>
+                      {refreshing ? (
+                        <svg className="w-4 h-4 animate-spin" viewBox="0 0 24 24" fill="none">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" />
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                        </svg>
+                      ) : (
+                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" />
+                        </svg>
+                      )}
                     </button>
                   </div>
 
@@ -1439,12 +1416,24 @@ export default function Dashboard() {
                               <span className="text-[14px] font-semibold text-[var(--label-primary)]">{formatCompact(cat.current)}</span>
                             </td>
                             <td className="text-right px-4 py-3">
-                              <p className={`text-[14px] font-semibold ${cat.pnl >= 0 ? 'text-[#059669]' : 'text-[#DC2626]'}`}>
-                                {cat.pnl >= 0 ? '+' : ''}{formatCompact(cat.pnl)}
-                              </p>
-                              <p className={`text-[11px] ${cat.pnlPercent >= 0 ? 'text-[#059669]' : 'text-[#DC2626]'}`}>
-                                {cat.pnlPercent >= 0 ? '+' : ''}{cat.pnlPercent.toFixed(1)}%
-                              </p>
+                              {cat.isEquity && !pricesLoaded ? (
+                                <div className="flex items-center justify-end gap-2">
+                                  <svg className="w-4 h-4 animate-spin text-[var(--label-tertiary)]" viewBox="0 0 24 24" fill="none">
+                                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" />
+                                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                                  </svg>
+                                  <span className="text-[12px] text-[var(--label-tertiary)]">Loading...</span>
+                                </div>
+                              ) : (
+                                <>
+                                  <p className={`text-[14px] font-semibold ${cat.pnl >= 0 ? 'text-[#059669]' : 'text-[#DC2626]'}`}>
+                                    {cat.pnl >= 0 ? '+' : ''}{formatCompact(cat.pnl)}
+                                  </p>
+                                  <p className={`text-[11px] ${cat.pnlPercent >= 0 ? 'text-[#059669]' : 'text-[#DC2626]'}`}>
+                                    {cat.pnlPercent >= 0 ? '+' : ''}{cat.pnlPercent.toFixed(1)}%
+                                  </p>
+                                </>
+                              )}
                             </td>
                             <td className="text-right px-4 py-3">
                               <div className="flex items-center justify-end gap-2">

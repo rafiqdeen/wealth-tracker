@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { assetService, priceService, ASSET_CONFIG } from '../services/assets';
+import { assetService, ASSET_CONFIG } from '../services/assets';
 import { Card, SearchInput, AssetsSkeleton, Modal } from '../components/apple';
 import QuickAddTransaction from '../components/QuickAddTransaction';
 import { spring, staggerContainer, staggerItem } from '../utils/animations';
@@ -10,15 +10,16 @@ import { categoryColors } from '../constants/theme';
 import { formatCurrency, formatCompact } from '../utils/formatting';
 import { calculateFixedIncomeValue, getCompoundingFrequency, calculateXIRRFromTransactions, generateRecurringDepositSchedule } from '../utils/interest';
 import { useToast } from '../context/ToastContext';
+import { usePrices } from '../context/PriceContext';
 
 export default function Assets() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const toast = useToast();
+  const { prices, loading: pricesLoading, fetchPrices } = usePrices();
   const [assets, setAssets] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
-  const [prices, setPrices] = useState({});
   const [expandedCategories, setExpandedCategories] = useState({});
   const [expandedAssets, setExpandedAssets] = useState({});
   const [fixedIncomeCalcs, setFixedIncomeCalcs] = useState({});
@@ -100,17 +101,26 @@ export default function Assets() {
       setAssets(assetList);
 
       const equityAssets = assetList.filter(a => a.category === 'EQUITY' && a.symbol);
+      const fixedIncomeAssets = assetList.filter(a => a.category === 'FIXED_INCOME' && a.interest_rate);
+
+      // Start all fetches in parallel for better performance
+      const parallelFetches = [];
+
       if (equityAssets.length > 0) {
-        fetchPrices(equityAssets);
-        // Fetch first transaction dates for holding period
-        fetchTransactionDates(equityAssets);
+        // Use PriceContext's fetchPrices - it handles loading state internally
+        parallelFetches.push(fetchPrices(equityAssets));
+        parallelFetches.push(fetchTransactionDates(equityAssets));
       }
 
-      const fixedIncomeAssets = assetList.filter(a => a.category === 'FIXED_INCOME' && a.interest_rate);
       if (fixedIncomeAssets.length > 0) {
-        fetchFixedIncomeCalculations(fixedIncomeAssets);
-        fetchTransactionDates(fixedIncomeAssets);
+        parallelFetches.push(fetchFixedIncomeCalculations(fixedIncomeAssets));
+        parallelFetches.push(fetchTransactionDates(fixedIncomeAssets));
       }
+
+      // Don't wait for parallel fetches to complete - let them update state as they finish
+      // This allows the page to render immediately with assets
+      Promise.all(parallelFetches).catch(console.error);
+
     } catch (error) {
       console.error('Error fetching assets:', error);
     } finally {
@@ -213,19 +223,6 @@ export default function Assets() {
     }
   };
 
-  const fetchPrices = async (equityAssets) => {
-    try {
-      const symbols = equityAssets.map(a => ({
-        symbol: a.asset_type === 'MUTUAL_FUND' ? a.symbol : `${a.symbol}.${a.exchange === 'BSE' ? 'BO' : 'NS'}`,
-        type: a.asset_type === 'MUTUAL_FUND' ? 'mf' : 'stock'
-      }));
-      const response = await priceService.getBulkPrices(symbols);
-      setPrices(response.data.prices || {});
-    } catch (error) {
-      console.error('Error fetching prices:', error);
-    }
-  };
-
   const handleDelete = (asset, e) => {
     e.preventDefault();
     e.stopPropagation();
@@ -254,17 +251,16 @@ export default function Assets() {
     setAssetToDelete(null);
   };
 
-  // Asset value calculations
+  // Asset value calculations - returns null for equity if price unavailable
   const getAssetValue = (asset) => {
     if (asset.category === 'EQUITY' && asset.quantity && asset.symbol) {
       const priceKey = asset.asset_type === 'MUTUAL_FUND' ? asset.symbol : `${asset.symbol}.${asset.exchange === 'BSE' ? 'BO' : 'NS'}`;
       const priceData = prices[priceKey];
-      // Use price if available (check for number, as 0 is falsy but could be valid)
-      if (priceData && typeof priceData.price === 'number' && priceData.price > 0) {
+      // Return value only if price is available, otherwise null (never use buyPrice)
+      if (priceData && !priceData.unavailable && typeof priceData.price === 'number' && priceData.price > 0) {
         return asset.quantity * priceData.price;
       }
-      // Fallback to avg_buy_price only if price is unavailable
-      if (asset.avg_buy_price) return asset.quantity * asset.avg_buy_price;
+      return null; // Price unavailable - don't use buyPrice
     }
     if (asset.category === 'FIXED_INCOME') {
       const calc = fixedIncomeCalcs[asset.id];
@@ -299,23 +295,44 @@ export default function Assets() {
     return 0;
   };
 
-  const getGainLoss = (asset) => getAssetValue(asset) - getInvestedValue(asset);
-  const getGainPercent = (asset) => {
-    const invested = getInvestedValue(asset);
-    return invested > 0 ? ((getAssetValue(asset) - invested) / invested) * 100 : 0;
+  // Returns null if price unavailable
+  const getGainLoss = (asset) => {
+    const value = getAssetValue(asset);
+    if (value === null) return null;
+    return value - getInvestedValue(asset);
   };
 
+  // Returns null if price unavailable
+  const getGainPercent = (asset) => {
+    const value = getAssetValue(asset);
+    if (value === null) return null;
+    const invested = getInvestedValue(asset);
+    return invested > 0 ? ((value - invested) / invested) * 100 : 0;
+  };
+
+  // Get current price - returns null if unavailable (never falls back to buyPrice)
   const getCurrentPrice = (asset) => {
     if (asset.category === 'EQUITY' && asset.symbol) {
       const priceKey = asset.asset_type === 'MUTUAL_FUND' ? asset.symbol : `${asset.symbol}.${asset.exchange === 'BSE' ? 'BO' : 'NS'}`;
       const priceData = prices[priceKey];
-      // Return price if it's a valid positive number
-      if (priceData && typeof priceData.price === 'number' && priceData.price > 0) {
+      // Return price only if valid, otherwise null (never buyPrice)
+      if (priceData && !priceData.unavailable && typeof priceData.price === 'number' && priceData.price > 0) {
         return priceData.price;
       }
-      return asset.avg_buy_price || 0;
+      return null; // Price unavailable
     }
-    return asset.avg_buy_price || 0;
+    // Non-equity assets use their stored current_value
+    return asset.current_value || asset.avg_buy_price || null;
+  };
+
+  // Check if price is available for an asset
+  const isPriceAvailable = (asset) => {
+    if (asset.category === 'EQUITY' && asset.symbol) {
+      const priceKey = asset.asset_type === 'MUTUAL_FUND' ? asset.symbol : `${asset.symbol}.${asset.exchange === 'BSE' ? 'BO' : 'NS'}`;
+      const priceData = prices[priceKey];
+      return priceData && !priceData.unavailable && typeof priceData.price === 'number' && priceData.price > 0;
+    }
+    return true; // Non-equity assets always have value
   };
 
   // Day's change for equity assets
@@ -323,7 +340,7 @@ export default function Assets() {
     if (asset.category === 'EQUITY' && asset.symbol) {
       const priceKey = asset.asset_type === 'MUTUAL_FUND' ? asset.symbol : `${asset.symbol}.${asset.exchange === 'BSE' ? 'BO' : 'NS'}`;
       const priceData = prices[priceKey];
-      // Check for valid price and changePercent (changePercent can be 0 on holidays)
+      // Simple: if we have valid price data, show the change
       if (priceData && typeof priceData.price === 'number' && priceData.price > 0 && asset.quantity) {
         const currentValue = asset.quantity * priceData.price;
         const changePercent = typeof priceData.changePercent === 'number' ? priceData.changePercent : 0;
@@ -331,11 +348,12 @@ export default function Assets() {
         const dayChangeAmount = currentValue * changePercent / 100;
         return {
           amount: dayChangeAmount,
-          percent: changePercent
+          percent: changePercent,
+          hasData: true  // We have price data, so show the change
         };
       }
     }
-    return { amount: 0, percent: 0 };
+    return { amount: 0, percent: 0, hasData: false };
   };
 
   // Calculate holding period
@@ -485,17 +503,26 @@ export default function Assets() {
     }
   };
 
-  const totalCurrentValue = filteredAssets.reduce((sum, asset) => sum + getAssetValue(asset), 0);
-  const totalInvestedValue = filteredAssets.reduce((sum, asset) => sum + getInvestedValue(asset), 0);
+  // Calculate totals - exclude assets with unavailable prices
+  const assetsWithPrice = filteredAssets.filter(asset => isPriceAvailable(asset));
+  const assetsWithoutPrice = filteredAssets.filter(asset => asset.category === 'EQUITY' && asset.symbol && !isPriceAvailable(asset));
+  const unavailableCount = assetsWithoutPrice.length;
+
+  const totalCurrentValue = assetsWithPrice.reduce((sum, asset) => {
+    const value = getAssetValue(asset);
+    return sum + (value || 0);
+  }, 0);
+  const totalInvestedValue = assetsWithPrice.reduce((sum, asset) => sum + getInvestedValue(asset), 0);
   const totalGainLoss = totalCurrentValue - totalInvestedValue;
   const totalGainPercent = totalInvestedValue > 0 ? (totalGainLoss / totalInvestedValue) * 100 : 0;
 
-  // Calculate total day's change
-  const totalDayChange = filteredAssets.reduce((sum, asset) => sum + getDayChange(asset).amount, 0);
+  // Calculate total day's change (only for assets with price)
+  const totalDayChange = assetsWithPrice.reduce((sum, asset) => sum + getDayChange(asset).amount, 0);
   const totalDayChangePercent = totalCurrentValue > 0 ? (totalDayChange / (totalCurrentValue - totalDayChange)) * 100 : 0;
 
   // Find top gainer and loser (by day's change percent)
   const equityAssets = filteredAssets.filter(a => a.category === 'EQUITY');
+  const hasEquityAssets = equityAssets.length > 0;
   const sortedByDayChange = [...equityAssets].sort((a, b) => getDayChange(b).percent - getDayChange(a).percent);
   const topGainer = sortedByDayChange.length > 0 ? sortedByDayChange[0] : null;
   const topLoser = sortedByDayChange.length > 0 ? sortedByDayChange[sortedByDayChange.length - 1] : null;
@@ -608,7 +635,12 @@ export default function Assets() {
             <p className="text-[22px] font-bold text-[var(--label-primary)] tracking-tight tabular-nums mt-1">
               {formatCurrency(totalCurrentValue)}
             </p>
-            <p className="text-[12px] font-medium text-[var(--label-tertiary)] mt-0.5">{filteredAssets.length} assets</p>
+            <p className="text-[12px] font-medium text-[var(--label-tertiary)] mt-0.5">
+              {filteredAssets.length} assets
+              {unavailableCount > 0 && (
+                <span className="text-[#F59E0B] ml-1">({unavailableCount} excluded)</span>
+              )}
+            </p>
           </div>
         </Card>
 
@@ -625,22 +657,48 @@ export default function Assets() {
 
         {/* Card 3: Total Returns */}
         <Card padding="p-0" className="overflow-hidden">
-          <div className={`px-4 py-3 bg-gradient-to-r ${totalGainLoss >= 0 ? 'from-[#059669]/10 via-[#059669]/5' : 'from-[#DC2626]/10 via-[#DC2626]/5'} to-transparent`}>
+          <div className={`px-4 py-3 bg-gradient-to-r ${hasEquityAssets && pricesLoading ? 'from-[var(--system-gray)]/8 via-[var(--system-gray)]/4' : totalGainLoss >= 0 ? 'from-[#059669]/10 via-[#059669]/5' : 'from-[#DC2626]/10 via-[#DC2626]/5'} to-transparent`}>
             <p className="text-[11px] text-[var(--label-secondary)] uppercase tracking-wide font-medium">Total Returns</p>
-            <p className={`text-[22px] font-bold tabular-nums mt-1 ${totalGainLoss >= 0 ? 'text-[#059669]' : 'text-[#DC2626]'}`}>
-              {totalGainLoss >= 0 ? '+' : ''}{formatCurrency(Math.abs(totalGainLoss))}
-            </p>
-            <p className={`text-[12px] font-semibold mt-0.5 ${totalGainPercent >= 0 ? 'text-[#059669]' : 'text-[#DC2626]'}`}>
-              {totalGainPercent >= 0 ? '+' : ''}{totalGainPercent.toFixed(2)}% all time
-            </p>
+            {hasEquityAssets && pricesLoading ? (
+              <>
+                <div className="flex items-center gap-2 mt-2">
+                  <svg className="w-5 h-5 animate-spin text-[var(--label-tertiary)]" viewBox="0 0 24 24" fill="none">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                  </svg>
+                  <span className="text-[14px] text-[var(--label-tertiary)]">Fetching prices...</span>
+                </div>
+                <p className="text-[12px] text-[var(--label-quaternary)] mt-1">Equity P&L loading</p>
+              </>
+            ) : (
+              <>
+                <p className={`text-[22px] font-bold tabular-nums mt-1 ${totalGainLoss >= 0 ? 'text-[#059669]' : 'text-[#DC2626]'}`}>
+                  {totalGainLoss >= 0 ? '+' : ''}{formatCurrency(Math.abs(totalGainLoss))}
+                </p>
+                <p className={`text-[12px] font-semibold mt-0.5 ${totalGainPercent >= 0 ? 'text-[#059669]' : 'text-[#DC2626]'}`}>
+                  {totalGainPercent >= 0 ? '+' : ''}{totalGainPercent.toFixed(2)}% all time
+                </p>
+              </>
+            )}
           </div>
         </Card>
 
         {/* Card 4: Today's Change */}
         <Card padding="p-0" className="overflow-hidden">
-          <div className={`px-4 py-3 bg-gradient-to-r ${totalDayChange !== 0 ? (totalDayChange >= 0 ? 'from-[#059669]/10 via-[#059669]/5' : 'from-[#DC2626]/10 via-[#DC2626]/5') : 'from-[var(--system-gray)]/8 via-[var(--system-gray)]/4'} to-transparent`}>
+          <div className={`px-4 py-3 bg-gradient-to-r ${hasEquityAssets && pricesLoading ? 'from-[var(--system-gray)]/8 via-[var(--system-gray)]/4' : totalDayChange !== 0 ? (totalDayChange >= 0 ? 'from-[#059669]/10 via-[#059669]/5' : 'from-[#DC2626]/10 via-[#DC2626]/5') : 'from-[var(--system-gray)]/8 via-[var(--system-gray)]/4'} to-transparent`}>
             <p className="text-[11px] text-[var(--label-secondary)] uppercase tracking-wide font-medium">Today</p>
-            {totalDayChange !== 0 ? (
+            {hasEquityAssets && pricesLoading ? (
+              <>
+                <div className="flex items-center gap-2 mt-2">
+                  <svg className="w-5 h-5 animate-spin text-[var(--label-tertiary)]" viewBox="0 0 24 24" fill="none">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                  </svg>
+                  <span className="text-[14px] text-[var(--label-tertiary)]">Fetching...</span>
+                </div>
+                <p className="text-[12px] text-[var(--label-quaternary)] mt-1">Day change loading</p>
+              </>
+            ) : totalDayChange !== 0 ? (
               <>
                 <p className={`text-[22px] font-bold tabular-nums mt-1 ${totalDayChange >= 0 ? 'text-[#059669]' : 'text-[#DC2626]'}`}>
                   {totalDayChange >= 0 ? '+' : '-'}{formatCurrency(Math.abs(totalDayChange))}
@@ -814,9 +872,18 @@ export default function Assets() {
                   {/* Value + Returns + Day Change - All in one line */}
                   <div className="flex items-center gap-3 ml-auto">
                     <p className="text-[17px] font-bold text-[var(--label-primary)] tabular-nums">{formatCompact(categoryTotal)}</p>
-                    <span className={`text-[14px] font-semibold tabular-nums ${categoryGain >= 0 ? 'text-[#059669]' : 'text-[#DC2626]'}`}>
-                      {categoryGain >= 0 ? '+' : ''}{categoryGainPercent.toFixed(1)}%
-                    </span>
+                    {(category === 'EQUITY_STOCKS' || category === 'EQUITY_MF') && pricesLoading ? (
+                      <div className="flex items-center gap-1.5">
+                        <svg className="w-3.5 h-3.5 animate-spin text-[var(--label-tertiary)]" viewBox="0 0 24 24" fill="none">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" />
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                        </svg>
+                      </div>
+                    ) : (
+                      <span className={`text-[14px] font-semibold tabular-nums ${categoryGain >= 0 ? 'text-[#059669]' : 'text-[#DC2626]'}`}>
+                        {categoryGain >= 0 ? '+' : ''}{categoryGainPercent.toFixed(1)}%
+                      </span>
+                    )}
                     {categoryDayChange !== 0 && (category === 'EQUITY_STOCKS' || category === 'EQUITY_MF') && (
                       <span className={`text-[11px] px-1.5 py-0.5 rounded font-medium tabular-nums ${
                         categoryDayChange >= 0
@@ -929,25 +996,48 @@ export default function Assets() {
 
                                 {/* Current Value + LTP */}
                                 <div className="col-span-6 md:col-span-2 text-right">
-                                  <p className="text-[15px] font-bold text-[var(--label-primary)] tabular-nums">{formatCompact(currentValue)}</p>
-                                  <p className="text-[13px] text-[var(--label-secondary)] tabular-nums mt-0.5">
-                                    {!isFixedIncome && currentPrice > 0 ? `LTP ₹${currentPrice.toLocaleString('en-IN', { maximumFractionDigits: 2 })}` : `${portfolioWeight.toFixed(1)}% wt`}
-                                  </p>
+                                  {currentValue === null ? (
+                                    <>
+                                      <p className="text-[14px] font-medium text-[#F59E0B]">Price Unavailable</p>
+                                      <p className="text-[12px] text-[var(--label-tertiary)] mt-0.5">Excluded from totals</p>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <p className="text-[15px] font-bold text-[var(--label-primary)] tabular-nums">{formatCompact(currentValue)}</p>
+                                      <p className="text-[13px] text-[var(--label-secondary)] tabular-nums mt-0.5">
+                                        {!isFixedIncome && currentPrice ? `LTP ₹${currentPrice.toLocaleString('en-IN', { maximumFractionDigits: 2 })}` : `${portfolioWeight.toFixed(1)}% wt`}
+                                      </p>
+                                    </>
+                                  )}
                                 </div>
 
                                 {/* P&L */}
                                 <div className="col-span-3 md:col-span-2 text-right">
-                                  <p className={`text-[15px] font-semibold tabular-nums ${gainLoss >= 0 ? 'text-[#059669]' : 'text-[#DC2626]'}`}>
-                                    {gainLoss >= 0 ? '+' : ''}{formatCompact(gainLoss)}
-                                  </p>
-                                  <p className={`text-[13px] font-medium tabular-nums mt-0.5 ${gainPercent >= 0 ? 'text-[#059669]' : 'text-[#DC2626]'}`}>
-                                    {gainPercent >= 0 ? '+' : ''}{gainPercent.toFixed(2)}%
-                                  </p>
+                                  {currentValue === null ? (
+                                    <p className="text-[14px] text-[var(--label-tertiary)]">—</p>
+                                  ) : asset.category === 'EQUITY' && pricesLoading ? (
+                                    <div className="flex items-center justify-end gap-2">
+                                      <svg className="w-4 h-4 animate-spin text-[var(--label-tertiary)]" viewBox="0 0 24 24" fill="none">
+                                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" />
+                                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                                      </svg>
+                                      <span className="text-[12px] text-[var(--label-tertiary)]">Loading</span>
+                                    </div>
+                                  ) : (
+                                    <>
+                                      <p className={`text-[15px] font-semibold tabular-nums ${gainLoss >= 0 ? 'text-[#059669]' : 'text-[#DC2626]'}`}>
+                                        {gainLoss >= 0 ? '+' : ''}{formatCompact(gainLoss)}
+                                      </p>
+                                      <p className={`text-[13px] font-medium tabular-nums mt-0.5 ${gainPercent >= 0 ? 'text-[#059669]' : 'text-[#DC2626]'}`}>
+                                        {gainPercent >= 0 ? '+' : ''}{gainPercent.toFixed(2)}%
+                                      </p>
+                                    </>
+                                  )}
                                 </div>
 
                                 {/* Day's Change */}
                                 <div className="col-span-3 md:col-span-1 text-right">
-                                  {asset.category === 'EQUITY' && dayChange.percent !== 0 ? (
+                                  {asset.category === 'EQUITY' && dayChange.hasData ? (
                                     <>
                                       <p className={`text-[14px] font-semibold tabular-nums ${dayChange.percent >= 0 ? 'text-[#059669]' : 'text-[#DC2626]'}`}>
                                         {dayChange.percent >= 0 ? '+' : ''}{dayChange.percent.toFixed(2)}%

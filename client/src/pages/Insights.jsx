@@ -1,16 +1,18 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { assetService, priceService, ASSET_CONFIG } from '../services/assets';
+import { assetService, ASSET_CONFIG } from '../services/assets';
 import { Card, PageSpinner } from '../components/apple';
 import { spring, staggerContainer, staggerItem } from '../utils/animations';
 import { categoryColors } from '../constants/theme';
 import { formatCurrency, formatCompact } from '../utils/formatting';
 import { calculateFixedIncomeValue, getCompoundingFrequency } from '../utils/interest';
+import { usePrices } from '../context/PriceContext';
 
 export default function Insights() {
+  const { prices, loading: pricesLoading, fetchPrices } = usePrices();
   const [assets, setAssets] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [prices, setPrices] = useState({});
+  const [pricesLoaded, setPricesLoaded] = useState(false);
   const [fixedIncomeCalcs, setFixedIncomeCalcs] = useState({});
   const [transactionDates, setTransactionDates] = useState({});
 
@@ -25,18 +27,17 @@ export default function Insights() {
       const assetList = response.data.assets || [];
       setAssets(assetList);
 
-      // Fetch prices for market assets
+      // Fetch prices for market assets using PriceContext
       const marketAssets = assetList.filter(a =>
         ['STOCK', 'MUTUAL_FUND', 'ETF', 'CRYPTO'].includes(a.asset_type)
       );
 
       if (marketAssets.length > 0) {
-        const symbols = marketAssets.map(a => ({
-          symbol: a.asset_type === 'MUTUAL_FUND' ? a.symbol : `${a.symbol}.${a.exchange === 'BSE' ? 'BO' : 'NS'}`,
-          type: a.asset_type === 'MUTUAL_FUND' ? 'mf' : 'stock'
-        }));
-        const priceResponse = await priceService.getBulkPrices(symbols);
-        setPrices(priceResponse.data.prices || {});
+        // Use PriceContext's fetchPrices - handles caching and loading internally
+        await fetchPrices(marketAssets);
+        setPricesLoaded(true);
+      } else {
+        setPricesLoaded(true); // No market assets, consider prices "loaded"
       }
 
       // Calculate fixed income values
@@ -144,7 +145,7 @@ export default function Insights() {
     'EQUITY': { color: '#3B82F6', label: 'Stocks & Funds' },
     'FIXED_INCOME': { color: '#10B981', label: 'Fixed Income' },
     'REAL_ESTATE': { color: '#06B6D4', label: 'Real Estate' },
-    'PHYSICAL_ASSETS': { color: '#F59E0B', label: 'Physical Assets' },
+    'PHYSICAL': { color: '#F59E0B', label: 'Physical Assets' },
     'SAVINGS': { color: '#8B5CF6', label: 'Savings' },
     'CRYPTO': { color: '#EC4899', label: 'Crypto' },
     'INSURANCE': { color: '#F472B6', label: 'Insurance' },
@@ -235,7 +236,7 @@ export default function Insights() {
     'REAL_ESTATE': '🏠',
     'FIXED_INCOME': '💰',
     'EQUITY': '📊',
-    'PHYSICAL_ASSETS': '🪙',
+    'PHYSICAL': '🪙',
     'SAVINGS': '🏦',
     'CRYPTO': '₿',
     'INSURANCE': '🛡️',
@@ -283,7 +284,7 @@ export default function Insights() {
 
   // 4. Liquidity Analysis
   const liquidCategories = ['EQUITY', 'SAVINGS', 'CRYPTO'];
-  const lockedCategories = ['FIXED_INCOME', 'REAL_ESTATE', 'PHYSICAL_ASSETS', 'INSURANCE'];
+  const lockedCategories = ['FIXED_INCOME', 'REAL_ESTATE', 'PHYSICAL', 'INSURANCE'];
 
   const liquidAssets = assets.filter(a => liquidCategories.includes(a.category));
   const lockedAssets = assets.filter(a => lockedCategories.includes(a.category));
@@ -559,7 +560,7 @@ export default function Insights() {
                       <div className="flex items-center justify-between text-[11px]">
                         <span className="text-[var(--label-tertiary)]">{assetsWithReturns.length} assets tracked</span>
                         <span className="text-[var(--label-tertiary)]">
-                          Best: <span className="text-[#059669] font-semibold">+{bestPerformer?.returnPercent.toFixed(0)}%</span>
+                          Best: <span className="text-[#059669] font-semibold">+{bestPerformer?.returnPercent?.toFixed(0) || 0}%</span>
                         </span>
                       </div>
                     </div>
@@ -701,7 +702,7 @@ export default function Insights() {
                         </div>
                         <div className="text-right">
                           <p className="text-[20px] font-bold tabular-nums" style={{ color: categoryAllocation[0]?.color }}>
-                            {categoryAllocation[0]?.percent.toFixed(0)}%
+                            {categoryAllocation[0]?.percent?.toFixed(0) || 0}%
                           </p>
                           <p className="text-[12px] text-[var(--label-tertiary)] tabular-nums">{formatCompact(categoryAllocation[0]?.value || 0)}</p>
                         </div>
@@ -785,7 +786,7 @@ export default function Insights() {
                         <motion.circle
                           cx="40" cy="40" r="35"
                           fill="none"
-                          stroke={diversificationScore >= 70 ? 'var(--system-green)' : diversificationScore >= 50 ? 'var(--system-orange)' : 'var(--system-red)'}
+                          stroke={diversificationScore >= 70 ? '#10B981' : diversificationScore >= 50 ? '#F59E0B' : '#EF4444'}
                           strokeWidth="8"
                           strokeLinecap="round"
                           strokeDasharray={`${(diversificationScore / 100) * 220} 220`}
@@ -1092,9 +1093,9 @@ export default function Insights() {
                 <>
                   <div className="space-y-3 mb-4">
                     {[
-                      { label: '< 1 Year', count: holdingBuckets.lessThan1Year, color: 'var(--system-orange)' },
-                      { label: '1-3 Years', count: holdingBuckets.oneToThreeYears, color: 'var(--system-blue)' },
-                      { label: '3+ Years', count: holdingBuckets.moreThan3Years, color: 'var(--system-green)' },
+                      { label: '< 1 Year', count: holdingBuckets.lessThan1Year, color: '#F59E0B' },
+                      { label: '1-3 Years', count: holdingBuckets.oneToThreeYears, color: '#3B82F6' },
+                      { label: '3+ Years', count: holdingBuckets.moreThan3Years, color: '#10B981' },
                     ].map((bucket, index) => {
                       const maxCount = Math.max(holdingBuckets.lessThan1Year, holdingBuckets.oneToThreeYears, holdingBuckets.moreThan3Years, 1);
                       const barWidth = (bucket.count / maxCount) * 100;
