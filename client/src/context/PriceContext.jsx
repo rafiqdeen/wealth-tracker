@@ -3,9 +3,10 @@ import { priceService } from '../services/assets';
 
 const PriceContext = createContext(null);
 
-// Cache duration: 5 minutes for live prices, 24 hours for backup
-const CACHE_DURATION = 5 * 60 * 1000;
-const BACKUP_DURATION = 24 * 60 * 60 * 1000;
+// Cache duration: 15 minutes for live prices (matches server cache during market open)
+// 48 hours for localStorage backup (covers weekends)
+const CACHE_DURATION = 15 * 60 * 1000;
+const BACKUP_DURATION = 48 * 60 * 60 * 1000;
 
 export function PriceProvider({ children }) {
   const [prices, setPrices] = useState({});
@@ -70,6 +71,8 @@ export function PriceProvider({ children }) {
   }, [prices, lastUpdated]);
 
   // Fetch prices for given assets
+  // IMPORTANT: Always returns a Promise that resolves to the complete prices object
+  // This ensures XIRR calculations wait for all prices to be fetched
   const fetchPrices = useCallback(async (assets, forceRefresh = false) => {
     if (!assets || assets.length === 0) return {};
 
@@ -78,7 +81,7 @@ export function PriceProvider({ children }) {
       a.category === 'EQUITY' && a.symbol
     );
 
-    if (equityAssets.length === 0) return prices;
+    if (equityAssets.length === 0) return {};
 
     // Build symbols array
     const allSymbols = equityAssets.map(a => ({
@@ -92,18 +95,36 @@ export function PriceProvider({ children }) {
       symbolsToFetch = allSymbols.filter(s => needsFetch(s.symbol));
     }
 
-    // If nothing to fetch, return current prices
+    // If nothing to fetch, return current prices from state
+    // We need to get the latest state value, not the closure value
     if (symbolsToFetch.length === 0) {
-      return prices;
+      // Return the prices we need for the requested symbols
+      const result = {};
+      for (const s of allSymbols) {
+        if (prices[s.symbol]) {
+          result[s.symbol] = prices[s.symbol];
+        }
+      }
+      return result;
     }
 
-    // If already fetching the same symbols, wait for that promise
+    // If already fetching the same symbols, wait for that promise and return its result
     if (fetchPromiseRef.current) {
       const fetchingSymbols = Array.from(fetchedSymbolsRef.current);
       const allCovered = symbolsToFetch.every(s => fetchingSymbols.includes(s.symbol));
       if (allCovered) {
-        await fetchPromiseRef.current;
-        return prices;
+        // Wait for the in-flight request and return its merged result
+        const fetchedPrices = await fetchPromiseRef.current;
+        // Merge with existing cached prices for symbols we already have
+        const result = {};
+        for (const s of allSymbols) {
+          if (fetchedPrices[s.symbol]) {
+            result[s.symbol] = fetchedPrices[s.symbol];
+          } else if (prices[s.symbol]) {
+            result[s.symbol] = prices[s.symbol];
+          }
+        }
+        return result;
       }
     }
 
@@ -117,51 +138,50 @@ export function PriceProvider({ children }) {
         const newPrices = response.data?.prices || {};
         const newMarketStatus = response.data?.marketStatus;
 
-        // Merge with existing prices
-        setPrices(prev => {
-          const merged = { ...prev };
+        // Build the merged prices object to return
+        const mergedPrices = { ...prices };
 
-          // Add new prices
-          for (const [symbol, data] of Object.entries(newPrices)) {
-            if (data && typeof data.price === 'number' && data.price > 0) {
-              merged[symbol] = data;
-            } else if (data?.unavailable) {
-              // Check backup for unavailable prices
-              const backup = loadBackupPrices();
-              if (backup[symbol]) {
-                merged[symbol] = { ...backup[symbol], fromBackup: true };
-              } else {
-                merged[symbol] = data;
-              }
+        // Add new prices
+        for (const [symbol, data] of Object.entries(newPrices)) {
+          if (data && typeof data.price === 'number' && data.price > 0) {
+            mergedPrices[symbol] = data;
+          } else if (data?.unavailable) {
+            // Check backup for unavailable prices
+            const backup = loadBackupPrices();
+            if (backup[symbol]) {
+              mergedPrices[symbol] = { ...backup[symbol], fromBackup: true };
+            } else {
+              mergedPrices[symbol] = data;
             }
           }
+        }
 
-          // Save valid prices to backup
-          saveBackupPrices(merged);
+        // Update React state
+        setPrices(mergedPrices);
 
-          return merged;
-        });
+        // Save valid prices to backup
+        saveBackupPrices(mergedPrices);
 
         setMarketStatus(newMarketStatus);
         setLastUpdated(new Date());
 
-        return newPrices;
+        // Return merged prices for immediate use (don't wait for React state update)
+        return mergedPrices;
       } catch (error) {
         console.error('Error fetching prices:', error);
         // On error, try to use backup prices
         const backup = loadBackupPrices();
+        const mergedPrices = { ...prices };
+
         if (Object.keys(backup).length > 0) {
-          setPrices(prev => {
-            const merged = { ...prev };
-            for (const s of symbolsToFetch) {
-              if (!merged[s.symbol] && backup[s.symbol]) {
-                merged[s.symbol] = { ...backup[s.symbol], fromBackup: true };
-              }
+          for (const s of symbolsToFetch) {
+            if (!mergedPrices[s.symbol] && backup[s.symbol]) {
+              mergedPrices[s.symbol] = { ...backup[s.symbol], fromBackup: true };
             }
-            return merged;
-          });
+          }
+          setPrices(mergedPrices);
         }
-        return {};
+        return mergedPrices;
       } finally {
         setLoading(false);
         fetchPromiseRef.current = null;

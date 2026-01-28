@@ -71,88 +71,6 @@
   --sidebar-icon-active: #FFFFFF;
 }
 
-/* Dark Mode */
-:root.dark {
-  /* Primary Colors - Dark Mode */
-  --system-blue: #E2E8F0;
-  --system-blue-light: #60A5FA;
-  --system-blue-muted: #1E3A5F;
-  --system-green: #4ADE80;
-  --system-red: #F87171;
-  --system-amber: #FBBF24;
-  --system-orange: #FB923C;
-  --system-yellow: #FACC15;
-  --system-purple: #A78BFA;
-  --system-pink: #F472B6;
-  --system-teal: #2DD4BF;
-  --system-indigo: #818CF8;
-
-  /* Gray Palette - Dark */
-  --system-gray: #94A3B8;
-  --system-gray-2: #64748B;
-  --system-gray-3: #475569;
-  --system-gray-4: #334155;
-  --system-gray-5: #1E293B;
-  --system-gray-6: #0F172A;
-
-  /* Labels - Dark */
-  --label-primary: #F8FAFC;
-  --label-secondary: #CBD5E1;
-  --label-tertiary: #94A3B8;
-  --label-quaternary: #64748B;
-
-  /* Backgrounds - Dark */
-  --bg-page: #0C0E14;
-  --bg-primary: #1A1D29;
-  --bg-secondary: #12141C;
-  --bg-tertiary: #252836;
-
-  /* Fill Colors - Dark */
-  --fill-primary: rgba(248, 250, 252, 0.12);
-  --fill-secondary: rgba(248, 250, 252, 0.08);
-  --fill-tertiary: rgba(248, 250, 252, 0.04);
-
-  /* Separator - Dark */
-  --separator: rgba(248, 250, 252, 0.08);
-  --separator-opaque: #2D3242;
-
-  /* Chart Colors - Dark */
-  --chart-primary: #60A5FA;
-  --chart-secondary: #3B82F6;
-  --chart-tertiary: #1E3A5F;
-  --chart-positive: #4ADE80;
-  --chart-negative: #F87171;
-
-  /* Category Colors - Dark */
-  --category-equity: #60A5FA;
-  --category-mf: #A78BFA;
-  --category-fixed: #4ADE80;
-  --category-realestate: #FBBF24;
-  --category-physical: #FB923C;
-  --category-savings: #2DD4BF;
-  --category-crypto: #818CF8;
-  --category-insurance: #F472B6;
-
-  /* Sidebar - Dark */
-  --sidebar-bg: #1A1D29;
-  --sidebar-active: #4F7DF3;
-  --sidebar-icon: #6B7280;
-  --sidebar-icon-active: #FFFFFF;
-}
-
-/* High Contrast Mode - Vivid colors for accessibility */
-:root.high-contrast {
-  --system-green: #22C55E;       /* Vivid Green */
-  --system-amber: #EF4444;       /* Vivid Red for losses */
-  --system-blue: #2563EB;        /* Vivid Blue */
-}
-
-:root.dark.high-contrast {
-  --system-green: #4ADE80;       /* Bright Green */
-  --system-amber: #F87171;       /* Bright Red */
-  --system-blue: #60A5FA;        /* Bright Blue */
-}
-
 /* Reduced Motion - Respect user preferences */
 @media (prefers-reduced-motion: reduce) {
   *,
@@ -293,21 +211,6 @@ input:-webkit-autofill:focus {
     0 0 0 1px rgba(30,58,95,0.08);
 }
 
-/* Card glow effect - Dark mode */
-:root.dark .card-glow {
-  box-shadow:
-    0 1px 2px rgba(0,0,0,0.3),
-    0 2px 8px rgba(0,0,0,0.4),
-    0 0 0 1px rgba(255,255,255,0.05);
-}
-
-:root.dark .card-glow:hover {
-  box-shadow:
-    0 4px 16px rgba(0,0,0,0.5),
-    0 8px 32px rgba(0,0,0,0.6),
-    0 0 0 1px rgba(255,255,255,0.08);
-}
-
 /* Smooth number transitions */
 .tabular-nums {
   font-variant-numeric: tabular-nums;
@@ -318,36 +221,4 @@ input:-webkit-autofill:focus {
   background: rgba(255, 255, 255, 0.7);
   backdrop-filter: blur(20px) saturate(180%);
   -webkit-backdrop-filter: blur(20px) saturate(180%);
-}
-
-:root.dark .glass {
-  background: rgba(28, 28, 30, 0.8);
-}
-
-/* Dark mode input autofill */
-:root.dark input:-webkit-autofill,
-:root.dark input:-webkit-autofill:hover,
-:root.dark input:-webkit-autofill:focus {
-  -webkit-box-shadow: 0 0 0 30px #2C2C2E inset !important;
-  -webkit-text-fill-color: #FFFFFF !important;
-}
-
-/* Dark mode selection */
-:root.dark ::selection {
-  background: rgba(96, 165, 250, 0.3);
-}
-
-/* Dark mode scrollbar */
-:root.dark ::-webkit-scrollbar-thumb {
-  background: var(--system-gray-3);
-}
-
-:root.dark ::-webkit-scrollbar-thumb:hover {
-  background: var(--system-gray-2);
-}
-
-/* Dark mode placeholder */
-:root.dark input::placeholder,
-:root.dark textarea::placeholder {
-  color: rgba(255, 255, 255, 0.35);
 }

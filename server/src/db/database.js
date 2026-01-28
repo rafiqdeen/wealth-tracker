@@ -270,6 +270,38 @@ export function initializeDb() {
     CREATE INDEX IF NOT EXISTS idx_assets_user_status ON assets(user_id, status);
   `);
 
+  // Price sync jobs table - tracks background sync job history
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS price_sync_jobs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      status TEXT NOT NULL DEFAULT 'PENDING',
+      symbols_total INTEGER DEFAULT 0,
+      symbols_fetched INTEGER DEFAULT 0,
+      symbols_failed INTEGER DEFAULT 0,
+      error_message TEXT,
+      started_at DATETIME,
+      completed_at DATETIME,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
+  // Symbol priority table - tracks frequently accessed symbols for sync prioritization
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS symbol_priority (
+      symbol TEXT PRIMARY KEY,
+      priority INTEGER DEFAULT 0,
+      last_requested DATETIME,
+      request_count INTEGER DEFAULT 0
+    )
+  `);
+
+  // Indexes for sync tables
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_price_sync_jobs_status ON price_sync_jobs(status);
+    CREATE INDEX IF NOT EXISTS idx_price_sync_jobs_created ON price_sync_jobs(created_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_symbol_priority_priority ON symbol_priority(priority DESC);
+  `);
+
   // Migrate existing equity assets to transactions (one-time migration)
   migrateExistingEquityAssets();
 

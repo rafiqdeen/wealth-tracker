@@ -14,6 +14,7 @@ import portfolioRoutes from './routes/portfolio.js';
 import metalsRoutes from './routes/metals.js';
 import goalsRoutes from './routes/goals.js';
 import backupRoutes from './routes/backup.js';
+import { startPriceSync } from './services/priceSync.js';
 
 // Force IPv4 first to avoid IPv6 connection issues with external APIs
 dns.setDefaultResultOrder('ipv4first');
@@ -108,4 +109,7 @@ app.get('/api/health', (req, res) => {
 
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
+
+  // Start background price sync service
+  startPriceSync();
 });

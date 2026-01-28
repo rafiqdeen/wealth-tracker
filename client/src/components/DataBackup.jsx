@@ -13,19 +13,7 @@ const modalVariants = {
   visible: { opacity: 1, scale: 1, y: 0 },
 };
 
-// Asset category field configurations
-const CATEGORY_FIELDS = {
-  EQUITY: ['symbol', 'exchange', 'quantity', 'avg_buy_price', 'purchase_date'],
-  FIXED_INCOME: ['principal', 'interest_rate', 'start_date', 'maturity_date', 'institution'],
-  REAL_ESTATE: ['purchase_price', 'current_value', 'location', 'area_sqft', 'appreciation_rate'],
-  PHYSICAL: ['weight_grams', 'purity', 'purchase_price', 'purchase_date'],
-  SAVINGS: ['balance', 'interest_rate', 'institution'],
-  CRYPTO: ['symbol', 'quantity', 'avg_buy_price', 'exchange'],
-  INSURANCE: ['premium', 'sum_assured', 'policy_number', 'start_date', 'maturity_date'],
-  OTHER: ['purchase_price', 'current_value', 'purchase_date'],
-};
-
-export default function DataBackup({ isOpen, onClose, assets = [] }) {
+export default function DataBackup({ isOpen, onClose }) {
   const [importing, setImporting] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [importResult, setImportResult] = useState(null);
@@ -72,10 +60,16 @@ export default function DataBackup({ isOpen, onClose, assets = [] }) {
   };
 
   // Export CSV with all asset-type specific fields
-  const handleExportCSV = () => {
+  const handleExportCSV = async () => {
+    setExporting(true);
     try {
-      if (!assets || assets.length === 0) {
+      // Fetch assets from server (same as full backup)
+      const response = await api.get('/backup/export');
+      const assets = response.data.data.assets || [];
+
+      if (assets.length === 0) {
         setImportResult({ type: 'error', message: 'No assets to export' });
+        setExporting(false);
         return;
       }
 
@@ -196,7 +190,9 @@ export default function DataBackup({ isOpen, onClose, assets = [] }) {
       setTimeout(() => setImportResult(null), 3000);
     } catch (error) {
       console.error('CSV export error:', error);
-      setImportResult({ type: 'error', message: 'Failed to export CSV' });
+      setImportResult({ type: 'error', message: error.response?.data?.error || 'Failed to export CSV' });
+    } finally {
+      setExporting(false);
     }
   };
 
@@ -386,7 +382,8 @@ export default function DataBackup({ isOpen, onClose, assets = [] }) {
 
                   <button
                     onClick={handleExportCSV}
-                    className="w-full flex items-center gap-3 p-3 bg-[var(--fill-tertiary)]/50 hover:bg-[var(--fill-tertiary)] rounded-xl transition-colors text-left"
+                    disabled={exporting}
+                    className="w-full flex items-center gap-3 p-3 bg-[var(--fill-tertiary)]/50 hover:bg-[var(--fill-tertiary)] rounded-xl transition-colors text-left disabled:opacity-50"
                   >
                     <div className="w-10 h-10 bg-[var(--system-green)]/10 rounded-xl flex items-center justify-center">
                       <svg className="w-5 h-5 text-[var(--system-green)]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>

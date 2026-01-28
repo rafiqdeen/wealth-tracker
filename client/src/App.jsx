@@ -1,7 +1,6 @@
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import { AuthProvider, useAuth } from './context/AuthContext';
-import { ThemeProvider } from './context/ThemeContext';
 import { ToastProvider } from './context/ToastContext';
 import { PriceProvider } from './context/PriceContext';
 import { PageSpinner } from './components/apple';
@@ -105,15 +104,13 @@ function App() {
   return (
     <ErrorBoundary>
       <BrowserRouter>
-        <ThemeProvider>
-          <ToastProvider>
-            <AuthProvider>
-              <PriceProvider>
-                <AnimatedRoutes />
-              </PriceProvider>
-            </AuthProvider>
-          </ToastProvider>
-        </ThemeProvider>
+        <ToastProvider>
+          <AuthProvider>
+            <PriceProvider>
+              <AnimatedRoutes />
+            </PriceProvider>
+          </AuthProvider>
+        </ToastProvider>
       </BrowserRouter>
     </ErrorBoundary>
   );

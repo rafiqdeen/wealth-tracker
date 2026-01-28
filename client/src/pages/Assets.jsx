@@ -107,7 +107,8 @@ export default function Assets() {
       const parallelFetches = [];
 
       if (equityAssets.length > 0) {
-        // Use PriceContext's fetchPrices - it handles loading state internally
+        // Use PriceContext's fetchPrices - must await to ensure prices are loaded
+        // before calculating "Today's" change values
         parallelFetches.push(fetchPrices(equityAssets));
         parallelFetches.push(fetchTransactionDates(equityAssets));
       }
@@ -117,9 +118,11 @@ export default function Assets() {
         parallelFetches.push(fetchTransactionDates(fixedIncomeAssets));
       }
 
-      // Don't wait for parallel fetches to complete - let them update state as they finish
-      // This allows the page to render immediately with assets
-      Promise.all(parallelFetches).catch(console.error);
+      // Wait for all parallel fetches to complete before setting loading to false
+      // This ensures prices are available for "Today's" change calculations
+      if (parallelFetches.length > 0) {
+        await Promise.all(parallelFetches);
+      }
 
     } catch (error) {
       console.error('Error fetching assets:', error);

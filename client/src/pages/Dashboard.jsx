@@ -13,10 +13,11 @@ import { calculateFixedIncomeValue, getCompoundingFrequency, calculateXIRRFromTr
 import { printPortfolioReport } from '../utils/export';
 import { useAuth } from '../context/AuthContext';
 import { usePrices } from '../context/PriceContext';
+import { CombinedFreshnessBadge } from '../components/PriceFreshness';
 
 export default function Dashboard() {
   const { user } = useAuth();
-  const { prices, loading: pricesLoading, lastUpdated, fetchPrices, refreshPrices } = usePrices();
+  const { prices, loading: pricesLoading, lastUpdated, marketStatus, fetchPrices, refreshPrices } = usePrices();
   const [assets, setAssets] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -201,9 +202,9 @@ export default function Dashboard() {
           return;
         }
 
-        // Prices are now available from context (merged with any fetched prices)
-        // Use fetchedPrices for immediate calculation, context's prices for render
-        const priceData = { ...prices, ...fetchedPrices };
+        // fetchedPrices now contains the complete merged prices from PriceContext
+        // Use it directly for XIRR calculation to avoid race condition with React state
+        const priceData = fetchedPrices;
         setPricesLoaded(true);
 
         // Build transaction map for XIRR
@@ -307,16 +308,6 @@ export default function Dashboard() {
       assets: assetsWithValues,
       generatedAt: new Date(),
     });
-  };
-
-  const getTimeAgo = (date) => {
-    if (!date) return null;
-    const seconds = Math.floor((new Date() - date) / 1000);
-    if (seconds < 60) return 'Just now';
-    const minutes = Math.floor(seconds / 60);
-    if (minutes < 60) return `${minutes}m ago`;
-    const hours = Math.floor(minutes / 60);
-    return `${hours}h ago`;
   };
 
   // Record snapshot with debouncing to prevent multiple calls
@@ -707,15 +698,17 @@ export default function Dashboard() {
                     {formatCompact(totalValue)}
                   </p>
 
-                  {/* Returns Badge */}
+                  {/* Returns Percentage & Freshness Badge */}
                   <div className="flex items-center gap-2 mt-2 mb-4">
-                    <span className={`text-[14px] font-semibold ${totalPnL >= 0 ? 'text-[#059669]' : 'text-[#DC2626]'}`}>
-                      {totalPnL >= 0 ? '+' : ''}{formatCompact(totalPnL)} ({totalPnL >= 0 ? '+' : ''}{totalPnLPercent.toFixed(1)}%)
+                    <span className={`text-[18px] font-bold tracking-tight ${totalPnL >= 0 ? 'text-[#059669]' : 'text-[#DC2626]'}`}>
+                      {totalPnL >= 0 ? '+' : ''}{totalPnLPercent.toFixed(1)}%
                     </span>
                     {lastUpdated && (
-                      <span className="text-[11px] text-[var(--label-quaternary)]">
-                        • {getTimeAgo(lastUpdated)}
-                      </span>
+                      <CombinedFreshnessBadge
+                        lastUpdated={lastUpdated}
+                        source={marketStatus?.isOpen ? 'live' : 'cached'}
+                        marketStatus={marketStatus}
+                      />
                     )}
                   </div>
 

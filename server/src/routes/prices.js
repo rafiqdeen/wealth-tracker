@@ -2,6 +2,8 @@ import express from 'express';
 import dns from 'dns';
 import db from '../db/database.js';
 import { authenticateToken } from '../middleware/auth.js';
+import { fetchPriceWithFallback, getCircuitBreakerStates, resetCircuitBreaker, resetAllCircuitBreakers } from '../services/priceProviders.js';
+import { getSyncStatus, triggerManualSync, updateSymbolPriority, getRecentSyncJobs } from '../services/priceSync.js';
 
 // Force IPv4 first to avoid IPv6 connection issues
 dns.setDefaultResultOrder('ipv4first');
@@ -25,8 +27,41 @@ function getRandomUserAgent() {
   return USER_AGENTS[Math.floor(Math.random() * USER_AGENTS.length)];
 }
 
-// Cache duration in milliseconds (30 minutes - balances freshness vs API limits)
-const CACHE_DURATION = 30 * 60 * 1000;
+// Smart cache durations based on market status
+// Market open: 15 min (prices change frequently)
+// Market closed: 12 hours (prices don't change)
+// Mutual funds: 24 hours (NAV updates once daily)
+const CACHE_DURATION_MARKET_OPEN = 15 * 60 * 1000;      // 15 minutes
+const CACHE_DURATION_MARKET_CLOSED = 12 * 60 * 60 * 1000; // 12 hours
+const CACHE_DURATION_MUTUAL_FUND = 24 * 60 * 60 * 1000;   // 24 hours
+
+/**
+ * Get appropriate cache duration based on asset type and market status
+ */
+function getCacheDuration(symbol, isMarketOpen) {
+  // Mutual funds use MFAPI and update NAV once daily
+  const isMutualFund = !symbol.includes('.NS') && !symbol.includes('.BO');
+
+  if (isMutualFund) {
+    return CACHE_DURATION_MUTUAL_FUND;
+  }
+
+  return isMarketOpen ? CACHE_DURATION_MARKET_OPEN : CACHE_DURATION_MARKET_CLOSED;
+}
+
+/**
+ * Check if cached price is still valid
+ */
+function isCacheValid(cached, symbol, isMarketOpen) {
+  if (!cached || !cached.fetched_at) return false;
+
+  // Parse fetched_at as UTC (SQLite CURRENT_TIMESTAMP is UTC)
+  const fetchedAtUTC = cached.fetched_at + 'Z';
+  const cacheAge = Date.now() - new Date(fetchedAtUTC).getTime();
+  const maxAge = getCacheDuration(symbol, isMarketOpen);
+
+  return cacheAge < maxAge;
+}
 
 // Yahoo session management - cookie + crumb for bypassing rate limits
 let yahooSession = {
@@ -335,14 +370,17 @@ function cachePrice(symbol, priceData, source) {
 
 // Format cached data for API response
 function formatCachedPrice(cached) {
+  // Parse fetched_at as UTC (SQLite CURRENT_TIMESTAMP is UTC)
+  const fetchedAtUTC = cached.fetched_at ? cached.fetched_at + 'Z' : null;
   return {
     price: cached.price,
     previousClose: cached.previous_close,
     change: cached.change_amount || 0,
     changePercent: cached.change_percent || 0,
     currency: cached.currency || 'INR',
-    source: cached.source,
-    fetchedAt: cached.fetched_at
+    source: cached.source || 'cached',
+    fetchedAt: cached.fetched_at,
+    cacheAge: fetchedAtUTC ? Math.round((Date.now() - new Date(fetchedAtUTC).getTime()) / 60000) : null
   };
 }
 
@@ -599,11 +637,11 @@ async function processBatch(items, processor, concurrency = 5, delayMs = 100) {
 }
 
 // Bulk price fetch with smart caching
-// Market OPEN: Fetch fresh, cache as 'live', failed = unavailable
-// Market CLOSED: Use cache, if no cache fetch once and cache as 'close'
+// Uses cache when valid (based on market hours and asset type)
+// Only fetches from API when cache is stale or missing
 router.post('/bulk', authenticateToken, async (req, res) => {
   try {
-    const { symbols } = req.body;
+    const { symbols, forceRefresh } = req.body;
 
     if (!symbols || !Array.isArray(symbols)) {
       return res.status(400).json({ error: 'symbols array is required' });
@@ -619,103 +657,90 @@ router.post('/bulk', authenticateToken, async (req, res) => {
 
     const results = {};
     const allSymbols = symbols.map(s => s.symbol);
+    const symbolsToFetch = [];
 
-    if (market.isOpen) {
-      // === MARKET OPEN: Fetch ALL fresh, cache as 'live' ===
-      console.log(`[Price] Market OPEN - fetching ${symbols.length} symbols fresh`);
+    // Get all cached prices
+    const cachedPrices = getBulkCachedPrices(allSymbols);
 
+    // First pass: check cache validity for each symbol
+    for (const item of symbols) {
+      const cached = cachedPrices[item.symbol];
+
+      // Track symbol priority for background sync
+      updateSymbolPriority(item.symbol);
+
+      // Use cache if valid and not forcing refresh
+      if (!forceRefresh && cached && isCacheValid(cached, item.symbol, market.isOpen)) {
+        results[item.symbol] = formatCachedPrice(cached);
+        console.log(`[Price] CACHE HIT: ${item.symbol} (age: ${Math.round((Date.now() - new Date(cached.fetched_at).getTime()) / 60000)}min)`);
+      } else {
+        symbolsToFetch.push(item);
+      }
+    }
+
+    const cacheHits = Object.keys(results).length;
+    const source = market.isOpen ? 'live' : 'close';
+
+    console.log(`[Price] Market ${market.isOpen ? 'OPEN' : 'CLOSED'} - ${cacheHits} cache hits, ${symbolsToFetch.length} to fetch`);
+
+    // Second pass: fetch symbols that need fresh data
+    if (symbolsToFetch.length > 0) {
       // Pre-fetch Yahoo session to avoid rate limits on crumb endpoint
       await getYahooSession();
 
-      await processBatch(symbols, async (item) => {
+      let fetchedCount = 0;
+      let failedCount = 0;
+
+      await processBatch(symbolsToFetch, async (item) => {
         const { symbol, type } = item;
         try {
+          // Use fallback chain for stocks, MFAPI for mutual funds
           const priceData = type === 'mf'
             ? await fetchMutualFundNAV(symbol)
-            : await fetchYahooPrice(symbol);
+            : await fetchPriceWithFallback(symbol, fetchYahooPrice);
+
           if (priceData && priceData.price) {
-            // Cache immediately as price is fetched
-            cachePrice(symbol, priceData, 'live');
-            console.log(`[Price] OK: ${symbol} = ${priceData.price}`);
+            fetchedCount++;
+            // Cache immediately with the actual source
+            const priceSource = priceData.source || source;
+            cachePrice(symbol, priceData, priceSource);
+            console.log(`[Price] FETCHED: ${symbol} = ${priceData.price} (via ${priceSource})`);
             results[symbol] = {
               price: priceData.price,
               previousClose: priceData.previousClose,
               change: priceData.change || 0,
               changePercent: priceData.changePercent || 0,
               currency: priceData.currency || 'INR',
-              source: 'live'
+              source: priceSource,
+              fetchedAt: new Date().toISOString()
             };
           } else {
-            console.log(`[Price] FAIL: ${symbol} - no data returned`);
-            results[symbol] = { unavailable: true, reason: 'Fetch failed' };
+            failedCount++;
+            // Try to use stale cache as fallback
+            const staleCache = cachedPrices[symbol];
+            if (staleCache) {
+              console.log(`[Price] STALE FALLBACK: ${symbol} (all providers failed, using old cache)`);
+              results[symbol] = { ...formatCachedPrice(staleCache), source: 'stale' };
+            } else {
+              console.log(`[Price] FAIL: ${symbol} - all providers failed and no cache`);
+              results[symbol] = { unavailable: true, reason: 'All providers failed, no cache' };
+            }
           }
         } catch (err) {
-          console.error(`[Price] FAIL: ${symbol} - ${err.message}`);
-          results[symbol] = { unavailable: true, reason: 'Fetch failed' };
-        }
-      }, 1, 3000); // Sequential requests with 3s delay to avoid rate limiting
-    } else {
-      // === MARKET CLOSED: Use cache, fetch missing symbols once ===
-      console.log(`[Price] Market CLOSED - checking cache for ${symbols.length} symbols`);
-
-      const cachedPrices = getBulkCachedPrices(allSymbols);
-      const uncachedSymbols = [];
-
-      // First pass: use cache where available
-      for (const item of symbols) {
-        const cached = cachedPrices[item.symbol];
-        if (cached) {
-          results[item.symbol] = formatCachedPrice(cached);
-        } else {
-          uncachedSymbols.push(item);
-        }
-      }
-
-      // Second pass: fetch uncached symbols (initial fetch for first-time users)
-      if (uncachedSymbols.length > 0) {
-        console.log(`[Price] Fetching ${uncachedSymbols.length} uncached symbols`);
-
-        // Pre-fetch Yahoo session to avoid rate limits on crumb endpoint
-        await getYahooSession();
-
-        let fetchedCount = 0;
-        let failedCount = 0;
-        const fetchResults = await processBatch(uncachedSymbols, async (item) => {
-          const { symbol, type } = item;
-          try {
-            const priceData = type === 'mf'
-              ? await fetchMutualFundNAV(symbol)
-              : await fetchYahooPrice(symbol);
-            if (priceData && priceData.price) {
-              fetchedCount++;
-              // Cache immediately as price is fetched
-              cachePrice(symbol, priceData, 'close');
-              console.log(`[Price] OK: ${symbol} = ${priceData.price}`);
-              // Also add to results immediately
-              results[symbol] = {
-                price: priceData.price,
-                previousClose: priceData.previousClose,
-                change: priceData.change || 0,
-                changePercent: priceData.changePercent || 0,
-                currency: priceData.currency || 'INR',
-                source: 'close'
-              };
-            } else {
-              failedCount++;
-              console.log(`[Price] FAIL: ${symbol} - no data returned`);
-              results[symbol] = { unavailable: true, reason: 'No cached price available' };
-            }
-            return { symbol, priceData };
-          } catch (err) {
-            failedCount++;
+          failedCount++;
+          // Try to use stale cache as fallback
+          const staleCache = cachedPrices[symbol];
+          if (staleCache) {
+            console.log(`[Price] STALE FALLBACK: ${symbol} (error: ${err.message})`);
+            results[symbol] = { ...formatCachedPrice(staleCache), source: 'stale' };
+          } else {
             console.error(`[Price] FAIL: ${symbol} - ${err.message}`);
             results[symbol] = { unavailable: true, reason: 'Fetch error' };
-            return { symbol, priceData: null };
           }
-        }, 1, 3000); // Sequential requests with 3s delay to avoid rate limiting
+        }
+      }, 1, 3000); // Sequential requests with 3s delay to avoid rate limiting
 
-        console.log(`[Price] Fetch complete: ${fetchedCount} success, ${failedCount} failed`);
-      }
+      console.log(`[Price] Fetch complete: ${fetchedCount} fetched, ${failedCount} failed, ${cacheHits} from cache`);
     }
 
     console.log(`[Price] Returning ${Object.keys(results).length} prices`);
@@ -723,6 +748,81 @@ router.post('/bulk', authenticateToken, async (req, res) => {
   } catch (error) {
     console.error('Error fetching bulk prices:', error);
     res.status(500).json({ error: 'Failed to fetch prices' });
+  }
+});
+
+// Circuit breaker monitoring endpoint
+router.get('/circuit-breakers', authenticateToken, (req, res) => {
+  try {
+    const states = getCircuitBreakerStates();
+    res.json({
+      circuitBreakers: states,
+      summary: {
+        total: states.length,
+        open: states.filter(s => s.state === 'OPEN').length,
+        halfOpen: states.filter(s => s.state === 'HALF_OPEN').length,
+        closed: states.filter(s => s.state === 'CLOSED').length
+      }
+    });
+  } catch (error) {
+    console.error('Error getting circuit breaker states:', error);
+    res.status(500).json({ error: 'Failed to get circuit breaker states' });
+  }
+});
+
+// Reset circuit breaker endpoint
+router.post('/circuit-breakers/reset', authenticateToken, (req, res) => {
+  try {
+    const { provider } = req.body;
+
+    if (provider) {
+      const success = resetCircuitBreaker(provider);
+      if (success) {
+        res.json({ success: true, message: `Circuit breaker ${provider} reset` });
+      } else {
+        res.status(404).json({ error: `Circuit breaker ${provider} not found` });
+      }
+    } else {
+      resetAllCircuitBreakers();
+      res.json({ success: true, message: 'All circuit breakers reset' });
+    }
+  } catch (error) {
+    console.error('Error resetting circuit breaker:', error);
+    res.status(500).json({ error: 'Failed to reset circuit breaker' });
+  }
+});
+
+// Background sync status endpoint
+router.get('/sync/status', authenticateToken, (req, res) => {
+  try {
+    const status = getSyncStatus();
+    res.json(status);
+  } catch (error) {
+    console.error('Error getting sync status:', error);
+    res.status(500).json({ error: 'Failed to get sync status' });
+  }
+});
+
+// Trigger manual sync endpoint
+router.post('/sync/trigger', authenticateToken, async (req, res) => {
+  try {
+    const result = await triggerManualSync();
+    res.json(result);
+  } catch (error) {
+    console.error('Error triggering sync:', error);
+    res.status(500).json({ error: 'Failed to trigger sync' });
+  }
+});
+
+// Get recent sync jobs
+router.get('/sync/jobs', authenticateToken, (req, res) => {
+  try {
+    const limit = parseInt(req.query.limit) || 10;
+    const jobs = getRecentSyncJobs(limit);
+    res.json({ jobs });
+  } catch (error) {
+    console.error('Error getting sync jobs:', error);
+    res.status(500).json({ error: 'Failed to get sync jobs' });
   }
 });
 
