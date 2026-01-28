@@ -45,11 +45,14 @@ A comprehensive personal wealth management application built for tracking invest
 - Over-allocation warnings
 
 ### Market Data Integration
-- Real-time stock prices from Yahoo Finance
+- Real-time stock prices with **multi-source fallback** (Yahoo Finance → BSE → Google)
 - Mutual fund NAV from AMFI API
 - Gold and Silver prices with India premium markup
 - Market status detection (open/closed/holidays)
-- Smart price caching
+- **Circuit breaker pattern** for API resilience
+- **Smart caching** with market-hours awareness
+- **Price freshness indicators** (Fresh/Stale/Old)
+- Background price sync service
 
 ### India-Specific Features
 - INR as primary currency
@@ -58,19 +61,40 @@ A comprehensive personal wealth management application built for tracking invest
 - Gold/Silver prices with retail markup
 - Interest compounding calculations for Indian fixed deposits
 
-### Reports & Analytics
+### Insights & Analytics
+- **10 insight cards** with actionable financial intelligence:
+  - Portfolio Overview (total value, returns, XIRR)
+  - Asset Allocation breakdown
+  - Top & Bottom Performers
+  - Risk Analysis
+  - Investment Income Summary (dividends, interest, rental)
+  - Tax Implications (LTCG/STCG estimates)
+  - Liquidity Analysis
+  - Diversification Score
+  - Recent Activity
+  - Goal Progress Overview
+
+### Reports
 - Portfolio summary reports
-- Asset allocation pie charts
+- Asset allocation pie charts with category breakdown
 - Monthly investment breakdown
 - Cumulative investment trends
 - Export to JSON and CSV
 - Print-friendly reports
 
 ### Data Management
-- Full data backup and restore
+- Full data backup and restore (JSON)
 - Category-specific CSV export
-- Import with duplicate detection
-- Automatic portfolio history
+- Import with duplicate detection and ID remapping
+- Cross-user backup restore support
+- Automatic portfolio history snapshots
+
+### User Experience
+- **Keyboard shortcuts** (⌘K for search, ? for help)
+- Global asset search
+- Responsive design (mobile + desktop)
+- Smooth animations with Framer Motion
+- Loading states and error handling
 
 ## Tech Stack
 
@@ -97,7 +121,7 @@ A comprehensive personal wealth management application built for tracking invest
 
 1. Clone the repository:
 ```bash
-git clone https://github.com/yourusername/wealth-tracker.git
+git clone https://github.com/rafiqdeen/wealth-tracker.git
 cd wealth-tracker
 ```
 
@@ -128,18 +152,23 @@ JWT_SECRET=your-secret-key-here
 wealth-tracker/
 ├── client/                  # React frontend
 │   ├── src/
-│   │   ├── pages/           # Page components
+│   │   ├── pages/           # Page components (Dashboard, Assets, Goals, etc.)
 │   │   ├── components/      # Reusable UI components
 │   │   ├── services/        # API service layers
-│   │   ├── context/         # React context (Auth, Theme)
-│   │   ├── utils/           # Helper functions
-│   │   └── constants/       # Theme and app constants
+│   │   ├── context/         # React context (Auth, Toast, Price)
+│   │   ├── hooks/           # Custom React hooks
+│   │   ├── utils/           # Helper functions (formatting, interest calc)
+│   │   └── constants/       # App constants
 │   └── package.json
 │
 ├── server/                  # Express backend
 │   ├── src/
 │   │   ├── routes/          # API route handlers
-│   │   ├── db/              # Database setup
+│   │   ├── services/        # Business logic services
+│   │   │   ├── circuitBreaker.js   # API resilience
+│   │   │   ├── priceProviders.js   # Multi-source price fetching
+│   │   │   └── priceSync.js        # Background sync service
+│   │   ├── db/              # Database setup & migrations
 │   │   └── middleware/      # Auth middleware
 │   └── package.json
 │
@@ -192,10 +221,11 @@ wealth-tracker/
 ### Prices
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| GET | `/api/prices/:symbol` | Get stock/ETF price |
+| GET | `/api/prices/:symbol` | Get stock/ETF price (with fallback) |
 | POST | `/api/prices/bulk` | Get multiple prices |
 | GET | `/api/prices/search/stocks` | Search stocks |
 | GET | `/api/prices/search/mf` | Search mutual funds |
+| GET | `/api/prices/market-status` | Get market open/closed status |
 
 ### Metals
 | Method | Endpoint | Description |
@@ -251,8 +281,29 @@ The application uses SQLite with the following main tables:
 - **goal_asset_links** - Goal-asset associations
 - **goal_contributions** - Manual contributions
 - **goal_history** - Goal progress snapshots
-- **price_cache** - Cached market prices
+- **price_cache** - Cached market prices with source tracking
 - **metal_prices** - Gold/silver price cache
+- **price_sync_jobs** - Background sync job tracking
+- **symbol_priority** - Frequently accessed symbols for prioritized syncing
+
+## Deployment Options
+
+### Local (Current Setup)
+Best for personal use with 1-5 users.
+- SQLite file-based database
+- No external dependencies
+- Data stays on your machine
+
+### Cloud Deployment (Recommended for Multi-user)
+
+| Option | Frontend | Backend | Database | Cost |
+|--------|----------|---------|----------|------|
+| **Vercel + Turso** | Vercel | Vercel Serverless | Turso (SQLite cloud) | Free |
+| **Fly.io** | Fly.io | Fly.io | SQLite (persistent volume) | Free |
+| **Render** | Render | Render | SQLite (ephemeral) | Free |
+| **VPS** | Self-hosted | Self-hosted | SQLite | ~$5/mo |
+
+**Recommended:** Vercel + Turso for zero-maintenance, auto-scaling, and generous free tier.
 
 ## Contributing
 
