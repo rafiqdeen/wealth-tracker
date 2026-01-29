@@ -8,23 +8,22 @@ const router = express.Router();
 router.use(authenticateToken);
 
 // Record today's portfolio snapshot
-router.post('/snapshot', (req, res) => {
+router.post('/snapshot', async (req, res) => {
   try {
     const { totalValue, totalInvested, dayChange } = req.body;
     const today = new Date().toISOString().split('T')[0];
 
     // Upsert: Insert or update today's snapshot
-    const stmt = db.prepare(`
-      INSERT INTO portfolio_history (user_id, date, total_value, total_invested, day_change)
+    await db.run(
+      `INSERT INTO portfolio_history (user_id, date, total_value, total_invested, day_change)
       VALUES (?, ?, ?, ?, ?)
       ON CONFLICT(user_id, date) DO UPDATE SET
         total_value = excluded.total_value,
         total_invested = excluded.total_invested,
         day_change = excluded.day_change,
-        created_at = CURRENT_TIMESTAMP
-    `);
-
-    stmt.run(req.user.id, today, totalValue, totalInvested, dayChange || 0);
+        created_at = CURRENT_TIMESTAMP`,
+      [req.user.id, today, totalValue, totalInvested, dayChange || 0]
+    );
 
     res.json({ success: true, date: today });
   } catch (error) {
@@ -34,7 +33,7 @@ router.post('/snapshot', (req, res) => {
 });
 
 // Get portfolio history
-router.get('/history', (req, res) => {
+router.get('/history', async (req, res) => {
   try {
     const { period } = req.query; // 1D, 1W, 1M, 3M, 6M, 1Y, ALL
 
@@ -74,18 +73,20 @@ router.get('/history', (req, res) => {
 
     // Use parameterized query to avoid SQL injection
     const history = startDate
-      ? db.prepare(`
-          SELECT date, total_value, total_invested, day_change
+      ? await db.all(
+          `SELECT date, total_value, total_invested, day_change
           FROM portfolio_history
           WHERE user_id = ? AND date >= ?
-          ORDER BY date ASC
-        `).all(req.user.id, startDate)
-      : db.prepare(`
-          SELECT date, total_value, total_invested, day_change
+          ORDER BY date ASC`,
+          [req.user.id, startDate]
+        )
+      : await db.all(
+          `SELECT date, total_value, total_invested, day_change
           FROM portfolio_history
           WHERE user_id = ?
-          ORDER BY date ASC
-        `).all(req.user.id);
+          ORDER BY date ASC`,
+          [req.user.id]
+        );
 
     // Calculate performance metrics
     let performance = {
@@ -112,9 +113,9 @@ router.get('/history', (req, res) => {
 });
 
 // Clear portfolio history
-router.delete('/history', (req, res) => {
+router.delete('/history', async (req, res) => {
   try {
-    db.prepare('DELETE FROM portfolio_history WHERE user_id = ?').run(req.user.id);
+    await db.run('DELETE FROM portfolio_history WHERE user_id = ?', [req.user.id]);
     res.json({ success: true, message: 'Portfolio history cleared' });
   } catch (error) {
     console.error('Error clearing portfolio history:', error);
@@ -123,15 +124,16 @@ router.delete('/history', (req, res) => {
 });
 
 // Get latest snapshot
-router.get('/latest', (req, res) => {
+router.get('/latest', async (req, res) => {
   try {
-    const latest = db.prepare(`
-      SELECT date, total_value, total_invested, day_change
+    const latest = await db.get(
+      `SELECT date, total_value, total_invested, day_change
       FROM portfolio_history
       WHERE user_id = ?
       ORDER BY date DESC
-      LIMIT 1
-    `).get(req.user.id);
+      LIMIT 1`,
+      [req.user.id]
+    );
 
     res.json({ snapshot: latest || null });
   } catch (error) {
@@ -142,25 +144,26 @@ router.get('/latest', (req, res) => {
 
 // Backfill history from transactions - CLEARS ALL and rebuilds from scratch
 // Accepts optional currentValue and currentInvested to project historical values
-router.post('/backfill', (req, res) => {
+router.post('/backfill', async (req, res) => {
   try {
     const { currentValue, currentInvested } = req.body;
 
     // Get all transactions for this user, ordered by date
-    const transactions = db.prepare(`
-      SELECT t.*, a.category, a.asset_type, a.name as asset_name
+    const transactions = await db.all(
+      `SELECT t.*, a.category, a.asset_type, a.name as asset_name
       FROM transactions t
       JOIN assets a ON t.asset_id = a.id
       WHERE t.user_id = ?
-      ORDER BY t.transaction_date ASC
-    `).all(req.user.id);
+      ORDER BY t.transaction_date ASC`,
+      [req.user.id]
+    );
 
     if (transactions.length === 0) {
       return res.json({ message: 'No transactions to backfill from', backfilled: 0 });
     }
 
     // CLEAR ALL existing history - start fresh
-    db.prepare('DELETE FROM portfolio_history WHERE user_id = ?').run(req.user.id);
+    await db.run('DELETE FROM portfolio_history WHERE user_id = ?', [req.user.id]);
 
     // Get the date range
     const firstTxnDate = new Date(transactions[0].transaction_date);
@@ -196,12 +199,6 @@ router.post('/backfill', (req, res) => {
       ? currentValue / currentInvested
       : 1;
 
-    // Insert statement
-    const insertStmt = db.prepare(`
-      INSERT INTO portfolio_history (user_id, date, total_value, total_invested, day_change)
-      VALUES (?, ?, ?, ?, 0)
-    `);
-
     let backfilledCount = 0;
     const debugData = [];
 
@@ -218,7 +215,11 @@ router.post('/backfill', (req, res) => {
       // This assumes proportional growth over time (simplified model)
       const projectedValue = investedUpToDate * gainRatio;
 
-      insertStmt.run(req.user.id, date, projectedValue, investedUpToDate);
+      await db.run(
+        `INSERT INTO portfolio_history (user_id, date, total_value, total_invested, day_change)
+        VALUES (?, ?, ?, ?, 0)`,
+        [req.user.id, date, projectedValue, investedUpToDate]
+      );
       backfilledCount++;
 
       // Debug: track first few and last few entries
@@ -248,17 +249,18 @@ router.post('/backfill', (req, res) => {
 });
 
 // Get cumulative investment data for line chart
-router.get('/cumulative-investments', (req, res) => {
+router.get('/cumulative-investments', async (req, res) => {
   try {
     const { period } = req.query;
 
     // Get all transactions for this user, ordered by date
-    const transactions = db.prepare(`
-      SELECT t.transaction_date, t.type, t.total_amount
+    const transactions = await db.all(
+      `SELECT t.transaction_date, t.type, t.total_amount
       FROM transactions t
       WHERE t.user_id = ?
-      ORDER BY t.transaction_date ASC
-    `).all(req.user.id);
+      ORDER BY t.transaction_date ASC`,
+      [req.user.id]
+    );
 
     if (transactions.length === 0) {
       return res.json({ data: [], summary: { totalInvested: 0, firstDate: null, lastDate: null } });
@@ -357,17 +359,18 @@ router.get('/cumulative-investments', (req, res) => {
 });
 
 // Get monthly investment breakdown for bar chart
-router.get('/monthly-investments', (req, res) => {
+router.get('/monthly-investments', async (req, res) => {
   try {
     const { period } = req.query;
 
     // Get all transactions for this user
-    const transactions = db.prepare(`
-      SELECT t.transaction_date, t.type, t.total_amount
+    const transactions = await db.all(
+      `SELECT t.transaction_date, t.type, t.total_amount
       FROM transactions t
       WHERE t.user_id = ?
-      ORDER BY t.transaction_date ASC
-    `).all(req.user.id);
+      ORDER BY t.transaction_date ASC`,
+      [req.user.id]
+    );
 
     if (transactions.length === 0) {
       return res.json({ monthly: [], summary: { totalInvested: 0, months: 0 } });
@@ -449,22 +452,24 @@ router.get('/monthly-investments', (req, res) => {
 
 // Debug endpoint - DEVELOPMENT ONLY
 if (process.env.NODE_ENV !== 'production') {
-  router.get('/debug-transactions', (req, res) => {
+  router.get('/debug-transactions', async (req, res) => {
     try {
-      const transactions = db.prepare(`
-        SELECT t.transaction_date, t.type, t.quantity, t.price, t.total_amount, a.name, a.category
+      const transactions = await db.all(
+        `SELECT t.transaction_date, t.type, t.quantity, t.price, t.total_amount, a.name, a.category
         FROM transactions t
         JOIN assets a ON t.asset_id = a.id
         WHERE t.user_id = ?
-        ORDER BY t.transaction_date ASC
-      `).all(req.user.id);
+        ORDER BY t.transaction_date ASC`,
+        [req.user.id]
+      );
 
-      const history = db.prepare(`
-        SELECT date, total_value, total_invested
+      const history = await db.all(
+        `SELECT date, total_value, total_invested
         FROM portfolio_history
         WHERE user_id = ?
-        ORDER BY date ASC
-      `).all(req.user.id);
+        ORDER BY date ASC`,
+        [req.user.id]
+      );
 
       res.json({
         transactionCount: transactions.length,

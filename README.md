@@ -286,25 +286,6 @@ The application uses SQLite with the following main tables:
 - **price_sync_jobs** - Background sync job tracking
 - **symbol_priority** - Frequently accessed symbols for prioritized syncing
 
-## Deployment Options
-
-### Local (Current Setup)
-Best for personal use with 1-5 users.
-- SQLite file-based database
-- No external dependencies
-- Data stays on your machine
-
-### Cloud Deployment (Recommended for Multi-user)
-
-| Option | Frontend | Backend | Database | Cost |
-|--------|----------|---------|----------|------|
-| **Vercel + Turso** | Vercel | Vercel Serverless | Turso (SQLite cloud) | Free |
-| **Fly.io** | Fly.io | Fly.io | SQLite (persistent volume) | Free |
-| **Render** | Render | Render | SQLite (ephemeral) | Free |
-| **VPS** | Self-hosted | Self-hosted | SQLite | ~$5/mo |
-
-**Recommended:** Vercel + Turso for zero-maintenance, auto-scaling, and generous free tier.
-
 ## Contributing
 
 1. Fork the repository
@@ -312,6 +293,10 @@ Best for personal use with 1-5 users.
 3. Commit your changes (`git commit -m 'Add amazing feature'`)
 4. Push to the branch (`git push origin feature/amazing-feature`)
 5. Open a Pull Request
+
+## Author
+
+**Mohamed Rafiqdeen S**
 
 ## License
 

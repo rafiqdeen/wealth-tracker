@@ -254,9 +254,14 @@ export default function Login() {
           </p>
 
           {/* Footer */}
-          <p className="text-center text-[12px] text-gray-400 mt-12">
-            © 2026 Wealth Tracker. All rights reserved.
-          </p>
+          <div className="text-center mt-12">
+            <p className="text-[12px] text-gray-400">
+              © 2026 Wealth Tracker. All rights reserved.
+            </p>
+            <p className="text-[11px] text-gray-400 mt-1">
+              Developed by <span className="font-medium text-gray-500">Mohamed Rafiqdeen S</span>
+            </p>
+          </div>
         </motion.div>
       </div>
     </div>

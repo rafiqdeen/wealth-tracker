@@ -136,7 +136,7 @@ function getISTTime() {
 }
 
 // Check if we should fetch new price (after 11:30 AM IST and no fetch today after 11:30)
-function shouldFetchNewPrice(metal) {
+async function shouldFetchNewPrice(metal) {
   const istNow = getISTTime();
   const currentHour = istNow.getUTCHours();
   const currentMinute = istNow.getUTCMinutes();
@@ -149,49 +149,54 @@ function shouldFetchNewPrice(metal) {
   }
 
   // Check if we already fetched today after 11:30 AM
-  const todayFetch = db.prepare(`
-    SELECT * FROM metal_prices
+  const todayFetch = await db.get(
+    `SELECT * FROM metal_prices
     WHERE metal = ?
     AND DATE(fetched_at) = ?
     AND TIME(fetched_at) >= '11:30:00'
     ORDER BY fetched_at DESC
-    LIMIT 1
-  `).get(metal, today);
+    LIMIT 1`,
+    [metal, today]
+  );
 
   return !todayFetch;
 }
 
 // Get most recent cached price
-function getCachedPrice(metal) {
-  return db.prepare(`
-    SELECT * FROM metal_prices
+async function getCachedPrice(metal) {
+  return await db.get(
+    `SELECT * FROM metal_prices
     WHERE metal = ?
     ORDER BY fetched_at DESC
-    LIMIT 1
-  `).get(metal);
+    LIMIT 1`,
+    [metal]
+  );
 }
 
 // Save price to database
-function savePrice(metal, pricePerGram24K, metalPriceUSD, usdToInr) {
+async function savePrice(metal, pricePerGram24K, metalPriceUSD, usdToInr) {
   const now = new Date().toISOString();
 
-  db.prepare(`
-    INSERT INTO metal_prices (metal, price_per_gram, price_per_gram_24k, currency, fetched_at)
-    VALUES (?, ?, ?, 'INR', ?)
-  `).run(metal, pricePerGram24K, pricePerGram24K, now);
+  await db.run(
+    `INSERT INTO metal_prices (metal, price_per_gram, price_per_gram_24k, currency, fetched_at)
+    VALUES (?, ?, ?, 'INR', ?)`,
+    [metal, pricePerGram24K, pricePerGram24K, now]
+  );
 
   // Also store the raw data for reference
-  db.prepare(`
-    INSERT OR REPLACE INTO price_cache (symbol, price, currency, fetched_at)
-    VALUES (?, ?, 'USD', CURRENT_TIMESTAMP)
-  `).run(metal === 'gold' ? 'GC=F' : 'SI=F', metalPriceUSD);
+  await db.run(
+    `INSERT OR REPLACE INTO price_cache (symbol, price, currency, fetched_at)
+    VALUES (?, ?, 'USD', CURRENT_TIMESTAMP)`,
+    [metal === 'gold' ? 'GC=F' : 'SI=F', metalPriceUSD]
+  );
 
-  db.prepare(`
-    INSERT OR REPLACE INTO price_cache (symbol, price, currency, fetched_at)
-    VALUES ('USDINR=X', ?, 'INR', CURRENT_TIMESTAMP)
-  `).run(usdToInr);
+  await db.run(
+    `INSERT OR REPLACE INTO price_cache (symbol, price, currency, fetched_at)
+    VALUES ('USDINR=X', ?, 'INR', CURRENT_TIMESTAMP)`,
+    [usdToInr]
+  );
 
-  return getCachedPrice(metal);
+  return await getCachedPrice(metal);
 }
 
 // Calculate purity prices
@@ -215,10 +220,10 @@ router.get('/price/:metal', authenticateToken, async (req, res) => {
     }
 
     // Check if we should auto-fetch new price
-    if (shouldFetchNewPrice(metal)) {
+    if (await shouldFetchNewPrice(metal)) {
       try {
         const freshData = await fetchMetalPriceINR(metal);
-        const saved = savePrice(metal, freshData.pricePerGram24K, freshData.metalPriceUSD, freshData.usdToInr);
+        const saved = await savePrice(metal, freshData.pricePerGram24K, freshData.metalPriceUSD, freshData.usdToInr);
 
         return res.json({
           metal,
@@ -237,13 +242,13 @@ router.get('/price/:metal', authenticateToken, async (req, res) => {
     }
 
     // Return cached price
-    const cached = getCachedPrice(metal);
+    const cached = await getCachedPrice(metal);
 
     if (!cached) {
       // No cached price - try to fetch
       try {
         const freshData = await fetchMetalPriceINR(metal);
-        const saved = savePrice(metal, freshData.pricePerGram24K, freshData.metalPriceUSD, freshData.usdToInr);
+        const saved = await savePrice(metal, freshData.pricePerGram24K, freshData.metalPriceUSD, freshData.usdToInr);
 
         return res.json({
           metal,
@@ -287,7 +292,7 @@ router.post('/price/:metal/refresh', authenticateToken, async (req, res) => {
     }
 
     const freshData = await fetchMetalPriceINR(metal);
-    const saved = savePrice(metal, freshData.pricePerGram24K, freshData.metalPriceUSD, freshData.usdToInr);
+    const saved = await savePrice(metal, freshData.pricePerGram24K, freshData.metalPriceUSD, freshData.usdToInr);
 
     res.json({
       metal,
@@ -306,7 +311,7 @@ router.post('/price/:metal/refresh', authenticateToken, async (req, res) => {
 });
 
 // GET /api/metals/calculate - Calculate value based on weight and purity
-router.get('/calculate', authenticateToken, (req, res) => {
+router.get('/calculate', authenticateToken, async (req, res) => {
   try {
     const { metal = 'gold', weight, purity } = req.query;
 
@@ -324,7 +329,7 @@ router.get('/calculate', authenticateToken, (req, res) => {
       });
     }
 
-    const cached = getCachedPrice(metal);
+    const cached = await getCachedPrice(metal);
 
     if (!cached) {
       return res.status(404).json({ error: 'No price data available. Please refresh the price first.' });
@@ -413,7 +418,7 @@ router.get('/rates', authenticateToken, async (req, res) => {
 });
 
 // POST /api/metals/seed - Seed price manually (for testing)
-router.post('/seed', authenticateToken, (req, res) => {
+router.post('/seed', authenticateToken, async (req, res) => {
   try {
     const { metal = 'gold', pricePerGram24K } = req.body;
 
@@ -421,7 +426,7 @@ router.post('/seed', authenticateToken, (req, res) => {
       return res.status(400).json({ error: 'Valid pricePerGram24K is required' });
     }
 
-    const saved = savePrice(metal, parseFloat(pricePerGram24K), 0, 0);
+    const saved = await savePrice(metal, parseFloat(pricePerGram24K), 0, 0);
 
     res.json({
       message: 'Price seeded successfully',

@@ -1,6 +1,7 @@
 {
   "name": "wealth-tracker",
   "version": "1.0.0",
+  "type": "module",
   "description": "Wealth management app to track investments across stocks, mutual funds, and gold ETFs",
   "scripts": {
     "dev": "concurrently \"npm run dev:server\" \"npm run dev:client\"",

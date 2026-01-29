@@ -232,9 +232,9 @@ export default function Layout() {
       <div className="flex-1 p-4 md:py-5 md:pr-5 md:pl-0 overflow-hidden">
         <div className="bg-[var(--bg-primary)] rounded-2xl md:rounded-[24px] h-full flex flex-col shadow-sm">
           {/* Top Header */}
-          <header className="h-[72px] px-4 md:px-12 flex items-center justify-between border-b border-[var(--separator-opaque)] shrink-0">
+          <header className="h-[72px] px-4 md:px-12 flex items-center justify-between border-b border-[var(--separator-opaque)] shrink-0 relative">
             {/* Left: Greeting + Market Status */}
-            <div>
+            <div className="z-10">
               <h1 className="text-[17px] font-semibold text-[var(--label-primary)]">
                 Hi, {user?.name?.split(' ')[0] || 'there'}!
               </h1>
@@ -243,7 +243,7 @@ export default function Layout() {
                 {/* Market Status Badge - Compact pill with tooltip */}
                 {marketStatus && !marketStatus.isOpen && (
                   <span
-                    className="group relative inline-flex items-center gap-1.5 px-2 py-0.5 bg-amber-500/10 text-amber-600 dark:text-amber-400 text-[11px] font-medium rounded-full cursor-help"
+                    className="group relative inline-flex items-center gap-1.5 px-2 py-0.5 bg-amber-500/10 text-amber-600 text-[11px] font-medium rounded-full cursor-help"
                     title="Stock & mutual fund prices may be outdated"
                   >
                     <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse"></span>
@@ -257,10 +257,10 @@ export default function Layout() {
               </div>
             </div>
 
-            {/* Center: Search */}
+            {/* Center: Search - Absolutely positioned for true center */}
             <button
               onClick={() => setShowSearch(true)}
-              className="hidden lg:flex items-center gap-2.5 px-4 py-2.5 bg-[var(--bg-tertiary)] rounded-xl text-[var(--label-tertiary)] w-[360px] cursor-pointer hover:bg-[var(--fill-secondary)] transition-colors"
+              className="hidden lg:flex items-center gap-2.5 px-4 py-2.5 bg-[var(--bg-tertiary)] rounded-xl text-[var(--label-tertiary)] w-[360px] cursor-pointer hover:bg-[var(--fill-secondary)] transition-colors absolute left-1/2 -translate-x-1/2"
             >
               <svg className="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
@@ -270,7 +270,7 @@ export default function Layout() {
             </button>
 
             {/* Right: Actions */}
-            <div className="flex items-center gap-1.5">
+            <div className="flex items-center gap-1.5 z-10">
               {/* Backup - Mobile only */}
               <motion.button
                 whileTap={tapScale}

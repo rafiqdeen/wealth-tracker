@@ -331,13 +331,14 @@ async function fetchMutualFundNAV(schemeCode) {
 }
 
 // Get cached prices for multiple symbols
-function getBulkCachedPrices(symbols) {
+async function getBulkCachedPrices(symbols) {
   if (!symbols || symbols.length === 0) return {};
 
   const placeholders = symbols.map(() => '?').join(',');
-  const rows = db.prepare(`
-    SELECT * FROM price_cache WHERE symbol IN (${placeholders})
-  `).all(...symbols);
+  const rows = await db.all(
+    `SELECT * FROM price_cache WHERE symbol IN (${placeholders})`,
+    symbols
+  );
 
   return rows.reduce((acc, row) => {
     acc[row.symbol] = row;
@@ -347,7 +348,7 @@ function getBulkCachedPrices(symbols) {
 
 // Save price to cache (only successful fetches)
 // source: 'live' (during market hours) or 'close' (after market hours)
-function cachePrice(symbol, priceData, source) {
+async function cachePrice(symbol, priceData, source) {
   try {
     const {
       price,
@@ -357,15 +358,32 @@ function cachePrice(symbol, priceData, source) {
       currency = 'INR'
     } = priceData;
 
-    db.prepare(`
-      INSERT OR REPLACE INTO price_cache
+    await db.run(
+      `INSERT OR REPLACE INTO price_cache
       (symbol, price, previous_close, change_amount, change_percent, currency, source, fetched_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-    `).run(symbol, price, previousClose, change, changePercent, currency, source);
+      VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
+      [symbol, price, previousClose, change, changePercent, currency, source]
+    );
     console.log(`[Cache] Saved ${symbol} = ${price}`);
   } catch (error) {
     console.error(`[Cache] Error saving ${symbol}:`, error.message);
   }
+}
+
+// Get cached price for a symbol (for single symbol lookups)
+async function getCachedPrice(symbol) {
+  return await db.get(
+    'SELECT * FROM price_cache WHERE symbol = ?',
+    [symbol]
+  );
+}
+
+// Get any cached price (ignores freshness - for market closed scenarios)
+async function getAnyCachedPrice(symbol) {
+  return await db.get(
+    'SELECT * FROM price_cache WHERE symbol = ?',
+    [symbol]
+  );
 }
 
 // Format cached data for API response
@@ -594,7 +612,7 @@ router.get('/search/mf', authenticateToken, async (req, res) => {
 
 // Clear price cache (requires confirmation)
 // Note: Price cache is shared across all users for efficiency
-router.delete('/cache', authenticateToken, (req, res) => {
+router.delete('/cache', authenticateToken, async (req, res) => {
   try {
     const { confirm } = req.query;
 
@@ -606,7 +624,7 @@ router.delete('/cache', authenticateToken, (req, res) => {
       });
     }
 
-    const result = db.prepare('DELETE FROM price_cache').run();
+    const result = await db.run('DELETE FROM price_cache', []);
     res.json({
       success: true,
       message: 'Price cache cleared',
@@ -660,7 +678,7 @@ router.post('/bulk', authenticateToken, async (req, res) => {
     const symbolsToFetch = [];
 
     // Get all cached prices
-    const cachedPrices = getBulkCachedPrices(allSymbols);
+    const cachedPrices = await getBulkCachedPrices(allSymbols);
 
     // First pass: check cache validity for each symbol
     for (const item of symbols) {
@@ -703,7 +721,7 @@ router.post('/bulk', authenticateToken, async (req, res) => {
             fetchedCount++;
             // Cache immediately with the actual source
             const priceSource = priceData.source || source;
-            cachePrice(symbol, priceData, priceSource);
+            await cachePrice(symbol, priceData, priceSource);
             console.log(`[Price] FETCHED: ${symbol} = ${priceData.price} (via ${priceSource})`);
             results[symbol] = {
               price: priceData.price,
@@ -793,9 +811,9 @@ router.post('/circuit-breakers/reset', authenticateToken, (req, res) => {
 });
 
 // Background sync status endpoint
-router.get('/sync/status', authenticateToken, (req, res) => {
+router.get('/sync/status', authenticateToken, async (req, res) => {
   try {
-    const status = getSyncStatus();
+    const status = await getSyncStatus();
     res.json(status);
   } catch (error) {
     console.error('Error getting sync status:', error);
@@ -836,7 +854,7 @@ router.get('/:symbol', authenticateToken, async (req, res) => {
     const market = await checkMarketStatus();
 
     // Check cache - use any cached price outside market hours
-    const cached = market.isOpen ? getCachedPrice(symbol) : getAnyCachedPrice(symbol);
+    const cached = market.isOpen ? await getCachedPrice(symbol) : await getAnyCachedPrice(symbol);
     if (cached) {
       // Return cached data with proper structure
       const priceResponse = {
@@ -868,7 +886,7 @@ router.get('/:symbol', authenticateToken, async (req, res) => {
     }
 
     // Cache with full price data
-    cachePrice(symbol, priceData, market.isOpen);
+    await cachePrice(symbol, priceData, market.isOpen ? 'live' : 'close');
 
     // Prepare response (adjust change to 0 if market closed)
     const priceResponse = {

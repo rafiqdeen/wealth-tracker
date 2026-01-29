@@ -24,13 +24,13 @@ function getAssetValue(asset) {
 }
 
 // Helper: Calculate goal progress from linked assets
-function calculateGoalProgress(goalId, userId) {
-  const goal = db.prepare('SELECT * FROM goals WHERE id = ? AND user_id = ?').get(goalId, userId);
+async function calculateGoalProgress(goalId, userId) {
+  const goal = await db.get('SELECT * FROM goals WHERE id = ? AND user_id = ?', [goalId, userId]);
   if (!goal) return null;
 
   // Get linked assets with their allocations
   // Note: Explicitly select gal.id as link_id to avoid being overwritten by a.id
-  const links = db.prepare(`
+  const links = await db.all(`
     SELECT gal.id as link_id, gal.goal_id, gal.asset_id, gal.link_type,
            gal.allocation_percent, gal.allocation_mode, gal.fixed_allocation_amount,
            gal.initial_value_snapshot, gal.link_date,
@@ -39,7 +39,7 @@ function calculateGoalProgress(goalId, userId) {
     FROM goal_asset_links gal
     JOIN assets a ON gal.asset_id = a.id
     WHERE gal.goal_id = ? AND a.user_id = ?
-  `).all(goalId, userId);
+  `, [goalId, userId]);
 
   let linkedAssetsValue = 0;
   const linkedAssets = [];
@@ -96,7 +96,7 @@ function calculateGoalProgress(goalId, userId) {
 }
 
 // Helper: Get asset allocation across all goals
-function getAssetAllocations(assetId, userId, excludeGoalId = null) {
+async function getAssetAllocations(assetId, userId, excludeGoalId = null) {
   let query = `
     SELECT gal.*, g.name as goal_name
     FROM goal_asset_links gal
@@ -110,18 +110,18 @@ function getAssetAllocations(assetId, userId, excludeGoalId = null) {
     params.push(excludeGoalId);
   }
 
-  return db.prepare(query).all(...params);
+  return await db.all(query, params);
 }
 
 // ==================== GOALS CRUD ====================
 
 // GET /api/goals - Get all goals for user (OPTIMIZED: batch queries instead of N+1)
-router.get('/', (req, res) => {
+router.get('/', async (req, res) => {
   try {
     // Fetch all goals in one query
-    const goals = db.prepare(`
+    const goals = await db.all(`
       SELECT * FROM goals WHERE user_id = ? ORDER BY status, created_at DESC
-    `).all(req.user.id);
+    `, [req.user.id]);
 
     if (goals.length === 0) {
       return res.json({ goals: [] });
@@ -130,7 +130,7 @@ router.get('/', (req, res) => {
     // Fetch ALL linked assets for ALL goals in ONE query (fixes N+1 problem)
     const goalIds = goals.map(g => g.id);
     const placeholders = goalIds.map(() => '?').join(',');
-    const allLinks = db.prepare(`
+    const allLinks = await db.all(`
       SELECT gal.goal_id, gal.link_type, gal.allocation_percent, gal.allocation_mode,
              gal.fixed_allocation_amount, a.id as asset_id, a.name as asset_name,
              a.asset_type, a.quantity, a.avg_buy_price, a.current_value,
@@ -138,7 +138,7 @@ router.get('/', (req, res) => {
       FROM goal_asset_links gal
       JOIN assets a ON gal.asset_id = a.id
       WHERE gal.goal_id IN (${placeholders}) AND a.user_id = ?
-    `).all(...goalIds, req.user.id);
+    `, [...goalIds, req.user.id]);
 
     // Group links by goal_id for O(1) lookup
     const linksByGoal = allLinks.reduce((acc, link) => {
@@ -199,17 +199,17 @@ router.get('/', (req, res) => {
 });
 
 // GET /api/goals/:id - Get single goal with full details
-router.get('/:id', (req, res) => {
+router.get('/:id', async (req, res) => {
   try {
-    const goal = db.prepare(`
+    const goal = await db.get(`
       SELECT * FROM goals WHERE id = ? AND user_id = ?
-    `).get(req.params.id, req.user.id);
+    `, [req.params.id, req.user.id]);
 
     if (!goal) {
       return res.status(404).json({ error: 'Goal not found' });
     }
 
-    const progress = calculateGoalProgress(goal.id, req.user.id);
+    const progress = await calculateGoalProgress(goal.id, req.user.id);
 
     res.json({
       goal: {
@@ -224,7 +224,7 @@ router.get('/:id', (req, res) => {
 });
 
 // POST /api/goals - Create new goal
-router.post('/', (req, res) => {
+router.post('/', async (req, res) => {
   try {
     const {
       name,
@@ -242,10 +242,10 @@ router.post('/', (req, res) => {
     }
 
     // Create goal
-    const result = db.prepare(`
+    const result = await db.run(`
       INSERT INTO goals (user_id, name, category, target_amount, target_date, progress_mode, manual_current_amount, notes)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(
+    `, [
       req.user.id,
       name,
       category.toUpperCase(),
@@ -254,7 +254,7 @@ router.post('/', (req, res) => {
       progress_mode,
       manual_current_amount,
       notes || null
-    );
+    ]);
 
     const goalId = result.lastInsertRowid;
 
@@ -265,12 +265,12 @@ router.post('/', (req, res) => {
         const allocationPercent = link.allocation_percent ?? 100;
 
         // Check existing allocations for this asset across all goals
-        const existingAllocation = db.prepare(`
+        const existingAllocation = await db.get(`
           SELECT COALESCE(SUM(allocation_percent), 0) as total
           FROM goal_asset_links gal
           JOIN goals g ON gal.goal_id = g.id
           WHERE gal.asset_id = ? AND g.user_id = ? AND g.status = 'ACTIVE'
-        `).get(link.asset_id, req.user.id);
+        `, [link.asset_id, req.user.id]);
 
         const totalAllocation = (existingAllocation?.total || 0) + allocationPercent;
         if (totalAllocation > 100) {
@@ -280,40 +280,37 @@ router.post('/', (req, res) => {
         }
       }
 
-      const insertLink = db.prepare(`
-        INSERT INTO goal_asset_links (goal_id, asset_id, link_type, allocation_percent, initial_value_snapshot)
-        VALUES (?, ?, ?, ?, ?)
-      `);
-
       for (const link of linked_assets) {
         // Verify asset belongs to user
-        const asset = db.prepare('SELECT * FROM assets WHERE id = ? AND user_id = ?')
-          .get(link.asset_id, req.user.id);
+        const asset = await db.get('SELECT * FROM assets WHERE id = ? AND user_id = ?', [link.asset_id, req.user.id]);
 
         if (asset) {
           const assetValue = getAssetValue(asset);
-          insertLink.run(
+          await db.run(`
+            INSERT INTO goal_asset_links (goal_id, asset_id, link_type, allocation_percent, initial_value_snapshot)
+            VALUES (?, ?, ?, ?, ?)
+          `, [
             goalId,
             link.asset_id,
             link.link_type || 'FUNDING',
             link.allocation_percent ?? 100,
             assetValue
-          );
+          ]);
         }
       }
     }
 
     // Record initial contribution if manual amount provided
     if (manual_current_amount > 0) {
-      db.prepare(`
+      await db.run(`
         INSERT INTO goal_contributions (goal_id, contribution_type, amount, description)
         VALUES (?, 'MANUAL', ?, 'Initial contribution')
-      `).run(goalId, manual_current_amount);
+      `, [goalId, manual_current_amount]);
     }
 
     // Fetch created goal with progress
-    const goal = db.prepare('SELECT * FROM goals WHERE id = ?').get(goalId);
-    const progress = calculateGoalProgress(goalId, req.user.id);
+    const goal = await db.get('SELECT * FROM goals WHERE id = ?', [goalId]);
+    const progress = await calculateGoalProgress(goalId, req.user.id);
 
     res.status(201).json({
       message: 'Goal created successfully',
@@ -326,10 +323,9 @@ router.post('/', (req, res) => {
 });
 
 // PUT /api/goals/:id - Update goal
-router.put('/:id', (req, res) => {
+router.put('/:id', async (req, res) => {
   try {
-    const existing = db.prepare('SELECT * FROM goals WHERE id = ? AND user_id = ?')
-      .get(req.params.id, req.user.id);
+    const existing = await db.get('SELECT * FROM goals WHERE id = ? AND user_id = ?', [req.params.id, req.user.id]);
 
     if (!existing) {
       return res.status(404).json({ error: 'Goal not found' });
@@ -360,10 +356,10 @@ router.put('/:id', (req, res) => {
     if (manual_current_amount !== undefined && manual_current_amount !== existing.manual_current_amount) {
       const diff = manual_current_amount - (existing.manual_current_amount || 0);
       if (diff !== 0) {
-        db.prepare(`
+        await db.run(`
           INSERT INTO goal_contributions (goal_id, contribution_type, amount, description)
           VALUES (?, 'MANUAL', ?, ?)
-        `).run(req.params.id, diff, diff > 0 ? 'Manual addition' : 'Manual adjustment');
+        `, [req.params.id, diff, diff > 0 ? 'Manual addition' : 'Manual adjustment']);
       }
     }
 
@@ -375,7 +371,7 @@ router.put('/:id', (req, res) => {
       completedAt = null;
     }
 
-    db.prepare(`
+    await db.run(`
       UPDATE goals SET
         name = COALESCE(?, name),
         category = COALESCE(?, category),
@@ -388,7 +384,7 @@ router.put('/:id', (req, res) => {
         completed_at = ?,
         updated_at = CURRENT_TIMESTAMP
       WHERE id = ? AND user_id = ?
-    `).run(
+    `, [
       name,
       category?.toUpperCase(),
       target_amount,
@@ -400,10 +396,10 @@ router.put('/:id', (req, res) => {
       completedAt,
       req.params.id,
       req.user.id
-    );
+    ]);
 
-    const goal = db.prepare('SELECT * FROM goals WHERE id = ?').get(req.params.id);
-    const progress = calculateGoalProgress(goal.id, req.user.id);
+    const goal = await db.get('SELECT * FROM goals WHERE id = ?', [req.params.id]);
+    const progress = await calculateGoalProgress(goal.id, req.user.id);
 
     res.json({
       message: 'Goal updated successfully',
@@ -416,10 +412,9 @@ router.put('/:id', (req, res) => {
 });
 
 // DELETE /api/goals/:id - Delete goal
-router.delete('/:id', (req, res) => {
+router.delete('/:id', async (req, res) => {
   try {
-    const result = db.prepare('DELETE FROM goals WHERE id = ? AND user_id = ?')
-      .run(req.params.id, req.user.id);
+    const result = await db.run('DELETE FROM goals WHERE id = ? AND user_id = ?', [req.params.id, req.user.id]);
 
     if (result.changes === 0) {
       return res.status(404).json({ error: 'Goal not found' });
@@ -435,25 +430,25 @@ router.delete('/:id', (req, res) => {
 // ==================== ASSET LINKS ====================
 
 // GET /api/goals/:id/links - Get all asset links for a goal
-router.get('/:id/links', (req, res) => {
+router.get('/:id/links', async (req, res) => {
   try {
-    const goal = db.prepare('SELECT id FROM goals WHERE id = ? AND user_id = ?')
-      .get(req.params.id, req.user.id);
+    const goal = await db.get('SELECT id FROM goals WHERE id = ? AND user_id = ?', [req.params.id, req.user.id]);
 
     if (!goal) {
       return res.status(404).json({ error: 'Goal not found' });
     }
 
-    const links = db.prepare(`
+    const links = await db.all(`
       SELECT gal.*, a.name as asset_name, a.asset_type, a.category as asset_category
       FROM goal_asset_links gal
       JOIN assets a ON gal.asset_id = a.id
       WHERE gal.goal_id = ?
-    `).all(req.params.id);
+    `, [req.params.id]);
 
     // Enrich with current values
-    const enrichedLinks = links.map(link => {
-      const asset = db.prepare('SELECT * FROM assets WHERE id = ?').get(link.asset_id);
+    const enrichedLinks = [];
+    for (const link of links) {
+      const asset = await db.get('SELECT * FROM assets WHERE id = ?', [link.asset_id]);
       const assetValue = asset ? getAssetValue(asset) : 0;
       let allocatedValue = 0;
 
@@ -465,12 +460,12 @@ router.get('/:id/links', (req, res) => {
         }
       }
 
-      return {
+      enrichedLinks.push({
         ...link,
         asset_value: assetValue,
         allocated_value: allocatedValue,
-      };
-    });
+      });
+    }
 
     res.json({ links: enrichedLinks });
   } catch (error) {
@@ -480,10 +475,9 @@ router.get('/:id/links', (req, res) => {
 });
 
 // POST /api/goals/:id/links - Add asset link to goal
-router.post('/:id/links', (req, res) => {
+router.post('/:id/links', async (req, res) => {
   try {
-    const goal = db.prepare('SELECT * FROM goals WHERE id = ? AND user_id = ?')
-      .get(req.params.id, req.user.id);
+    const goal = await db.get('SELECT * FROM goals WHERE id = ? AND user_id = ?', [req.params.id, req.user.id]);
 
     if (!goal) {
       return res.status(404).json({ error: 'Goal not found' });
@@ -510,15 +504,14 @@ router.post('/:id/links', (req, res) => {
     }
 
     // Verify asset belongs to user
-    const asset = db.prepare('SELECT * FROM assets WHERE id = ? AND user_id = ?')
-      .get(asset_id, req.user.id);
+    const asset = await db.get('SELECT * FROM assets WHERE id = ? AND user_id = ?', [asset_id, req.user.id]);
 
     if (!asset) {
       return res.status(404).json({ error: 'Asset not found' });
     }
 
     // Check for over-allocation
-    const existingAllocations = getAssetAllocations(asset_id, req.user.id, req.params.id);
+    const existingAllocations = await getAssetAllocations(asset_id, req.user.id, req.params.id);
     const totalExisting = existingAllocations.reduce((sum, a) => sum + (a.allocation_percent || 0), 0);
 
     if (totalExisting + allocation_percent > 100) {
@@ -531,8 +524,7 @@ router.post('/:id/links', (req, res) => {
     }
 
     // Check if link already exists
-    const existingLink = db.prepare('SELECT id FROM goal_asset_links WHERE goal_id = ? AND asset_id = ?')
-      .get(req.params.id, asset_id);
+    const existingLink = await db.get('SELECT id FROM goal_asset_links WHERE goal_id = ? AND asset_id = ?', [req.params.id, asset_id]);
 
     if (existingLink) {
       return res.status(400).json({ error: 'Asset is already linked to this goal' });
@@ -540,10 +532,10 @@ router.post('/:id/links', (req, res) => {
 
     const assetValue = getAssetValue(asset);
 
-    const result = db.prepare(`
+    const result = await db.run(`
       INSERT INTO goal_asset_links (goal_id, asset_id, link_type, allocation_percent, allocation_mode, fixed_allocation_amount, initial_value_snapshot)
       VALUES (?, ?, ?, ?, ?, ?, ?)
-    `).run(
+    `, [
       req.params.id,
       asset_id,
       link_type,
@@ -551,9 +543,9 @@ router.post('/:id/links', (req, res) => {
       allocation_mode,
       fixed_allocation_amount || null,
       assetValue
-    );
+    ]);
 
-    const link = db.prepare('SELECT * FROM goal_asset_links WHERE id = ?').get(result.lastInsertRowid);
+    const link = await db.get('SELECT * FROM goal_asset_links WHERE id = ?', [result.lastInsertRowid]);
 
     res.status(201).json({
       message: 'Asset linked successfully',
@@ -571,17 +563,15 @@ router.post('/:id/links', (req, res) => {
 });
 
 // PUT /api/goals/:id/links/:linkId - Update asset link
-router.put('/:id/links/:linkId', (req, res) => {
+router.put('/:id/links/:linkId', async (req, res) => {
   try {
-    const goal = db.prepare('SELECT id FROM goals WHERE id = ? AND user_id = ?')
-      .get(req.params.id, req.user.id);
+    const goal = await db.get('SELECT id FROM goals WHERE id = ? AND user_id = ?', [req.params.id, req.user.id]);
 
     if (!goal) {
       return res.status(404).json({ error: 'Goal not found' });
     }
 
-    const existingLink = db.prepare('SELECT * FROM goal_asset_links WHERE id = ? AND goal_id = ?')
-      .get(req.params.linkId, req.params.id);
+    const existingLink = await db.get('SELECT * FROM goal_asset_links WHERE id = ? AND goal_id = ?', [req.params.linkId, req.params.id]);
 
     if (!existingLink) {
       return res.status(404).json({ error: 'Link not found' });
@@ -606,7 +596,7 @@ router.put('/:id/links/:linkId', (req, res) => {
 
     // Check for over-allocation if changing percent
     if (allocation_percent !== undefined && allocation_percent !== existingLink.allocation_percent) {
-      const existingAllocations = getAssetAllocations(existingLink.asset_id, req.user.id, req.params.id);
+      const existingAllocations = await getAssetAllocations(existingLink.asset_id, req.user.id, req.params.id);
       const totalExisting = existingAllocations.reduce((sum, a) => sum + (a.allocation_percent || 0), 0);
 
       if (totalExisting + allocation_percent > 100) {
@@ -618,27 +608,27 @@ router.put('/:id/links/:linkId', (req, res) => {
       }
     }
 
-    db.prepare(`
+    await db.run(`
       UPDATE goal_asset_links SET
         link_type = COALESCE(?, link_type),
         allocation_percent = COALESCE(?, allocation_percent),
         allocation_mode = COALESCE(?, allocation_mode),
         fixed_allocation_amount = ?
       WHERE id = ?
-    `).run(
+    `, [
       link_type,
       allocation_percent,
       allocation_mode,
       fixed_allocation_amount !== undefined ? fixed_allocation_amount : existingLink.fixed_allocation_amount,
       req.params.linkId
-    );
+    ]);
 
-    const link = db.prepare(`
+    const link = await db.get(`
       SELECT gal.*, a.name as asset_name, a.asset_type
       FROM goal_asset_links gal
       JOIN assets a ON gal.asset_id = a.id
       WHERE gal.id = ?
-    `).get(req.params.linkId);
+    `, [req.params.linkId]);
 
     res.json({ message: 'Link updated successfully', link });
   } catch (error) {
@@ -648,17 +638,15 @@ router.put('/:id/links/:linkId', (req, res) => {
 });
 
 // DELETE /api/goals/:id/links/:linkId - Remove asset link
-router.delete('/:id/links/:linkId', (req, res) => {
+router.delete('/:id/links/:linkId', async (req, res) => {
   try {
-    const goal = db.prepare('SELECT id FROM goals WHERE id = ? AND user_id = ?')
-      .get(req.params.id, req.user.id);
+    const goal = await db.get('SELECT id FROM goals WHERE id = ? AND user_id = ?', [req.params.id, req.user.id]);
 
     if (!goal) {
       return res.status(404).json({ error: 'Goal not found' });
     }
 
-    const result = db.prepare('DELETE FROM goal_asset_links WHERE id = ? AND goal_id = ?')
-      .run(req.params.linkId, req.params.id);
+    const result = await db.run('DELETE FROM goal_asset_links WHERE id = ? AND goal_id = ?', [req.params.linkId, req.params.id]);
 
     if (result.changes === 0) {
       return res.status(404).json({ error: 'Link not found' });
@@ -674,22 +662,21 @@ router.delete('/:id/links/:linkId', (req, res) => {
 // ==================== CONTRIBUTIONS ====================
 
 // GET /api/goals/:id/contributions - Get contribution history
-router.get('/:id/contributions', (req, res) => {
+router.get('/:id/contributions', async (req, res) => {
   try {
-    const goal = db.prepare('SELECT id FROM goals WHERE id = ? AND user_id = ?')
-      .get(req.params.id, req.user.id);
+    const goal = await db.get('SELECT id FROM goals WHERE id = ? AND user_id = ?', [req.params.id, req.user.id]);
 
     if (!goal) {
       return res.status(404).json({ error: 'Goal not found' });
     }
 
-    const contributions = db.prepare(`
+    const contributions = await db.all(`
       SELECT gc.*, a.name as asset_name
       FROM goal_contributions gc
       LEFT JOIN assets a ON gc.source_asset_id = a.id
       WHERE gc.goal_id = ?
       ORDER BY gc.contribution_date DESC, gc.created_at DESC
-    `).all(req.params.id);
+    `, [req.params.id]);
 
     res.json({ contributions });
   } catch (error) {
@@ -699,10 +686,9 @@ router.get('/:id/contributions', (req, res) => {
 });
 
 // POST /api/goals/:id/contributions - Add manual contribution
-router.post('/:id/contributions', (req, res) => {
+router.post('/:id/contributions', async (req, res) => {
   try {
-    const goal = db.prepare('SELECT * FROM goals WHERE id = ? AND user_id = ?')
-      .get(req.params.id, req.user.id);
+    const goal = await db.get('SELECT * FROM goals WHERE id = ? AND user_id = ?', [req.params.id, req.user.id]);
 
     if (!goal) {
       return res.status(404).json({ error: 'Goal not found' });
@@ -719,23 +705,21 @@ router.post('/:id/contributions', (req, res) => {
     }
 
     // Insert contribution
-    const result = db.prepare(`
+    const result = await db.run(`
       INSERT INTO goal_contributions (goal_id, contribution_type, amount, description, contribution_date)
       VALUES (?, 'MANUAL', ?, ?, ?)
-    `).run(
+    `, [
       req.params.id,
       amount,
       description || null,
       contribution_date || new Date().toISOString().split('T')[0]
-    );
+    ]);
 
     // Update manual_current_amount
     const newManualAmount = (goal.manual_current_amount || 0) + amount;
-    db.prepare('UPDATE goals SET manual_current_amount = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
-      .run(newManualAmount, req.params.id);
+    await db.run('UPDATE goals SET manual_current_amount = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?', [newManualAmount, req.params.id]);
 
-    const contribution = db.prepare('SELECT * FROM goal_contributions WHERE id = ?')
-      .get(result.lastInsertRowid);
+    const contribution = await db.get('SELECT * FROM goal_contributions WHERE id = ?', [result.lastInsertRowid]);
 
     res.status(201).json({
       message: 'Contribution added successfully',
@@ -751,23 +735,22 @@ router.post('/:id/contributions', (req, res) => {
 // ==================== PROGRESS & HISTORY ====================
 
 // GET /api/goals/:id/progress - Get current progress details
-router.get('/:id/progress', (req, res) => {
+router.get('/:id/progress', async (req, res) => {
   try {
-    const goal = db.prepare('SELECT * FROM goals WHERE id = ? AND user_id = ?')
-      .get(req.params.id, req.user.id);
+    const goal = await db.get('SELECT * FROM goals WHERE id = ? AND user_id = ?', [req.params.id, req.user.id]);
 
     if (!goal) {
       return res.status(404).json({ error: 'Goal not found' });
     }
 
-    const progress = calculateGoalProgress(goal.id, req.user.id);
+    const progress = await calculateGoalProgress(goal.id, req.user.id);
 
     // Get recent contributions
-    const recentContributions = db.prepare(`
+    const recentContributions = await db.all(`
       SELECT * FROM goal_contributions
       WHERE goal_id = ? AND contribution_date >= date('now', '-30 days')
       ORDER BY contribution_date DESC
-    `).all(req.params.id);
+    `, [req.params.id]);
 
     const thisMonthTotal = recentContributions
       .filter(c => c.contribution_date >= new Date().toISOString().slice(0, 7))
@@ -788,10 +771,9 @@ router.get('/:id/progress', (req, res) => {
 });
 
 // GET /api/goals/:id/history - Get historical progress
-router.get('/:id/history', (req, res) => {
+router.get('/:id/history', async (req, res) => {
   try {
-    const goal = db.prepare('SELECT id FROM goals WHERE id = ? AND user_id = ?')
-      .get(req.params.id, req.user.id);
+    const goal = await db.get('SELECT id FROM goals WHERE id = ? AND user_id = ?', [req.params.id, req.user.id]);
 
     if (!goal) {
       return res.status(404).json({ error: 'Goal not found' });
@@ -799,12 +781,12 @@ router.get('/:id/history', (req, res) => {
 
     const { days = 30 } = req.query;
 
-    const history = db.prepare(`
+    const history = await db.all(`
       SELECT * FROM goal_history
       WHERE goal_id = ?
       ORDER BY date DESC
       LIMIT ?
-    `).all(req.params.id, parseInt(days));
+    `, [req.params.id, parseInt(days)]);
 
     res.json({ history: history.reverse() });
   } catch (error) {
@@ -814,29 +796,28 @@ router.get('/:id/history', (req, res) => {
 });
 
 // POST /api/goals/snapshot - Record daily snapshot for all goals (called by cron or manually)
-router.post('/snapshot', (req, res) => {
+router.post('/snapshot', async (req, res) => {
   try {
-    const goals = db.prepare('SELECT * FROM goals WHERE user_id = ? AND status = ?')
-      .all(req.user.id, 'ACTIVE');
+    const goals = await db.all('SELECT * FROM goals WHERE user_id = ? AND status = ?', [req.user.id, 'ACTIVE']);
 
     const today = new Date().toISOString().split('T')[0];
     let snapshotCount = 0;
 
     for (const goal of goals) {
-      const progress = calculateGoalProgress(goal.id, req.user.id);
+      const progress = await calculateGoalProgress(goal.id, req.user.id);
 
       if (progress) {
-        db.prepare(`
+        await db.run(`
           INSERT OR REPLACE INTO goal_history (goal_id, date, current_value, progress_percent, linked_assets_value, manual_value)
           VALUES (?, ?, ?, ?, ?, ?)
-        `).run(
+        `, [
           goal.id,
           today,
           progress.current_value,
           progress.progress_percent,
           progress.linked_assets_value,
           progress.manual_value
-        );
+        ]);
         snapshotCount++;
       }
     }
@@ -851,16 +832,15 @@ router.post('/snapshot', (req, res) => {
 // ==================== UTILITY ENDPOINTS ====================
 
 // GET /api/goals/asset-allocations/:assetId - Get all goal allocations for an asset
-router.get('/asset-allocations/:assetId', (req, res) => {
+router.get('/asset-allocations/:assetId', async (req, res) => {
   try {
-    const asset = db.prepare('SELECT * FROM assets WHERE id = ? AND user_id = ?')
-      .get(req.params.assetId, req.user.id);
+    const asset = await db.get('SELECT * FROM assets WHERE id = ? AND user_id = ?', [req.params.assetId, req.user.id]);
 
     if (!asset) {
       return res.status(404).json({ error: 'Asset not found' });
     }
 
-    const allocations = getAssetAllocations(req.params.assetId, req.user.id);
+    const allocations = await getAssetAllocations(req.params.assetId, req.user.id);
     const totalAllocated = allocations.reduce((sum, a) => sum + (a.allocation_percent || 0), 0);
     const assetValue = getAssetValue(asset);
 
@@ -885,7 +865,7 @@ router.get('/asset-allocations/:assetId', (req, res) => {
 });
 
 // POST /api/goals/migrate - Migrate goals from localStorage (one-time)
-router.post('/migrate', (req, res) => {
+router.post('/migrate', async (req, res) => {
   try {
     const { goals: localGoals } = req.body;
 
@@ -898,18 +878,17 @@ router.post('/migrate', (req, res) => {
 
     for (const localGoal of localGoals) {
       // Check if goal already exists (by name for this user)
-      const existing = db.prepare('SELECT id FROM goals WHERE user_id = ? AND name = ?')
-        .get(req.user.id, localGoal.name);
+      const existing = await db.get('SELECT id FROM goals WHERE user_id = ? AND name = ?', [req.user.id, localGoal.name]);
 
       if (existing) {
         continue; // Skip already migrated goals
       }
 
       // Create goal
-      const result = db.prepare(`
+      const result = await db.run(`
         INSERT INTO goals (user_id, name, category, target_amount, target_date, progress_mode, manual_current_amount, notes, created_at)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `).run(
+      `, [
         req.user.id,
         localGoal.name,
         localGoal.category || 'CUSTOM',
@@ -919,22 +898,21 @@ router.post('/migrate', (req, res) => {
         localGoal.current_amount || 0,
         localGoal.notes || null,
         localGoal.created_at || new Date().toISOString()
-      );
+      ]);
 
       const goalId = result.lastInsertRowid;
 
       // Migrate linked assets if any
       if (localGoal.linked_assets && Array.isArray(localGoal.linked_assets)) {
         for (const assetId of localGoal.linked_assets) {
-          const asset = db.prepare('SELECT * FROM assets WHERE id = ? AND user_id = ?')
-            .get(assetId, req.user.id);
+          const asset = await db.get('SELECT * FROM assets WHERE id = ? AND user_id = ?', [assetId, req.user.id]);
 
           if (asset) {
             const assetValue = getAssetValue(asset);
-            db.prepare(`
+            await db.run(`
               INSERT OR IGNORE INTO goal_asset_links (goal_id, asset_id, link_type, allocation_percent, initial_value_snapshot)
               VALUES (?, ?, 'FUNDING', 100, ?)
-            `).run(goalId, assetId, assetValue);
+            `, [goalId, assetId, assetValue]);
           }
         }
       }

@@ -80,11 +80,11 @@ function isPostMarketSyncTime() {
  * Get all unique equity symbols from user portfolios
  * Ordered by priority (most requested first)
  */
-function getSymbolsToSync() {
+async function getSymbolsToSync() {
   try {
     // Get all unique stock/MF symbols from active assets
-    const symbols = db.prepare(`
-      SELECT DISTINCT
+    const symbols = await db.all(
+      `SELECT DISTINCT
         CASE
           WHEN a.asset_type = 'MUTUAL_FUND' THEN a.symbol
           ELSE a.symbol || '.' || CASE WHEN a.exchange = 'BSE' THEN 'BO' ELSE 'NS' END
@@ -102,8 +102,9 @@ function getSymbolsToSync() {
         AND a.symbol IS NOT NULL
         AND a.status = 'ACTIVE'
       ORDER BY priority DESC, request_count DESC
-      LIMIT ?
-    `).all(MAX_SYMBOLS_PER_SYNC);
+      LIMIT ?`,
+      [MAX_SYMBOLS_PER_SYNC]
+    );
 
     return symbols.map(s => ({
       symbol: s.full_symbol,
@@ -118,16 +119,17 @@ function getSymbolsToSync() {
 /**
  * Update symbol priority after a request
  */
-export function updateSymbolPriority(symbol) {
+export async function updateSymbolPriority(symbol) {
   try {
-    db.prepare(`
-      INSERT INTO symbol_priority (symbol, priority, last_requested, request_count)
+    await db.run(
+      `INSERT INTO symbol_priority (symbol, priority, last_requested, request_count)
       VALUES (?, 1, CURRENT_TIMESTAMP, 1)
       ON CONFLICT(symbol) DO UPDATE SET
         priority = priority + 1,
         last_requested = CURRENT_TIMESTAMP,
-        request_count = request_count + 1
-    `).run(symbol);
+        request_count = request_count + 1`,
+      [symbol]
+    );
   } catch (error) {
     console.error('[PriceSync] Error updating symbol priority:', error.message);
   }
@@ -136,12 +138,13 @@ export function updateSymbolPriority(symbol) {
 /**
  * Create a new sync job
  */
-function createSyncJob(symbolCount) {
+async function createSyncJob(symbolCount) {
   try {
-    const result = db.prepare(`
-      INSERT INTO price_sync_jobs (status, symbols_total, started_at)
-      VALUES ('RUNNING', ?, CURRENT_TIMESTAMP)
-    `).run(symbolCount);
+    const result = await db.run(
+      `INSERT INTO price_sync_jobs (status, symbols_total, started_at)
+      VALUES ('RUNNING', ?, CURRENT_TIMESTAMP)`,
+      [symbolCount]
+    );
     return result.lastInsertRowid;
   } catch (error) {
     console.error('[PriceSync] Error creating sync job:', error.message);
@@ -152,20 +155,22 @@ function createSyncJob(symbolCount) {
 /**
  * Update sync job progress
  */
-function updateSyncJob(jobId, fetched, failed, status = 'RUNNING', errorMessage = null) {
+async function updateSyncJob(jobId, fetched, failed, status = 'RUNNING', errorMessage = null) {
   try {
     if (status === 'COMPLETED' || status === 'FAILED') {
-      db.prepare(`
-        UPDATE price_sync_jobs
+      await db.run(
+        `UPDATE price_sync_jobs
         SET symbols_fetched = ?, symbols_failed = ?, status = ?, error_message = ?, completed_at = CURRENT_TIMESTAMP
-        WHERE id = ?
-      `).run(fetched, failed, status, errorMessage, jobId);
+        WHERE id = ?`,
+        [fetched, failed, status, errorMessage, jobId]
+      );
     } else {
-      db.prepare(`
-        UPDATE price_sync_jobs
+      await db.run(
+        `UPDATE price_sync_jobs
         SET symbols_fetched = ?, symbols_failed = ?
-        WHERE id = ?
-      `).run(fetched, failed, jobId);
+        WHERE id = ?`,
+        [fetched, failed, jobId]
+      );
     }
   } catch (error) {
     console.error('[PriceSync] Error updating sync job:', error.message);
@@ -175,13 +180,14 @@ function updateSyncJob(jobId, fetched, failed, status = 'RUNNING', errorMessage 
 /**
  * Get recent sync jobs for monitoring
  */
-export function getRecentSyncJobs(limit = 10) {
+export async function getRecentSyncJobs(limit = 10) {
   try {
-    return db.prepare(`
-      SELECT * FROM price_sync_jobs
+    return await db.all(
+      `SELECT * FROM price_sync_jobs
       ORDER BY created_at DESC
-      LIMIT ?
-    `).all(limit);
+      LIMIT ?`,
+      [limit]
+    );
   } catch (error) {
     console.error('[PriceSync] Error getting sync jobs:', error.message);
     return [];
@@ -191,20 +197,21 @@ export function getRecentSyncJobs(limit = 10) {
 /**
  * Cache a fetched price
  */
-function cachePrice(symbol, priceData, source) {
+async function cachePrice(symbol, priceData, source) {
   try {
-    db.prepare(`
-      INSERT OR REPLACE INTO price_cache
+    await db.run(
+      `INSERT OR REPLACE INTO price_cache
       (symbol, price, previous_close, change_amount, change_percent, currency, source, fetched_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-    `).run(
-      symbol,
-      priceData.price,
-      priceData.previousClose || null,
-      priceData.change || 0,
-      priceData.changePercent || 0,
-      priceData.currency || 'INR',
-      source
+      VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
+      [
+        symbol,
+        priceData.price,
+        priceData.previousClose || null,
+        priceData.change || 0,
+        priceData.changePercent || 0,
+        priceData.currency || 'INR',
+        source
+      ]
     );
   } catch (error) {
     console.error('[PriceSync] Error caching price:', error.message);
@@ -314,7 +321,7 @@ async function runSyncCycle() {
     return;
   }
 
-  const symbols = getSymbolsToSync();
+  const symbols = await getSymbolsToSync();
 
   if (symbols.length === 0) {
     console.log('[PriceSync] No symbols to sync');
@@ -322,7 +329,7 @@ async function runSyncCycle() {
   }
 
   isRunning = true;
-  const jobId = createSyncJob(symbols.length);
+  const jobId = await createSyncJob(symbols.length);
   let fetched = 0;
   let failed = 0;
 
@@ -342,7 +349,7 @@ async function runSyncCycle() {
         }
 
         if (priceData && priceData.price > 0) {
-          cachePrice(item.symbol, priceData, priceData.source);
+          await cachePrice(item.symbol, priceData, priceData.source);
           fetched++;
           console.log(`[PriceSync] ${item.symbol} = ${priceData.price} (${priceData.source})`);
         } else {
@@ -356,18 +363,18 @@ async function runSyncCycle() {
 
       // Update job progress periodically
       if ((fetched + failed) % 10 === 0) {
-        updateSyncJob(jobId, fetched, failed);
+        await updateSyncJob(jobId, fetched, failed);
       }
 
       // Delay between symbols to avoid rate limiting
       await new Promise(resolve => setTimeout(resolve, SYNC_DELAY_BETWEEN_SYMBOLS));
     }
 
-    updateSyncJob(jobId, fetched, failed, 'COMPLETED');
+    await updateSyncJob(jobId, fetched, failed, 'COMPLETED');
     console.log(`[PriceSync] Sync completed: ${fetched} fetched, ${failed} failed`);
 
   } catch (error) {
-    updateSyncJob(jobId, fetched, failed, 'FAILED', error.message);
+    await updateSyncJob(jobId, fetched, failed, 'FAILED', error.message);
     console.error('[PriceSync] Sync failed:', error.message);
   } finally {
     isRunning = false;
@@ -486,12 +493,12 @@ export async function triggerManualSync() {
 /**
  * Get sync service status
  */
-export function getSyncStatus() {
+export async function getSyncStatus() {
   return {
     isRunning,
     marketOpen: isMarketOpen(),
     postMarketWindow: isPostMarketSyncTime(),
-    recentJobs: getRecentSyncJobs(5)
+    recentJobs: await getRecentSyncJobs(5)
   };
 }
 

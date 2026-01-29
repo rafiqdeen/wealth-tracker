@@ -21,11 +21,12 @@ export const ASSET_CATEGORIES = {
 router.use(authenticateToken);
 
 // Get all assets for user
-router.get('/', (req, res) => {
+router.get('/', async (req, res) => {
   try {
-    const assets = db.prepare(`
-      SELECT * FROM assets WHERE user_id = ? ORDER BY category, asset_type, name
-    `).all(req.user.id);
+    const assets = await db.all(
+      'SELECT * FROM assets WHERE user_id = ? ORDER BY category, asset_type, name',
+      [req.user.id]
+    );
 
     res.json({ assets });
   } catch (error) {
@@ -35,12 +36,13 @@ router.get('/', (req, res) => {
 });
 
 // Get assets by category
-router.get('/category/:category', (req, res) => {
+router.get('/category/:category', async (req, res) => {
   try {
     const { category } = req.params;
-    const assets = db.prepare(`
-      SELECT * FROM assets WHERE user_id = ? AND category = ? ORDER BY asset_type, name
-    `).all(req.user.id, category.toUpperCase());
+    const assets = await db.all(
+      'SELECT * FROM assets WHERE user_id = ? AND category = ? ORDER BY asset_type, name',
+      [req.user.id, category.toUpperCase()]
+    );
 
     res.json({ assets });
   } catch (error) {
@@ -50,11 +52,12 @@ router.get('/category/:category', (req, res) => {
 });
 
 // Get single asset
-router.get('/:id', (req, res) => {
+router.get('/:id', async (req, res) => {
   try {
-    const asset = db.prepare(`
-      SELECT * FROM assets WHERE id = ? AND user_id = ?
-    `).get(req.params.id, req.user.id);
+    const asset = await db.get(
+      'SELECT * FROM assets WHERE id = ? AND user_id = ?',
+      [req.params.id, req.user.id]
+    );
 
     if (!asset) {
       return res.status(404).json({ error: 'Asset not found' });
@@ -68,7 +71,7 @@ router.get('/:id', (req, res) => {
 });
 
 // Create new asset or record transaction
-router.post('/', (req, res) => {
+router.post('/', async (req, res) => {
   try {
     const {
       category, asset_type, name, symbol, exchange, quantity, price,
@@ -92,10 +95,10 @@ router.post('/', (req, res) => {
       const txnType = (transaction_type || 'BUY').toUpperCase();
 
       // Check if asset already exists
-      let existingAsset = db.prepare(`
-        SELECT * FROM assets
-        WHERE user_id = ? AND category = 'EQUITY' AND symbol = ? AND asset_type = ?
-      `).get(req.user.id, symbol, upperAssetType);
+      let existingAsset = await db.get(
+        "SELECT * FROM assets WHERE user_id = ? AND category = 'EQUITY' AND symbol = ? AND asset_type = ?",
+        [req.user.id, symbol, upperAssetType]
+      );
 
       if (txnType === 'SELL') {
         // For SELL, asset must exist
@@ -117,25 +120,26 @@ router.post('/', (req, res) => {
         const realizedGain = proceeds - costBasis;
 
         // Create SELL transaction
-        db.prepare(`
-          INSERT INTO transactions (
+        await db.run(
+          `INSERT INTO transactions (
             asset_id, user_id, type, quantity, price, total_amount, transaction_date, notes, realized_gain
-          ) VALUES (?, ?, 'SELL', ?, ?, ?, ?, ?, ?)
-        `).run(
-          existingAsset.id,
-          req.user.id,
-          quantity,
-          price,
-          proceeds,
-          transactionDate,
-          notes || null,
-          realizedGain
+          ) VALUES (?, ?, 'SELL', ?, ?, ?, ?, ?, ?)`,
+          [
+            existingAsset.id,
+            req.user.id,
+            quantity,
+            price,
+            proceeds,
+            transactionDate,
+            notes || null,
+            realizedGain
+          ]
         );
 
         // Recalculate asset
-        recalculateAssetFromTransactions(existingAsset.id);
+        await recalculateAssetFromTransactions(existingAsset.id);
 
-        const updatedAsset = db.prepare('SELECT * FROM assets WHERE id = ?').get(existingAsset.id);
+        const updatedAsset = await db.get('SELECT * FROM assets WHERE id = ?', [existingAsset.id]);
         return res.status(201).json({
           message: 'Sell transaction recorded successfully',
           asset: updatedAsset,
@@ -151,36 +155,38 @@ router.post('/', (req, res) => {
           assetId = existingAsset.id;
         } else {
           // Create new asset
-          const result = db.prepare(`
-            INSERT INTO assets (
+          const result = await db.run(
+            `INSERT INTO assets (
               user_id, category, asset_type, name, symbol, exchange, quantity, avg_buy_price, status
-            ) VALUES (?, ?, ?, ?, ?, ?, 0, 0, 'ACTIVE')
-          `).run(
-            req.user.id, upperCategory, upperAssetType, name,
-            symbol || null, exchange || null
+            ) VALUES (?, ?, ?, ?, ?, ?, 0, 0, 'ACTIVE')`,
+            [
+              req.user.id, upperCategory, upperAssetType, name,
+              symbol || null, exchange || null
+            ]
           );
           assetId = result.lastInsertRowid;
         }
 
         // Create BUY transaction
-        db.prepare(`
-          INSERT INTO transactions (
+        await db.run(
+          `INSERT INTO transactions (
             asset_id, user_id, type, quantity, price, total_amount, transaction_date, notes
-          ) VALUES (?, ?, 'BUY', ?, ?, ?, ?, ?)
-        `).run(
-          assetId,
-          req.user.id,
-          quantity,
-          price,
-          quantity * price,
-          transactionDate,
-          notes || null
+          ) VALUES (?, ?, 'BUY', ?, ?, ?, ?, ?)`,
+          [
+            assetId,
+            req.user.id,
+            quantity,
+            price,
+            quantity * price,
+            transactionDate,
+            notes || null
+          ]
         );
 
         // Recalculate asset
-        recalculateAssetFromTransactions(assetId);
+        await recalculateAssetFromTransactions(assetId);
 
-        const updatedAsset = db.prepare('SELECT * FROM assets WHERE id = ?').get(assetId);
+        const updatedAsset = await db.get('SELECT * FROM assets WHERE id = ?', [assetId]);
         return res.status(201).json({
           message: existingAsset ? 'Buy transaction recorded successfully' : 'Asset created with buy transaction',
           asset: updatedAsset
@@ -189,24 +195,25 @@ router.post('/', (req, res) => {
     }
 
     // Non-EQUITY assets: create normally
-    const result = db.prepare(`
-      INSERT INTO assets (
+    const result = await db.run(
+      `INSERT INTO assets (
         user_id, category, asset_type, name, symbol, exchange, quantity, avg_buy_price,
         principal, interest_rate, start_date, maturity_date, institution,
         purchase_price, current_value, location, area_sqft, balance,
         weight_grams, purity, premium, sum_assured, policy_number,
         purchase_date, notes
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(
-      req.user.id, upperCategory, upperAssetType, name,
-      symbol || null, exchange || null, quantity || null, price || null,
-      principal || null, interest_rate || null, start_date || null, maturity_date || null, institution || null,
-      purchase_price || null, current_value || null, location || null, area_sqft || null, balance || null,
-      weight_grams || null, purity || null, premium || null, sum_assured || null, policy_number || null,
-      purchase_date || null, notes || null
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        req.user.id, upperCategory, upperAssetType, name,
+        symbol || null, exchange || null, quantity || null, price || null,
+        principal || null, interest_rate || null, start_date || null, maturity_date || null, institution || null,
+        purchase_price || null, current_value || null, location || null, area_sqft || null, balance || null,
+        weight_grams || null, purity || null, premium || null, sum_assured || null, policy_number || null,
+        purchase_date || null, notes || null
+      ]
     );
 
-    const asset = db.prepare('SELECT * FROM assets WHERE id = ?').get(result.lastInsertRowid);
+    const asset = await db.get('SELECT * FROM assets WHERE id = ?', [result.lastInsertRowid]);
 
     res.status(201).json({ message: 'Asset created successfully', asset });
   } catch (error) {
@@ -216,10 +223,10 @@ router.post('/', (req, res) => {
 });
 
 // Update asset
-router.put('/:id', (req, res) => {
+router.put('/:id', async (req, res) => {
   try {
     // First check if asset belongs to user
-    const existing = db.prepare('SELECT id FROM assets WHERE id = ? AND user_id = ?').get(req.params.id, req.user.id);
+    const existing = await db.get('SELECT id FROM assets WHERE id = ? AND user_id = ?', [req.params.id, req.user.id]);
     if (!existing) {
       return res.status(404).json({ error: 'Asset not found' });
     }
@@ -232,8 +239,8 @@ router.put('/:id', (req, res) => {
       purchase_date, notes
     } = req.body;
 
-    db.prepare(`
-      UPDATE assets SET
+    await db.run(
+      `UPDATE assets SET
         category = COALESCE(?, category),
         asset_type = COALESCE(?, asset_type),
         name = COALESCE(?, name),
@@ -259,18 +266,19 @@ router.put('/:id', (req, res) => {
         purchase_date = ?,
         notes = ?,
         updated_at = CURRENT_TIMESTAMP
-      WHERE id = ? AND user_id = ?
-    `).run(
-      category?.toUpperCase(), asset_type?.toUpperCase(), name,
-      symbol, exchange, quantity, avg_buy_price,
-      principal, interest_rate, start_date, maturity_date, institution,
-      purchase_price, current_value, location, area_sqft, balance,
-      weight_grams, purity, premium, sum_assured, policy_number,
-      purchase_date, notes,
-      req.params.id, req.user.id
+      WHERE id = ? AND user_id = ?`,
+      [
+        category?.toUpperCase(), asset_type?.toUpperCase(), name,
+        symbol, exchange, quantity, avg_buy_price,
+        principal, interest_rate, start_date, maturity_date, institution,
+        purchase_price, current_value, location, area_sqft, balance,
+        weight_grams, purity, premium, sum_assured, policy_number,
+        purchase_date, notes,
+        req.params.id, req.user.id
+      ]
     );
 
-    const asset = db.prepare('SELECT * FROM assets WHERE id = ?').get(req.params.id);
+    const asset = await db.get('SELECT * FROM assets WHERE id = ?', [req.params.id]);
 
     res.json({ message: 'Asset updated successfully', asset });
   } catch (error) {
@@ -280,9 +288,9 @@ router.put('/:id', (req, res) => {
 });
 
 // Delete asset
-router.delete('/:id', (req, res) => {
+router.delete('/:id', async (req, res) => {
   try {
-    const result = db.prepare('DELETE FROM assets WHERE id = ? AND user_id = ?').run(req.params.id, req.user.id);
+    const result = await db.run('DELETE FROM assets WHERE id = ? AND user_id = ?', [req.params.id, req.user.id]);
 
     if (result.changes === 0) {
       return res.status(404).json({ error: 'Asset not found' });
@@ -296,9 +304,9 @@ router.delete('/:id', (req, res) => {
 });
 
 // Get portfolio summary
-router.get('/summary/overview', (req, res) => {
+router.get('/summary/overview', async (req, res) => {
   try {
-    const assets = db.prepare('SELECT * FROM assets WHERE user_id = ?').all(req.user.id);
+    const assets = await db.all('SELECT * FROM assets WHERE user_id = ?', [req.user.id]);
 
     // Calculate totals by category
     const summary = {

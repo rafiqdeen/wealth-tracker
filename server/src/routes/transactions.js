@@ -9,7 +9,7 @@ const router = express.Router();
 router.use(authenticateToken);
 
 // Create a new transaction (BUY or SELL)
-router.post('/', (req, res) => {
+router.post('/', async (req, res) => {
   try {
     const { asset_id, type, quantity, price, transaction_date, notes } = req.body;
 
@@ -33,66 +33,59 @@ router.post('/', (req, res) => {
     const transactionType = type.toUpperCase();
     const totalAmount = quantity * price;
 
-    // Use database transaction to prevent race conditions
-    const createTransaction = db.transaction(() => {
-      // Check asset exists and belongs to user (inside transaction for consistency)
-      const asset = db.prepare(`
-        SELECT * FROM assets WHERE id = ? AND user_id = ?
-      `).get(asset_id, req.user.id);
+    // Check asset exists and belongs to user
+    const asset = await db.get(
+      'SELECT * FROM assets WHERE id = ? AND user_id = ?',
+      [asset_id, req.user.id]
+    );
 
-      if (!asset) {
-        throw { statusCode: 404, message: 'Asset not found' };
+    if (!asset) {
+      return res.status(404).json({ error: 'Asset not found' });
+    }
+
+    // Validate asset is EQUITY category
+    if (asset.category !== 'EQUITY') {
+      return res.status(400).json({ error: 'Transactions are only supported for EQUITY assets' });
+    }
+
+    // For SELL, validate quantity doesn't exceed current holdings
+    if (transactionType === 'SELL') {
+      const currentQuantity = asset.quantity || 0;
+      if (quantity > currentQuantity) {
+        return res.status(400).json({
+          error: `Cannot sell ${quantity} units. Current holdings: ${currentQuantity}`
+        });
       }
+    }
 
-      // Validate asset is EQUITY category
-      if (asset.category !== 'EQUITY') {
-        throw { statusCode: 400, message: 'Transactions are only supported for EQUITY assets' };
-      }
+    // Calculate realized gain for SELL transactions (using weighted average)
+    let realizedGain = null;
+    if (transactionType === 'SELL') {
+      const avgBuyPrice = await getCurrentAvgBuyPrice(asset_id);
+      const costBasis = avgBuyPrice * quantity;
+      realizedGain = totalAmount - costBasis;
+    }
 
-      // For SELL, validate quantity doesn't exceed current holdings
-      if (transactionType === 'SELL') {
-        const currentQuantity = asset.quantity || 0;
-        if (quantity > currentQuantity) {
-          throw {
-            statusCode: 400,
-            message: `Cannot sell ${quantity} units. Current holdings: ${currentQuantity}`
-          };
-        }
-      }
-
-      // Calculate realized gain for SELL transactions (using weighted average)
-      let realizedGain = null;
-      if (transactionType === 'SELL') {
-        const avgBuyPrice = getCurrentAvgBuyPrice(asset_id);
-        const costBasis = avgBuyPrice * quantity;
-        realizedGain = totalAmount - costBasis;
-      }
-
-      // Insert transaction
-      const result = db.prepare(`
-        INSERT INTO transactions (
-          asset_id, user_id, type, quantity, price, total_amount,
-          transaction_date, notes, realized_gain
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `).run(
+    // Insert transaction
+    const result = await db.run(
+      `INSERT INTO transactions (
+        asset_id, user_id, type, quantity, price, total_amount,
+        transaction_date, notes, realized_gain
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
         asset_id, req.user.id, transactionType, quantity, price, totalAmount,
         transaction_date, notes || null, realizedGain
-      );
+      ]
+    );
 
-      // Recalculate asset values
-      recalculateAssetFromTransactions(asset_id);
+    // Recalculate asset values
+    await recalculateAssetFromTransactions(asset_id);
 
-      // Get the created transaction
-      const transaction = db.prepare('SELECT * FROM transactions WHERE id = ?').get(result.lastInsertRowid);
+    // Get the created transaction
+    const transaction = await db.get('SELECT * FROM transactions WHERE id = ?', [result.lastInsertRowid]);
 
-      // Get updated asset
-      const updatedAsset = db.prepare('SELECT * FROM assets WHERE id = ?').get(asset_id);
-
-      return { transaction, updatedAsset };
-    });
-
-    // Execute the transaction
-    const { transaction, updatedAsset } = createTransaction();
+    // Get updated asset
+    const updatedAsset = await db.get('SELECT * FROM assets WHERE id = ?', [asset_id]);
 
     res.status(201).json({
       message: `${transactionType} transaction recorded successfully`,
@@ -100,33 +93,31 @@ router.post('/', (req, res) => {
       asset: updatedAsset
     });
   } catch (error) {
-    // Handle custom errors from transaction
-    if (error.statusCode) {
-      return res.status(error.statusCode).json({ error: error.message });
-    }
     console.error('Error creating transaction:', error);
     res.status(500).json({ error: 'Failed to create transaction' });
   }
 });
 
 // Get all transactions for an asset
-router.get('/asset/:assetId', (req, res) => {
+router.get('/asset/:assetId', async (req, res) => {
   try {
     const { assetId } = req.params;
 
     // Verify asset belongs to user
-    const asset = db.prepare(`
-      SELECT * FROM assets WHERE id = ? AND user_id = ?
-    `).get(assetId, req.user.id);
+    const asset = await db.get(
+      'SELECT * FROM assets WHERE id = ? AND user_id = ?',
+      [assetId, req.user.id]
+    );
 
     if (!asset) {
       return res.status(404).json({ error: 'Asset not found' });
     }
 
     // Get all transactions
-    const transactions = db.prepare(`
-      SELECT * FROM transactions WHERE asset_id = ? ORDER BY transaction_date DESC, id DESC
-    `).all(assetId);
+    const transactions = await db.all(
+      'SELECT * FROM transactions WHERE asset_id = ? ORDER BY transaction_date DESC, id DESC',
+      [assetId]
+    );
 
     // Calculate summary
     let totalBought = 0;
@@ -163,14 +154,15 @@ router.get('/asset/:assetId', (req, res) => {
 });
 
 // Get single transaction
-router.get('/:id', (req, res) => {
+router.get('/:id', async (req, res) => {
   try {
-    const transaction = db.prepare(`
-      SELECT t.*, a.name as asset_name, a.symbol, a.category, a.asset_type
+    const transaction = await db.get(
+      `SELECT t.*, a.name as asset_name, a.symbol, a.category, a.asset_type
       FROM transactions t
       JOIN assets a ON t.asset_id = a.id
-      WHERE t.id = ? AND t.user_id = ?
-    `).get(req.params.id, req.user.id);
+      WHERE t.id = ? AND t.user_id = ?`,
+      [req.params.id, req.user.id]
+    );
 
     if (!transaction) {
       return res.status(404).json({ error: 'Transaction not found' });
@@ -184,14 +176,15 @@ router.get('/:id', (req, res) => {
 });
 
 // Update transaction
-router.put('/:id', (req, res) => {
+router.put('/:id', async (req, res) => {
   try {
     const { quantity, price, notes } = req.body;
 
     // Get transaction first to verify ownership
-    const transaction = db.prepare(`
-      SELECT * FROM transactions WHERE id = ? AND user_id = ?
-    `).get(req.params.id, req.user.id);
+    const transaction = await db.get(
+      'SELECT * FROM transactions WHERE id = ? AND user_id = ?',
+      [req.params.id, req.user.id]
+    );
 
     if (!transaction) {
       return res.status(404).json({ error: 'Transaction not found' });
@@ -228,31 +221,29 @@ router.put('/:id', (req, res) => {
     updates.push('total_amount = ?');
     values.push(newTotalAmount);
 
-    updates.push('updated_at = CURRENT_TIMESTAMP');
-
     // Add transaction id to values
     values.push(req.params.id);
 
     // Execute update
-    db.prepare(`
-      UPDATE transactions SET ${updates.join(', ')} WHERE id = ?
-    `).run(...values);
+    await db.run(
+      `UPDATE transactions SET ${updates.join(', ')} WHERE id = ?`,
+      values
+    );
 
     // Recalculate realized gain for SELL transactions
     if (transaction.type === 'SELL') {
-      const avgBuyPrice = getCurrentAvgBuyPrice(transaction.asset_id);
+      const avgBuyPrice = await getCurrentAvgBuyPrice(transaction.asset_id);
       const costBasis = avgBuyPrice * newQuantity;
       const realizedGain = newTotalAmount - costBasis;
 
-      db.prepare('UPDATE transactions SET realized_gain = ? WHERE id = ?')
-        .run(realizedGain, req.params.id);
+      await db.run('UPDATE transactions SET realized_gain = ? WHERE id = ?', [realizedGain, req.params.id]);
     }
 
     // Recalculate asset values
-    recalculateAssetFromTransactions(transaction.asset_id);
+    await recalculateAssetFromTransactions(transaction.asset_id);
 
     // Get updated transaction
-    const updatedTransaction = db.prepare('SELECT * FROM transactions WHERE id = ?').get(req.params.id);
+    const updatedTransaction = await db.get('SELECT * FROM transactions WHERE id = ?', [req.params.id]);
 
     res.json({
       message: 'Transaction updated successfully',
@@ -265,25 +256,26 @@ router.put('/:id', (req, res) => {
 });
 
 // Delete transaction
-router.delete('/:id', (req, res) => {
+router.delete('/:id', async (req, res) => {
   try {
     // Get transaction first to find the asset_id
-    const transaction = db.prepare(`
-      SELECT * FROM transactions WHERE id = ? AND user_id = ?
-    `).get(req.params.id, req.user.id);
+    const transaction = await db.get(
+      'SELECT * FROM transactions WHERE id = ? AND user_id = ?',
+      [req.params.id, req.user.id]
+    );
 
     if (!transaction) {
       return res.status(404).json({ error: 'Transaction not found' });
     }
 
     // Delete the transaction
-    db.prepare('DELETE FROM transactions WHERE id = ?').run(req.params.id);
+    await db.run('DELETE FROM transactions WHERE id = ?', [req.params.id]);
 
     // Recalculate asset values
-    const updatedAssetValues = recalculateAssetFromTransactions(transaction.asset_id);
+    await recalculateAssetFromTransactions(transaction.asset_id);
 
     // Get updated asset
-    const updatedAsset = db.prepare('SELECT * FROM assets WHERE id = ?').get(transaction.asset_id);
+    const updatedAsset = await db.get('SELECT * FROM assets WHERE id = ?', [transaction.asset_id]);
 
     res.json({
       message: 'Transaction deleted successfully',

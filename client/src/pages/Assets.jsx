@@ -888,12 +888,12 @@ export default function Assets() {
                       </span>
                     )}
                     {categoryDayChange !== 0 && (category === 'EQUITY_STOCKS' || category === 'EQUITY_MF') && (
-                      <span className={`text-[11px] px-1.5 py-0.5 rounded font-medium tabular-nums ${
+                      <span className={`text-[13px] px-2.5 py-1 rounded-lg font-semibold tabular-nums ${
                         categoryDayChange >= 0
-                          ? 'bg-[#059669]/15 text-[#059669]'
-                          : 'bg-[#DC2626]/15 text-[#DC2626]'
+                          ? 'bg-[#059669]/12 text-[#059669]'
+                          : 'bg-[#DC2626]/12 text-[#DC2626]'
                       }`}>
-                        {categoryDayChange >= 0 ? '↑' : '↓'}{Math.abs(categoryDayChange / categoryTotal * 100).toFixed(2)}%
+                        {categoryDayChange >= 0 ? '↑' : '↓'}{formatCompact(Math.abs(categoryDayChange))} ({Math.abs(categoryDayChange / categoryTotal * 100).toFixed(2)}%)
                       </span>
                     )}
                   </div>

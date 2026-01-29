@@ -9,9 +9,13 @@ build/
 .env
 .env.local
 .env.*.local
+server/.env
+client/.env
 
 # Database
 server/data/*.db
+server/*.db
+*.db
 
 # IDE
 .vscode/
@@ -27,3 +31,4 @@ npm-debug.log*
 
 # Cache
 .cache/
+.vercel

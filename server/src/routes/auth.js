@@ -9,7 +9,7 @@ const router = express.Router();
 // Simple in-memory rate limiter for auth endpoints
 const rateLimitStore = new Map();
 const RATE_LIMIT_WINDOW_MS = 15 * 60 * 1000; // 15 minutes
-const MAX_ATTEMPTS = 5; // 5 attempts per window
+const MAX_ATTEMPTS = process.env.NODE_ENV === 'production' ? 20 : 5; // More lenient in production (serverless resets anyway)
 
 // Clean up expired entries every 5 minutes (prevents memory leak)
 setInterval(() => {
@@ -64,7 +64,7 @@ router.post('/register', rateLimit, async (req, res) => {
     }
 
     // Check if user already exists
-    const existingUser = db.prepare('SELECT id FROM users WHERE email = ?').get(email);
+    const existingUser = await db.get('SELECT id FROM users WHERE email = ?', [email]);
     if (existingUser) {
       return res.status(409).json({ error: 'User with this email already exists' });
     }
@@ -74,9 +74,10 @@ router.post('/register', rateLimit, async (req, res) => {
     const passwordHash = await bcrypt.hash(password, saltRounds);
 
     // Create user
-    const result = db.prepare(
-      'INSERT INTO users (email, password_hash, name) VALUES (?, ?, ?)'
-    ).run(email, passwordHash, name);
+    const result = await db.run(
+      'INSERT INTO users (email, password_hash, name) VALUES (?, ?, ?)',
+      [email, passwordHash, name]
+    );
 
     // Generate token
     const token = jwt.sign(
@@ -106,7 +107,7 @@ router.post('/login', rateLimit, async (req, res) => {
     }
 
     // Find user
-    const user = db.prepare('SELECT * FROM users WHERE email = ?').get(email);
+    const user = await db.get('SELECT * FROM users WHERE email = ?', [email]);
     if (!user) {
       return res.status(401).json({ error: 'Invalid email or password' });
     }
@@ -136,12 +137,17 @@ router.post('/login', rateLimit, async (req, res) => {
 });
 
 // Get current user
-router.get('/me', authenticateToken, (req, res) => {
-  const user = db.prepare('SELECT id, email, name, created_at FROM users WHERE id = ?').get(req.user.id);
-  if (!user) {
-    return res.status(404).json({ error: 'User not found' });
+router.get('/me', authenticateToken, async (req, res) => {
+  try {
+    const user = await db.get('SELECT id, email, name, created_at FROM users WHERE id = ?', [req.user.id]);
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    res.json({ user });
+  } catch (error) {
+    console.error('Error fetching user:', error);
+    res.status(500).json({ error: 'Failed to fetch user' });
   }
-  res.json({ user });
 });
 
 export default router;
