@@ -419,6 +419,18 @@ export async function initializeDb() {
     )
   `);
 
+  // User settings table (for preferences like insights card visibility)
+  await db.exec(`
+    CREATE TABLE IF NOT EXISTS user_settings (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL UNIQUE,
+      insights_card_prefs TEXT DEFAULT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    )
+  `);
+
   // Price sync jobs table
   await db.exec(`
     CREATE TABLE IF NOT EXISTS price_sync_jobs (

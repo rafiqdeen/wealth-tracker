@@ -216,7 +216,7 @@ export default function QuickAddTransaction({ asset, onSuccess, onCancel }) {
         <div>
           <div className="flex items-center justify-between mb-1.5">
             <label className="text-[11px] font-medium text-[var(--label-tertiary)] uppercase tracking-wider">
-              Price / Unit
+              {asset.asset_type === 'MUTUAL_FUND' ? 'NAV Per Unit' : 'Price / Unit'}
             </label>
             <AnimatePresence>
               {touched.price && validation.errors.price && (
@@ -273,7 +273,7 @@ export default function QuickAddTransaction({ asset, onSuccess, onCancel }) {
           animate={{ color: accentColor }}
           transition={{ duration: 0.2 }}
         >
-          {isBuy ? '−' : '+'}{formatCurrency(totalAmount)}
+          {isBuy ? '+' : '−'}{formatCurrency(totalAmount)}
         </motion.p>
         <p className="text-[12px] text-[var(--label-tertiary)] mt-1 uppercase tracking-wide font-medium">
           Total Amount

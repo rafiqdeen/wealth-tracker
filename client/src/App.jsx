@@ -12,8 +12,7 @@ import Register from './pages/Register';
 import Dashboard from './pages/Dashboard';
 import Assets from './pages/Assets';
 import AddAsset from './pages/AddAsset';
-import EditAsset from './pages/EditAsset';
-import TransactionHistory from './pages/TransactionHistory';
+import ManageAsset from './pages/ManageAsset';
 import Goals from './pages/Goals';
 import Insights from './pages/Insights';
 import Reports from './pages/Reports';
@@ -89,8 +88,7 @@ function AnimatedRoutes() {
           <Route index element={<Dashboard />} />
           <Route path="assets" element={<Assets />} />
           <Route path="assets/add" element={<AddAsset />} />
-          <Route path="assets/edit/:id" element={<EditAsset />} />
-          <Route path="assets/:id/transactions" element={<TransactionHistory />} />
+          <Route path="assets/:id" element={<ManageAsset />} />
           <Route path="insights" element={<Insights />} />
           <Route path="goals" element={<Goals />} />
           <Route path="reports" element={<Reports />} />

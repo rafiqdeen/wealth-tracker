@@ -22,6 +22,7 @@ import portfolioRoutes from './routes/portfolio.js';
 import metalsRoutes from './routes/metals.js';
 import goalsRoutes from './routes/goals.js';
 import backupRoutes from './routes/backup.js';
+import settingsRoutes from './routes/settings.js';
 
 // Force IPv4 first to avoid IPv6 connection issues with external APIs
 dns.setDefaultResultOrder('ipv4first');
@@ -134,6 +135,7 @@ app.use('/api/portfolio', portfolioRoutes);
 app.use('/api/metals', metalsRoutes);
 app.use('/api/goals', dataLimiter, goalsRoutes); // Stricter rate limit for goal operations
 app.use('/api/backup', dataLimiter, backupRoutes);
+app.use('/api/settings', settingsRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {

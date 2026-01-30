@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { motion } from 'framer-motion';
+import { useState, useEffect, useCallback } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { assetService, ASSET_CONFIG } from '../services/assets';
 import { Card, PageSpinner } from '../components/apple';
 import { spring, staggerContainer, staggerItem } from '../utils/animations';
@@ -7,9 +7,37 @@ import { categoryColors } from '../constants/theme';
 import { formatCurrency, formatCompact } from '../utils/formatting';
 import { calculateFixedIncomeValue, getCompoundingFrequency, generateRecurringDepositSchedule } from '../utils/interest';
 import { usePrices } from '../context/PriceContext';
+import api from '../services/api';
 
 // Configuration constants
 const DEFAULT_MONTHLY_EXPENSE = 50000; // Used for emergency fund calculation
+
+// Card configuration for manage modal
+const CARD_CONFIG = [
+  { id: 'portfolio_performance', name: 'Portfolio Performance', description: 'Returns & key metrics' },
+  { id: 'asset_allocation', name: 'Asset Allocation', description: 'Category distribution' },
+  { id: 'risk_diversification', name: 'Risk & Diversification', description: 'Portfolio health score' },
+  { id: 'benchmark_comparison', name: 'Benchmark Comparison', description: 'Compare against indices' },
+  { id: 'liquidity_analysis', name: 'Liquidity Analysis', description: 'Emergency fund coverage' },
+  { id: 'holding_period', name: 'Holding Period Analysis', description: 'Investment timeline' },
+  { id: 'gainers_losers', name: 'Gainers & Losers', description: 'Best and worst performers' },
+  { id: 'asset_type_breakdown', name: 'Asset Type Breakdown', description: 'Detailed type distribution' },
+  { id: 'income_summary', name: 'Income Summary', description: 'Interest & passive income' },
+  { id: 'tax_implications', name: 'Tax Implications', description: 'Capital gains estimate' },
+];
+
+const DEFAULT_CARD_PREFS = {
+  portfolio_performance: true,
+  asset_allocation: true,
+  risk_diversification: true,
+  benchmark_comparison: true,
+  liquidity_analysis: true,
+  holding_period: true,
+  gainers_losers: true,
+  asset_type_breakdown: true,
+  income_summary: true,
+  tax_implications: true,
+};
 
 // Benchmark returns for comparison (approximate annual returns)
 // These are static approximations - ideally fetch real-time data
@@ -41,9 +69,88 @@ export default function Insights() {
   const [fixedIncomeCalcs, setFixedIncomeCalcs] = useState({});
   const [transactionDates, setTransactionDates] = useState({});
 
+  // Card preferences state
+  const [cardPrefs, setCardPrefs] = useState(() => {
+    // Initialize from localStorage cache
+    const cached = localStorage.getItem('insights_card_prefs');
+    return cached ? JSON.parse(cached) : DEFAULT_CARD_PREFS;
+  });
+  const [showManageModal, setShowManageModal] = useState(false);
+  const [savingPrefs, setSavingPrefs] = useState(false);
+
   useEffect(() => {
     fetchAssets();
+    fetchCardPreferences();
   }, []);
+
+  // Fetch card preferences from server
+  const fetchCardPreferences = async () => {
+    try {
+      const response = await api.get('/settings/insights-cards');
+      const prefs = response.data.prefs;
+      setCardPrefs(prefs);
+      localStorage.setItem('insights_card_prefs', JSON.stringify(prefs));
+    } catch (error) {
+      console.error('Failed to fetch card preferences:', error);
+      // Keep using cached/default preferences
+    }
+  };
+
+  // Save card preferences to server (background)
+  const saveCardPreferences = async (prefs) => {
+    setSavingPrefs(true);
+    try {
+      await api.put('/settings/insights-cards', { prefs });
+    } catch (error) {
+      console.error('Failed to save card preferences:', error);
+    } finally {
+      setSavingPrefs(false);
+    }
+  };
+
+  // Pending preferences for modal (only applied on Save)
+  const [pendingPrefs, setPendingPrefs] = useState(null);
+
+  // Open modal and initialize pending prefs
+  const openManageModal = () => {
+    setPendingPrefs({ ...cardPrefs });
+    setShowManageModal(true);
+  };
+
+  // Toggle a card in pending prefs
+  const togglePendingPref = (cardId) => {
+    setPendingPrefs(prev => ({
+      ...prev,
+      [cardId]: !prev[cardId]
+    }));
+  };
+
+  // Save preferences and refresh
+  const savePreferences = async () => {
+    setSavingPrefs(true);
+    try {
+      // Save to localStorage and server
+      localStorage.setItem('insights_card_prefs', JSON.stringify(pendingPrefs));
+      await saveCardPreferences(pendingPrefs);
+      setShowManageModal(false);
+      // Refresh page to apply changes
+      window.location.reload();
+    } catch (error) {
+      console.error('Failed to save preferences:', error);
+      setSavingPrefs(false);
+    }
+  };
+
+  // Cancel and close modal
+  const cancelPreferences = () => {
+    setPendingPrefs(null);
+    setShowManageModal(false);
+  };
+
+  // Check if a card is visible
+  const isCardVisible = useCallback((cardId) => {
+    return cardPrefs[cardId] !== false;
+  }, [cardPrefs]);
 
   const fetchAssets = async () => {
     try {
@@ -470,14 +577,26 @@ export default function Insights() {
         transition={spring.gentle}
         className="mb-6"
       >
-        <div className="flex items-center gap-3">
-          <h1 className="text-[22px] font-bold text-[var(--label-primary)]">Portfolio Insights</h1>
-          {showPriceLoading && (
-            <span className="inline-flex items-center gap-1.5 px-2 py-0.5 bg-[var(--fill-quaternary)] rounded-full text-[11px] text-[var(--label-tertiary)]">
-              <span className="w-1.5 h-1.5 bg-[var(--system-blue)] rounded-full animate-pulse" />
-              Fetching prices...
-            </span>
-          )}
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <h1 className="text-[22px] font-bold text-[var(--label-primary)]">Portfolio Insights</h1>
+            {showPriceLoading && (
+              <span className="inline-flex items-center gap-1.5 px-2 py-0.5 bg-[var(--fill-quaternary)] rounded-full text-[11px] text-[var(--label-tertiary)]">
+                <span className="w-1.5 h-1.5 bg-[var(--system-blue)] rounded-full animate-pulse" />
+                Fetching prices...
+              </span>
+            )}
+          </div>
+          <button
+            onClick={openManageModal}
+            className="flex items-center gap-1.5 px-2.5 py-1.5 text-[var(--label-secondary)] hover:text-[var(--label-primary)] hover:bg-[var(--fill-tertiary)] rounded-lg transition-all"
+          >
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.325.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 011.37.49l1.296 2.247a1.125 1.125 0 01-.26 1.431l-1.003.827c-.293.241-.438.613-.43.992a7.723 7.723 0 010 .255c-.008.378.137.75.43.991l1.004.827c.424.35.534.955.26 1.43l-1.298 2.247a1.125 1.125 0 01-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.47 6.47 0 01-.22.128c-.331.183-.581.495-.644.869l-.213 1.281c-.09.543-.56.94-1.11.94h-2.594c-.55 0-1.019-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 01-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 01-1.369-.49l-1.297-2.247a1.125 1.125 0 01.26-1.431l1.004-.827c.292-.24.437-.613.43-.991a6.932 6.932 0 010-.255c.007-.38-.138-.751-.43-.992l-1.004-.827a1.125 1.125 0 01-.26-1.43l1.297-2.247a1.125 1.125 0 011.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.086.22-.128.332-.183.582-.495.644-.869l.214-1.28Z" />
+              <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0Z" />
+            </svg>
+            <span className="text-[13px] font-medium">Manage</span>
+          </button>
         </div>
         <p className="text-[14px] text-[var(--label-secondary)] mt-1">
           Analyze your portfolio performance, risk, and allocation
@@ -525,6 +644,7 @@ export default function Insights() {
         className="grid grid-cols-1 md:grid-cols-2 gap-4"
       >
         {/* Portfolio Performance Card */}
+        {isCardVisible('portfolio_performance') && (
         <motion.div variants={staggerItem}>
           <Card padding="p-0" className="overflow-hidden h-full">
             <div className="px-4 py-3.5 bg-gradient-to-r from-[var(--chart-primary)]/10 via-[var(--chart-primary)]/5 to-transparent border-b border-[var(--separator-opaque)] rounded-t-2xl">
@@ -651,8 +771,10 @@ export default function Insights() {
             </div>
           </Card>
         </motion.div>
+        )}
 
         {/* Allocation Card - Clean Two-Column Layout */}
+        {isCardVisible('asset_allocation') && (
         <motion.div variants={staggerItem}>
           <Card padding="p-0" className="overflow-hidden h-full">
             {/* Header with Diversification Score */}
@@ -797,8 +919,10 @@ export default function Insights() {
             </div>
           </Card>
         </motion.div>
+        )}
 
         {/* Risk & Diversification Card */}
+        {isCardVisible('risk_diversification') && (
         <motion.div variants={staggerItem}>
           <Card padding="p-0" className="overflow-hidden h-full">
             <div className="px-4 py-3.5 bg-gradient-to-r from-[var(--system-purple)]/10 via-[var(--system-purple)]/5 to-transparent border-b border-[var(--separator-opaque)] rounded-t-2xl">
@@ -900,8 +1024,10 @@ export default function Insights() {
             </div>
           </Card>
         </motion.div>
+        )}
 
         {/* Benchmark Comparison Card */}
+        {isCardVisible('benchmark_comparison') && (
         <motion.div variants={staggerItem}>
           <Card padding="p-0" className="overflow-hidden h-full">
             <div className="px-4 py-3.5 bg-gradient-to-r from-[var(--system-orange)]/10 via-[var(--system-orange)]/5 to-transparent border-b border-[var(--separator-opaque)] rounded-t-2xl">
@@ -962,7 +1088,7 @@ export default function Insights() {
                             {/* Gradient overlay for depth */}
                             <div className="absolute inset-0 bg-gradient-to-t from-black/10 to-white/10 rounded-t-xl" />
                             {/* Tooltip on hover */}
-                            <div className="absolute -top-9 left-1/2 -translate-x-1/2 bg-[var(--bg-elevated)] border border-[var(--separator-opaque)] rounded-lg px-2.5 py-1 opacity-0 group-hover:opacity-100 transition-opacity shadow-lg whitespace-nowrap z-10">
+                            <div className="absolute -top-9 left-1/2 -translate-x-1/2 bg-[var(--bg-primary)] border border-[var(--separator-opaque)] rounded-lg px-2.5 py-1 opacity-0 group-hover:opacity-100 transition-opacity shadow-lg whitespace-nowrap z-10">
                               <p className="text-[11px] font-semibold text-[var(--label-primary)]">{b.name}: {b.value >= 0 ? '+' : ''}{b.value.toFixed(1)}%</p>
                             </div>
                           </motion.div>
@@ -1001,8 +1127,10 @@ export default function Insights() {
             </div>
           </Card>
         </motion.div>
+        )}
 
         {/* Liquidity Analysis Card */}
+        {isCardVisible('liquidity_analysis') && (
         <motion.div variants={staggerItem}>
           <Card padding="p-0" className="overflow-hidden h-full">
             <div className="px-4 py-3.5 bg-gradient-to-r from-[var(--system-blue)]/10 via-[var(--system-blue)]/5 to-transparent border-b border-[var(--separator-opaque)] rounded-t-2xl">
@@ -1170,8 +1298,10 @@ export default function Insights() {
             </div>
           </Card>
         </motion.div>
+        )}
 
         {/* Holding Period Analysis Card */}
+        {isCardVisible('holding_period') && (
         <motion.div variants={staggerItem}>
           <Card padding="p-0" className="overflow-hidden h-full">
             <div className="px-4 py-3.5 bg-gradient-to-r from-[var(--system-pink)]/10 via-[var(--system-pink)]/5 to-transparent border-b border-[var(--separator-opaque)] rounded-t-2xl">
@@ -1278,8 +1408,10 @@ export default function Insights() {
             </div>
           </Card>
         </motion.div>
+        )}
 
         {/* Gainers & Losers Card */}
+        {isCardVisible('gainers_losers') && (
         <motion.div variants={staggerItem}>
           <Card padding="p-0" className="overflow-hidden h-full">
             <div className="px-4 py-3.5 bg-gradient-to-r from-[#059669]/10 via-[#059669]/5 to-transparent border-b border-[var(--separator-opaque)] rounded-t-2xl">
@@ -1401,8 +1533,10 @@ export default function Insights() {
             </div>
           </Card>
         </motion.div>
+        )}
 
         {/* Asset Type Breakdown Card - Treemap Style */}
+        {isCardVisible('asset_type_breakdown') && (
         <motion.div variants={staggerItem}>
           <Card padding="p-0" className="overflow-hidden h-full">
             <div className="px-4 py-3.5 bg-gradient-to-r from-[#8B5CF6]/10 via-[#8B5CF6]/5 to-transparent border-b border-[var(--separator-opaque)] rounded-t-2xl">
@@ -1502,8 +1636,10 @@ export default function Insights() {
             </div>
           </Card>
         </motion.div>
+        )}
 
         {/* Income Summary Card */}
+        {isCardVisible('income_summary') && (
         <motion.div variants={staggerItem}>
           <Card padding="p-0" className="overflow-hidden h-full">
             <div className="px-4 py-3.5 bg-gradient-to-r from-[#10B981]/10 via-[#10B981]/5 to-transparent border-b border-[var(--separator-opaque)] rounded-t-2xl">
@@ -1588,8 +1724,10 @@ export default function Insights() {
             </div>
           </Card>
         </motion.div>
+        )}
 
         {/* Tax Implications Card */}
+        {isCardVisible('tax_implications') && (
         <motion.div variants={staggerItem}>
           <Card padding="p-0" className="overflow-hidden h-full">
             <div className="px-4 py-3.5 bg-gradient-to-r from-[#EF4444]/10 via-[#EF4444]/5 to-transparent border-b border-[var(--separator-opaque)] rounded-t-2xl">
@@ -1694,7 +1832,89 @@ export default function Insights() {
             </div>
           </Card>
         </motion.div>
+        )}
       </motion.div>
+
+      {/* Manage Cards Modal */}
+      <AnimatePresence>
+        {showManageModal && pendingPrefs && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
+            onClick={cancelPreferences}
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              transition={{ type: 'spring', duration: 0.3 }}
+              className="bg-[var(--bg-primary)] rounded-2xl shadow-xl w-full max-w-md max-h-[80vh] overflow-hidden"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Modal Header */}
+              <div className="px-5 py-4 border-b border-[var(--separator-opaque)]">
+                <h2 className="text-[17px] font-semibold text-[var(--label-primary)]">Manage Insight Cards</h2>
+                <p className="text-[13px] text-[var(--label-tertiary)] mt-0.5">Choose which cards to display</p>
+              </div>
+
+              {/* Modal Body */}
+              <div className="p-4 overflow-y-auto max-h-[50vh]">
+                <div className="space-y-1">
+                  {CARD_CONFIG.map((card) => (
+                    <label
+                      key={card.id}
+                      className="flex items-center gap-3 p-3 rounded-xl hover:bg-[var(--fill-quaternary)] transition-colors cursor-pointer"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={pendingPrefs[card.id] !== false}
+                        onChange={() => togglePendingPref(card.id)}
+                        className="w-5 h-5 rounded border-2 border-[var(--separator-opaque)] text-[var(--system-blue)] focus:ring-[var(--system-blue)] focus:ring-offset-0 cursor-pointer"
+                      />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-[14px] font-medium text-[var(--label-primary)]">{card.name}</p>
+                        <p className="text-[12px] text-[var(--label-tertiary)]">{card.description}</p>
+                      </div>
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              {/* Modal Footer */}
+              <div className="px-5 py-4 border-t border-[var(--separator-opaque)] flex items-center justify-between">
+                <p className="text-[12px] text-[var(--label-tertiary)]">
+                  {Object.values(pendingPrefs).filter(Boolean).length} of {CARD_CONFIG.length} cards selected
+                </p>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={cancelPreferences}
+                    disabled={savingPrefs}
+                    className="px-4 py-2 text-[13px] font-medium text-[var(--label-secondary)] hover:bg-[var(--fill-quaternary)] rounded-lg transition-colors disabled:opacity-50"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={savePreferences}
+                    disabled={savingPrefs}
+                    className="px-4 py-2 text-[13px] font-medium text-white bg-[var(--system-blue)] hover:bg-[var(--system-blue)]/90 rounded-lg transition-colors disabled:opacity-50 flex items-center gap-2"
+                  >
+                    {savingPrefs ? (
+                      <>
+                        <span className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                        Saving...
+                      </>
+                    ) : (
+                      'Save'
+                    )}
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

@@ -178,7 +178,7 @@ router.get('/:id', async (req, res) => {
 // Update transaction
 router.put('/:id', async (req, res) => {
   try {
-    const { quantity, price, notes } = req.body;
+    const { quantity, price, notes, transaction_date } = req.body;
 
     // Get transaction first to verify ownership
     const transaction = await db.get(
@@ -207,6 +207,11 @@ router.put('/:id', async (req, res) => {
     if (notes !== undefined) {
       updates.push('notes = ?');
       values.push(notes || null);
+    }
+
+    if (transaction_date !== undefined && transaction_date) {
+      updates.push('transaction_date = ?');
+      values.push(transaction_date);
     }
 
     if (updates.length === 0) {
