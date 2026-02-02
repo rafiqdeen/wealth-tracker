@@ -61,20 +61,20 @@ const corsOptions = {
 // Rate limiting - more relaxed in development
 const isDev = process.env.NODE_ENV !== 'production';
 
-// Global rate limiter: 1000 requests per 15 minutes in dev, 200 in production
+// Global rate limiter: 1000 requests per 15 minutes in dev, 500 in production
 const globalLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: isDev ? 1000 : 200,
+  max: isDev ? 1000 : 500,
   message: { error: 'Too many requests, please try again later' },
   standardHeaders: true,
   legacyHeaders: false,
   skip: () => isDev, // Skip rate limiting in development
 });
 
-// Data rate limiter: skip in dev, 100 per 15 minutes in production
+// Data rate limiter: skip in dev, 300 per 15 minutes in production
 const dataLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: isDev ? 500 : 100,
+  max: isDev ? 500 : 300,
   message: { error: 'Too many data requests, please try again later' },
   standardHeaders: true,
   legacyHeaders: false,
