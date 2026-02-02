@@ -16,10 +16,14 @@ const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
   console.log(`Database mode: ${process.env.DB_MODE || 'local'}`);
+  console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
 
-  // Start background price sync service (only for local development)
-  // On Vercel, this would need to be a separate cron job
-  if (process.env.DB_MODE !== 'turso') {
+  // Start background price sync service
+  // Runs on: localhost (local DB) and Serv00/persistent servers (Turso)
+  // Skipped on: Vercel (serverless - uses cron instead)
+  const isServerless = process.env.VERCEL === '1' || process.env.AWS_LAMBDA_FUNCTION_NAME;
+  if (!isServerless) {
+    console.log('Starting background price sync service...');
     startPriceSync();
   }
 });
