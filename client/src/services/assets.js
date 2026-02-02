@@ -45,6 +45,9 @@ export const priceService = {
 
   // Get market status (open/closed/holiday)
   getMarketStatus: () => api.get('/prices/market-status'),
+
+  // Trigger server-side price sync (refreshes cache from Yahoo Finance)
+  triggerSync: () => api.post('/prices/sync/trigger', {}, { timeout: 120000 }),
 };
 
 // Asset categories and types

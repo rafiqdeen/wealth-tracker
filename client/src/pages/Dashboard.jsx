@@ -274,6 +274,13 @@ export default function Dashboard() {
 
   const handleRefresh = async () => {
     setRefreshing(true);
+    try {
+      // Trigger server-side price sync first (refreshes prices in database)
+      await priceService.triggerSync();
+    } catch (error) {
+      console.error('Error syncing prices:', error);
+    }
+    // Then refresh client data
     await fetchData(true);
   };
 
