@@ -47,7 +47,7 @@
   "crons": [
     {
       "path": "/api/prices/sync/cron",
-      "schedule": "*/15 * * * *"
+      "schedule": "0 4 * * *"
     }
   ]
 }
