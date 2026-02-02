@@ -20,8 +20,10 @@ import { fetchPriceWithFallback } from './priceProviders.js';
 
 // Sync configuration
 const SYNC_INTERVAL_MARKET_OPEN = 15 * 60 * 1000;   // 15 minutes
-const SYNC_DELAY_BETWEEN_SYMBOLS = 3000;            // 3 seconds between API calls
+const SYNC_DELAY_BETWEEN_SYMBOLS = 3000;            // 3 seconds between API calls (background)
+const FAST_SYNC_DELAY = 300;                        // 300ms for manual sync
 const MAX_SYMBOLS_PER_SYNC = 50;                    // Limit symbols per sync job
+const VERCEL_TIMEOUT = 25000;                       // 25 seconds (Vercel limit is 30s)
 
 let syncTimer = null;
 let isRunning = false;
@@ -479,6 +481,75 @@ export function stopPriceSync() {
 }
 
 /**
+ * Fast sync for manual triggers (optimized for Vercel timeout)
+ * Fetches in parallel batches with minimal delay
+ */
+async function runFastSync() {
+  const symbols = await getSymbolsToSync();
+
+  if (symbols.length === 0) {
+    return { fetched: 0, failed: 0, total: 0 };
+  }
+
+  const startTime = Date.now();
+  let fetched = 0;
+  let failed = 0;
+
+  console.log(`[PriceSync] Fast sync starting for ${symbols.length} symbols`);
+
+  // Process in parallel batches of 3
+  const batchSize = 3;
+  for (let i = 0; i < symbols.length; i += batchSize) {
+    // Check timeout
+    if (Date.now() - startTime > VERCEL_TIMEOUT) {
+      console.log(`[PriceSync] Timeout reached after ${fetched + failed} symbols`);
+      break;
+    }
+
+    const batch = symbols.slice(i, i + batchSize);
+
+    const results = await Promise.allSettled(
+      batch.map(async (item) => {
+        try {
+          let priceData;
+          if (item.type === 'mf') {
+            priceData = await fetchMutualFundNAV(item.symbol);
+          } else {
+            priceData = await fetchPriceWithFallback(item.symbol, fetchYahooPrice);
+          }
+
+          if (priceData && priceData.price > 0) {
+            await cachePrice(item.symbol, priceData, priceData.source);
+            console.log(`[PriceSync] ${item.symbol} = ${priceData.price}`);
+            return { success: true };
+          }
+          return { success: false };
+        } catch (error) {
+          console.log(`[PriceSync] ${item.symbol} - error: ${error.message}`);
+          return { success: false };
+        }
+      })
+    );
+
+    results.forEach(r => {
+      if (r.status === 'fulfilled' && r.value.success) {
+        fetched++;
+      } else {
+        failed++;
+      }
+    });
+
+    // Small delay between batches
+    if (i + batchSize < symbols.length) {
+      await new Promise(resolve => setTimeout(resolve, FAST_SYNC_DELAY));
+    }
+  }
+
+  console.log(`[PriceSync] Fast sync completed: ${fetched} fetched, ${failed} failed`);
+  return { fetched, failed, total: symbols.length };
+}
+
+/**
  * Manually trigger a sync (for admin/testing)
  */
 export async function triggerManualSync() {
@@ -486,8 +557,13 @@ export async function triggerManualSync() {
     return { success: false, message: 'Sync already in progress' };
   }
 
-  await runSyncCycle();
-  return { success: true, message: 'Sync completed' };
+  isRunning = true;
+  try {
+    const result = await runFastSync();
+    return { success: true, message: 'Sync completed', ...result };
+  } finally {
+    isRunning = false;
+  }
 }
 
 /**
