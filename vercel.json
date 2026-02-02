@@ -43,5 +43,11 @@
   "env": {
     "DB_MODE": "turso",
     "NODE_ENV": "production"
-  }
+  },
+  "crons": [
+    {
+      "path": "/api/prices/sync/cron",
+      "schedule": "*/15 * * * *"
+    }
+  ]
 }

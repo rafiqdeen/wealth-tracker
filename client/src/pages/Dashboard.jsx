@@ -223,22 +223,40 @@ export default function Dashboard() {
           setAllTransactions(allTxns);
 
           // Calculate current portfolio value for equity
+          // Only use actual market prices, not fallback to avg_buy_price
           let totalCurrentValue = 0;
+          let hasAllPrices = true;
+
           equityAssets.forEach(asset => {
             if (asset.quantity && asset.symbol) {
               const priceKey = asset.asset_type === 'MUTUAL_FUND' ? asset.symbol : `${asset.symbol}.${asset.exchange === 'BSE' ? 'BO' : 'NS'}`;
-              const price = priceData[priceKey]?.price || asset.avg_buy_price || 0;
-              totalCurrentValue += asset.quantity * price;
+              const marketPrice = priceData[priceKey]?.price;
+
+              if (marketPrice) {
+                totalCurrentValue += asset.quantity * marketPrice;
+              } else {
+                // Mark that we don't have all prices
+                hasAllPrices = false;
+                // Still add to total using fallback for display purposes
+                totalCurrentValue += asset.quantity * (asset.avg_buy_price || 0);
+              }
             }
           });
 
-          // Calculate XIRR and store debug info
-          const xirr = calculateXIRRFromTransactions(allTxns, totalCurrentValue);
-          setPortfolioXIRR(isFinite(xirr) ? xirr : null);
+          // Only calculate XIRR if we have actual market prices
+          // Otherwise XIRR will be misleading
+          if (hasAllPrices && totalCurrentValue > 0) {
+            const xirr = calculateXIRRFromTransactions(allTxns, totalCurrentValue);
+            setPortfolioXIRR(isFinite(xirr) ? xirr : null);
 
-          // Store debug info for XIRR breakdown
-          const debug = debugXIRR(allTxns, totalCurrentValue);
-          setXirrDebugInfo(debug);
+            // Store debug info for XIRR breakdown
+            const debug = debugXIRR(allTxns, totalCurrentValue);
+            setXirrDebugInfo(debug);
+          } else {
+            // Don't show XIRR if prices aren't available
+            setPortfolioXIRR(null);
+            setXirrDebugInfo(null);
+          }
         } else {
           setPortfolioXIRR(null);
         }

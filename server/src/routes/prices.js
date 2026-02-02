@@ -693,72 +693,109 @@ router.post('/bulk', authenticateToken, async (req, res) => {
         console.log(`[Price] CACHE HIT: ${item.symbol} (age: ${Math.round((Date.now() - new Date(cached.fetched_at).getTime()) / 60000)}min)`);
       } else {
         symbolsToFetch.push(item);
+        // Pre-populate with stale cache so we have something to return if fetch fails/times out
+        if (cached) {
+          results[item.symbol] = { ...formatCachedPrice(cached), stale: true };
+        }
       }
     }
 
-    const cacheHits = Object.keys(results).length;
+    const cacheHits = Object.keys(results).length - symbolsToFetch.filter(s => cachedPrices[s.symbol]).length;
     const source = market.isOpen ? 'live' : 'close';
 
     console.log(`[Price] Market ${market.isOpen ? 'OPEN' : 'CLOSED'} - ${cacheHits} cache hits, ${symbolsToFetch.length} to fetch`);
 
-    // Second pass: fetch symbols that need fresh data
+    // Second pass: fetch symbols that need fresh data with timeout protection
     if (symbolsToFetch.length > 0) {
+      // Set a timeout for the entire fetch operation (15 seconds)
+      // This ensures we return cached data before Vercel's 30s timeout
+      const FETCH_TIMEOUT = 15000;
+      const fetchStartTime = Date.now();
+
       // Pre-fetch Yahoo session to avoid rate limits on crumb endpoint
-      await getYahooSession();
+      try {
+        await Promise.race([
+          getYahooSession(),
+          new Promise((_, reject) => setTimeout(() => reject(new Error('Session timeout')), 5000))
+        ]);
+      } catch (sessionErr) {
+        console.log(`[Price] Yahoo session fetch failed/timeout, proceeding with cached data`);
+        // Return cached data immediately if session fetch fails
+        return res.json({ prices: results, marketStatus: market, partial: true });
+      }
 
       let fetchedCount = 0;
       let failedCount = 0;
+      let timedOut = false;
 
-      await processBatch(symbolsToFetch, async (item) => {
-        const { symbol, type } = item;
-        try {
-          // Use fallback chain for stocks, MFAPI for mutual funds
-          const priceData = type === 'mf'
-            ? await fetchMutualFundNAV(symbol)
-            : await fetchPriceWithFallback(symbol, fetchYahooPrice);
+      // Wrap the entire fetch operation in a timeout
+      const fetchWithTimeout = async () => {
+        await processBatch(symbolsToFetch, async (item) => {
+          // Check if we've exceeded our time budget
+          if (Date.now() - fetchStartTime > FETCH_TIMEOUT) {
+            timedOut = true;
+            return; // Skip remaining fetches
+          }
 
-          if (priceData && priceData.price) {
-            fetchedCount++;
-            // Cache immediately with the actual source
-            const priceSource = priceData.source || source;
-            await cachePrice(symbol, priceData, priceSource);
-            console.log(`[Price] FETCHED: ${symbol} = ${priceData.price} (via ${priceSource})`);
-            results[symbol] = {
-              price: priceData.price,
-              previousClose: priceData.previousClose,
-              change: priceData.change || 0,
-              changePercent: priceData.changePercent || 0,
-              currency: priceData.currency || 'INR',
-              source: priceSource,
-              fetchedAt: new Date().toISOString()
-            };
-          } else {
-            failedCount++;
-            // Try to use stale cache as fallback
-            const staleCache = cachedPrices[symbol];
-            if (staleCache) {
-              console.log(`[Price] STALE FALLBACK: ${symbol} (all providers failed, using old cache)`);
-              results[symbol] = { ...formatCachedPrice(staleCache), source: 'stale' };
+          const { symbol, type } = item;
+          try {
+            // Use fallback chain for stocks, MFAPI for mutual funds
+            const priceData = type === 'mf'
+              ? await fetchMutualFundNAV(symbol)
+              : await fetchPriceWithFallback(symbol, fetchYahooPrice);
+
+            if (priceData && priceData.price) {
+              fetchedCount++;
+              // Cache immediately with the actual source
+              const priceSource = priceData.source || source;
+              await cachePrice(symbol, priceData, priceSource);
+              console.log(`[Price] FETCHED: ${symbol} = ${priceData.price} (via ${priceSource})`);
+              results[symbol] = {
+                price: priceData.price,
+                previousClose: priceData.previousClose,
+                change: priceData.change || 0,
+                changePercent: priceData.changePercent || 0,
+                currency: priceData.currency || 'INR',
+                source: priceSource,
+                fetchedAt: new Date().toISOString()
+              };
             } else {
-              console.log(`[Price] FAIL: ${symbol} - all providers failed and no cache`);
-              results[symbol] = { unavailable: true, reason: 'All providers failed, no cache' };
+              failedCount++;
+              // Stale cache was already pre-populated, just log
+              if (!results[symbol] || results[symbol].stale) {
+                console.log(`[Price] STALE FALLBACK: ${symbol} (all providers failed)`);
+              }
             }
-          }
-        } catch (err) {
-          failedCount++;
-          // Try to use stale cache as fallback
-          const staleCache = cachedPrices[symbol];
-          if (staleCache) {
+          } catch (err) {
+            failedCount++;
+            // Stale cache was already pre-populated, just log
             console.log(`[Price] STALE FALLBACK: ${symbol} (error: ${err.message})`);
-            results[symbol] = { ...formatCachedPrice(staleCache), source: 'stale' };
-          } else {
-            console.error(`[Price] FAIL: ${symbol} - ${err.message}`);
-            results[symbol] = { unavailable: true, reason: 'Fetch error' };
           }
-        }
-      }, 1, 3000); // Sequential requests with 3s delay to avoid rate limiting
+        }, 3, 500); // Concurrency of 3, 500ms delay between batches (faster!)
+      };
 
-      console.log(`[Price] Fetch complete: ${fetchedCount} fetched, ${failedCount} failed, ${cacheHits} from cache`);
+      // Race between fetch and timeout
+      await Promise.race([
+        fetchWithTimeout(),
+        new Promise(resolve => setTimeout(() => {
+          timedOut = true;
+          resolve();
+        }, FETCH_TIMEOUT))
+      ]);
+
+      if (timedOut) {
+        console.log(`[Price] Timeout reached after ${Date.now() - fetchStartTime}ms, returning cached data`);
+      }
+
+      console.log(`[Price] Fetch complete: ${fetchedCount} fetched, ${failedCount} failed, ${cacheHits} from cache${timedOut ? ' (timed out)' : ''}`);
+    }
+
+    // Remove 'stale' flag from results before returning (it was just for internal tracking)
+    for (const symbol of Object.keys(results)) {
+      if (results[symbol].stale) {
+        delete results[symbol].stale;
+        results[symbol].source = 'cache';
+      }
     }
 
     console.log(`[Price] Returning ${Object.keys(results).length} prices`);
@@ -841,6 +878,35 @@ router.get('/sync/jobs', authenticateToken, (req, res) => {
   } catch (error) {
     console.error('Error getting sync jobs:', error);
     res.status(500).json({ error: 'Failed to get sync jobs' });
+  }
+});
+
+// Cron endpoint for Vercel scheduled price sync
+// Protected by CRON_SECRET environment variable instead of user auth
+router.get('/sync/cron', async (req, res) => {
+  try {
+    // Verify cron secret from Vercel
+    const authHeader = req.headers.authorization;
+    const cronSecret = process.env.CRON_SECRET;
+
+    if (!cronSecret) {
+      console.log('[Cron] CRON_SECRET not configured');
+      return res.status(500).json({ error: 'Cron not configured' });
+    }
+
+    if (authHeader !== `Bearer ${cronSecret}`) {
+      console.log('[Cron] Unauthorized cron request');
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+
+    console.log('[Cron] Starting scheduled price sync...');
+    const result = await triggerManualSync();
+    console.log('[Cron] Price sync completed:', result);
+
+    res.json({ success: true, ...result });
+  } catch (error) {
+    console.error('[Cron] Error in scheduled sync:', error);
+    res.status(500).json({ error: 'Cron sync failed' });
   }
 });
 
