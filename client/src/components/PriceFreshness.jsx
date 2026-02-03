@@ -154,6 +154,9 @@ export function CombinedFreshnessBadge({ lastUpdated, source, marketStatus, clas
   // Determine market status label
   const marketLabel = marketStatus?.isOpen ? 'Live' : (marketStatus?.reason || 'Closed');
 
+  // Don't show duplicate labels (e.g., "Live · Live")
+  const showMarketLabel = sourceLabel !== marketLabel;
+
   return (
     <span
       className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-medium whitespace-nowrap ${className}`}
@@ -172,8 +175,12 @@ export function CombinedFreshnessBadge({ lastUpdated, source, marketStatus, clas
       <span style={{ color: freshness.color, fontWeight: 600 }}>{relativeTime}</span>
       <span style={{ color: 'var(--label-quaternary)' }}>·</span>
       <span style={{ color: 'var(--label-tertiary)' }}>{sourceLabel}</span>
-      <span style={{ color: 'var(--label-quaternary)' }}>·</span>
-      <span style={{ color: 'var(--label-tertiary)' }}>{marketLabel}</span>
+      {showMarketLabel && (
+        <>
+          <span style={{ color: 'var(--label-quaternary)' }}>·</span>
+          <span style={{ color: 'var(--label-tertiary)' }}>{marketLabel}</span>
+        </>
+      )}
     </span>
   );
 }

@@ -24,6 +24,9 @@ export const assetService = {
 
   // Get transactions for an asset
   getTransactions: (assetId) => api.get(`/transactions/asset/${assetId}`),
+
+  // Recalculate all equity assets from transactions
+  recalculate: () => api.post('/assets/recalculate'),
 };
 
 export const priceService = {
@@ -48,7 +51,15 @@ export const priceService = {
 
   // Trigger server-side price sync (refreshes cache from Yahoo Finance)
   triggerSync: () => api.post('/prices/sync/trigger', {}, { timeout: 120000 }),
+
+  // Get historical price data for charts
+  getHistorical: (symbol, range = '1mo', type = 'stock') =>
+    api.get(`/prices/historical/${encodeURIComponent(symbol)}?range=${range}&type=${type}`),
+
+  // Get company info (sector, industry)
+  getCompanyInfo: (symbol) => api.get(`/prices/company-info/${encodeURIComponent(symbol)}`),
 };
+
 
 // Asset categories and types
 export const ASSET_CONFIG = {

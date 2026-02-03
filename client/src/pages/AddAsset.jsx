@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { assetService, ASSET_CONFIG } from '../services/assets';
+import { assetService, ASSET_CONFIG, priceService } from '../services/assets';
 import { Card, Button } from '../components/apple';
 import { spring } from '../utils/animations';
 import { categoryColors, CategoryIcon } from '../constants/theme';
@@ -209,6 +209,7 @@ const getInitialFormData = () => ({
   tenure_months: '',
   monthly_deposit: '',
   pran_number: '',
+  sector: '', // Auto-fetched for stocks
   // New fields
   tags: [],
   goal: '',
@@ -970,7 +971,7 @@ export default function AddAsset() {
                 value={formData.name}
                 assetType={asset_type}
                 onChange={(value) => setFormData(prev => ({ ...prev, name: value }))}
-                onSelect={(item) => {
+                onSelect={async (item) => {
                   const cleanSymbol = item.symbol.replace(/\.(NS|BO)$/, '');
                   const exchange = item.symbol.endsWith('.NS') ? 'NSE' : item.symbol.endsWith('.BO') ? 'BSE' : item.exchange;
                   setFormData(prev => ({
@@ -979,6 +980,19 @@ export default function AddAsset() {
                     symbol: asset_type === 'MUTUAL_FUND' ? item.symbol : cleanSymbol,
                     exchange: exchange || prev.exchange
                   }));
+
+                  // Auto-fetch sector for stocks (not MF)
+                  if (asset_type !== 'MUTUAL_FUND' && item.symbol) {
+                    try {
+                      const symbolKey = item.symbol.includes('.') ? item.symbol : `${cleanSymbol}.${exchange === 'BSE' ? 'BO' : 'NS'}`;
+                      const response = await priceService.getCompanyInfo(symbolKey);
+                      if (response.data?.sector) {
+                        setFormData(prev => ({ ...prev, sector: response.data.sector }));
+                      }
+                    } catch (error) {
+                      console.log('Could not fetch sector info:', error.message);
+                    }
+                  }
                 }}
                 placeholder={asset_type === 'MUTUAL_FUND' ? 'Search mutual fund...' : 'Search stock...'}
               />

@@ -517,11 +517,13 @@ router.get('/search/stocks', authenticateToken, async (req, res) => {
       return res.status(400).json({ error: 'Search query must be at least 3 characters' });
     }
 
-    const url = `https://query1.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(q)}&quotesCount=15&newsCount=0&listsCount=0&enableFuzzyQuery=false&quotesQueryId=tss_match_phrase_query`;
+    // Use region=IN to prioritize Indian stocks in results
+    const url = `https://query1.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(q)}&quotesCount=25&newsCount=0&listsCount=0&region=IN&lang=en-IN&enableFuzzyQuery=true`;
 
     const response = await fetch(url, {
       headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+        'User-Agent': getRandomUserAgent(),
+        'Accept-Language': 'en-IN,en;q=0.9'
       }
     });
 
@@ -535,12 +537,14 @@ router.get('/search/stocks', authenticateToken, async (req, res) => {
     const stocks = (data.quotes || [])
       .filter(q => q.quoteType === 'EQUITY' && (q.exchange === 'NSI' || q.exchange === 'BSE' || q.symbol?.endsWith('.NS') || q.symbol?.endsWith('.BO')))
       .map(q => ({
-        symbol: q.symbol,
+        symbol: q.symbol?.replace('.NS', '').replace('.BO', ''),
         name: q.longname || q.shortname,
         exchange: q.symbol?.endsWith('.NS') ? 'NSE' : 'BSE',
-        type: 'STOCK'
+        suffix: q.symbol?.endsWith('.NS') ? 'NS' : 'BO',
+        type: 'STOCK',
+        sector: q.sector
       }))
-      .slice(0, 10);
+      .slice(0, 15);
 
     res.json({ stocks });
   } catch (error) {
@@ -907,6 +911,215 @@ router.get('/sync/cron', async (req, res) => {
   } catch (error) {
     console.error('[Cron] Error in scheduled sync:', error);
     res.status(500).json({ error: 'Cron sync failed' });
+  }
+});
+
+// Get historical price data for charts
+router.get('/historical/:symbol', authenticateToken, async (req, res) => {
+  try {
+    const { symbol } = req.params;
+    const { range = '1mo', type = 'stock' } = req.query;
+
+    // Map range to Yahoo Finance intervals
+    const rangeMap = {
+      '1mo': { range: '1mo', interval: '1d' },
+      '3mo': { range: '3mo', interval: '1d' },
+      '6mo': { range: '6mo', interval: '1d' },
+      '1y': { range: '1y', interval: '1wk' },
+      '5y': { range: '5y', interval: '1mo' },
+    };
+
+    const params = rangeMap[range] || rangeMap['1mo'];
+
+    if (type === 'mf') {
+      // Mutual Fund - use MFAPI
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 10000);
+
+      try {
+        const response = await fetch(`https://api.mfapi.in/mf/${symbol}`, {
+          signal: controller.signal
+        });
+        clearTimeout(timeoutId);
+
+        if (!response.ok) {
+          throw new Error(`MFAPI error: ${response.status}`);
+        }
+
+        const data = await response.json();
+        if (!data.data || data.data.length === 0) {
+          return res.status(404).json({ error: 'No historical data found' });
+        }
+
+        // Filter data based on range
+        const now = new Date();
+        const rangeMonths = { '1mo': 1, '3mo': 3, '6mo': 6, '1y': 12, '5y': 60 };
+        const months = rangeMonths[range] || 1;
+        const cutoffDate = new Date(now);
+        cutoffDate.setMonth(cutoffDate.getMonth() - months);
+
+        const historicalData = data.data
+          .map(item => {
+            const [day, month, year] = item.date.split('-');
+            const date = new Date(`${year}-${month}-${day}`);
+            return { date: date.toISOString().split('T')[0], close: parseFloat(item.nav) };
+          })
+          .filter(item => new Date(item.date) >= cutoffDate)
+          .reverse(); // Oldest first
+
+        res.json({ historical: historicalData, symbol, range });
+      } catch (error) {
+        clearTimeout(timeoutId);
+        throw error;
+      }
+    } else {
+      // Stock/ETF - use Yahoo Finance
+      const session = await getYahooSession();
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 15000);
+
+      try {
+        let url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?interval=${params.interval}&range=${params.range}`;
+        if (session?.crumb) {
+          url += `&crumb=${encodeURIComponent(session.crumb)}`;
+        }
+
+        const headers = {
+          'User-Agent': getRandomUserAgent(),
+          'Accept': 'application/json',
+        };
+        if (session?.cookie) {
+          headers['Cookie'] = session.cookie;
+        }
+
+        const response = await fetch(url, { signal: controller.signal, headers });
+        clearTimeout(timeoutId);
+
+        if (!response.ok) {
+          throw new Error(`Yahoo Finance error: ${response.status}`);
+        }
+
+        const data = await response.json();
+        const result = data.chart.result?.[0];
+
+        if (!result || !result.timestamp) {
+          return res.status(404).json({ error: 'No historical data found' });
+        }
+
+        const timestamps = result.timestamp;
+        const closes = result.indicators.quote[0].close;
+
+        const historicalData = timestamps.map((ts, i) => ({
+          date: new Date(ts * 1000).toISOString().split('T')[0],
+          close: closes[i],
+        })).filter(item => item.close !== null);
+
+        res.json({ historical: historicalData, symbol, range });
+      } catch (error) {
+        clearTimeout(timeoutId);
+        throw error;
+      }
+    }
+  } catch (error) {
+    console.error('Error fetching historical data:', error);
+    res.status(500).json({ error: 'Failed to fetch historical data' });
+  }
+});
+
+// Get company info (sector, industry) for a stock
+router.get('/company-info/:symbol', authenticateToken, async (req, res) => {
+  try {
+    const { symbol } = req.params;
+    const { exchange } = req.query;
+
+    // Helper function to fetch company info for a symbol
+    const fetchCompanyInfo = async (yahooSymbol) => {
+      const session = await getYahooSession();
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 10000);
+
+      try {
+        let url = `https://query1.finance.yahoo.com/v10/finance/quoteSummary/${encodeURIComponent(yahooSymbol)}?modules=assetProfile,summaryProfile`;
+        if (session?.crumb) {
+          url += `&crumb=${encodeURIComponent(session.crumb)}`;
+        }
+
+        const headers = {
+          'User-Agent': getRandomUserAgent(),
+          'Accept': 'application/json',
+        };
+        if (session?.cookie) {
+          headers['Cookie'] = session.cookie;
+        }
+
+        const response = await fetch(url, { signal: controller.signal, headers });
+        clearTimeout(timeoutId);
+
+        if (!response.ok) {
+          return null;
+        }
+
+        const data = await response.json();
+        return data.quoteSummary?.result?.[0]?.assetProfile;
+      } catch (error) {
+        clearTimeout(timeoutId);
+        return null;
+      }
+    };
+
+    // Determine which symbols to try
+    let symbolsToTry = [];
+
+    // If symbol already has exchange suffix, use it directly
+    if (symbol.includes('.')) {
+      symbolsToTry = [symbol];
+    } else if (exchange) {
+      // If exchange is provided, use it
+      const suffix = exchange === 'BSE' ? '.BO' : '.NS';
+      symbolsToTry = [`${symbol}${suffix}`];
+    } else {
+      // Try NSE first, then BSE for Indian stocks
+      symbolsToTry = [`${symbol}.NS`, `${symbol}.BO`];
+    }
+
+    let assetProfile = null;
+    for (const trySymbol of symbolsToTry) {
+      assetProfile = await fetchCompanyInfo(trySymbol);
+      if (assetProfile) break;
+    }
+
+    if (!assetProfile) {
+      return res.status(404).json({ error: 'Company info not found' });
+    }
+
+    // Map Yahoo sector to simplified sector
+    const sectorMap = {
+      'Technology': 'IT',
+      'Financial Services': 'Banking',
+      'Healthcare': 'Pharma',
+      'Consumer Defensive': 'FMCG',
+      'Consumer Cyclical': 'Consumer',
+      'Industrials': 'Industrial',
+      'Basic Materials': 'Materials',
+      'Energy': 'Energy',
+      'Utilities': 'Utilities',
+      'Communication Services': 'Telecom',
+      'Real Estate': 'Real Estate',
+    };
+
+    const sector = sectorMap[assetProfile.sector] || assetProfile.sector || 'Other';
+
+    res.json({
+      symbol,
+      sector,
+      industry: assetProfile.industry,
+      fullSector: assetProfile.sector,
+      website: assetProfile.website,
+      description: assetProfile.longBusinessSummary?.substring(0, 200),
+    });
+  } catch (error) {
+    console.error('Error fetching company info:', error);
+    res.status(500).json({ error: 'Failed to fetch company info' });
   }
 });
 

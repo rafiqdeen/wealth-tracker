@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { assetService, ASSET_CONFIG } from '../services/assets';
+import { assetService, priceService, ASSET_CONFIG } from '../services/assets';
 import { Card, PageSpinner } from '../components/apple';
 import { spring, staggerContainer, staggerItem } from '../utils/animations';
 import { categoryColors } from '../constants/theme';
@@ -16,6 +16,8 @@ const DEFAULT_MONTHLY_EXPENSE = 50000; // Used for emergency fund calculation
 const CARD_CONFIG = [
   { id: 'portfolio_performance', name: 'Portfolio Performance', description: 'Returns & key metrics' },
   { id: 'asset_allocation', name: 'Asset Allocation', description: 'Category distribution' },
+  { id: 'portfolio_heatmap', name: 'Portfolio Heatmap', description: 'Visual return distribution' },
+  { id: 'sector_allocation', name: 'Sector Allocation', description: 'Equity sector distribution' },
   { id: 'risk_diversification', name: 'Risk & Diversification', description: 'Portfolio health score' },
   { id: 'benchmark_comparison', name: 'Benchmark Comparison', description: 'Compare against indices' },
   { id: 'liquidity_analysis', name: 'Liquidity Analysis', description: 'Emergency fund coverage' },
@@ -29,6 +31,8 @@ const CARD_CONFIG = [
 const DEFAULT_CARD_PREFS = {
   portfolio_performance: true,
   asset_allocation: true,
+  portfolio_heatmap: true,
+  sector_allocation: true,
   risk_diversification: true,
   benchmark_comparison: true,
   liquidity_analysis: true,
@@ -77,6 +81,45 @@ export default function Insights() {
   });
   const [showManageModal, setShowManageModal] = useState(false);
   const [savingPrefs, setSavingPrefs] = useState(false);
+  const [fetchingSectors, setFetchingSectors] = useState(false);
+
+  // Fetch sectors for all equity assets without sector data
+  const fetchSectorsForAssets = async () => {
+    const equityWithoutSector = assets.filter(
+      a => a.category === 'EQUITY' && !a.sector && a.symbol && a.asset_type !== 'MUTUAL_FUND'
+    );
+
+    if (equityWithoutSector.length === 0) return;
+
+    setFetchingSectors(true);
+
+    // First, recalculate all equity assets to ensure quantity/avg_buy_price are correct
+    try {
+      await assetService.recalculate();
+    } catch (error) {
+      console.error('Failed to recalculate assets:', error);
+    }
+
+    let updated = 0;
+
+    for (const asset of equityWithoutSector) {
+      try {
+        const response = await priceService.getCompanyInfo(asset.symbol);
+        const sector = response.data?.sector;
+        if (sector) {
+          await assetService.update(asset.id, { sector });
+          updated++;
+        }
+      } catch (error) {
+        console.error(`Failed to fetch sector for ${asset.symbol}:`, error);
+      }
+    }
+
+    setFetchingSectors(false);
+
+    // Always refresh assets to show recalculated values and updated sectors
+    await fetchAssets();
+  };
 
   useEffect(() => {
     fetchAssets();
@@ -916,6 +959,351 @@ export default function Insights() {
                   <p className="text-[13px] text-[var(--label-tertiary)]">No allocation data</p>
                 </div>
               )}
+            </div>
+          </Card>
+        </motion.div>
+        )}
+
+        {/* Portfolio Heatmap Card */}
+        {isCardVisible('portfolio_heatmap') && (
+        <motion.div variants={staggerItem}>
+          <Card padding="p-0" className="overflow-hidden h-full">
+            <div className="px-4 py-3.5 bg-gradient-to-r from-[#F97316]/10 via-[#F97316]/5 to-transparent border-b border-[var(--separator-opaque)] rounded-t-2xl">
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 rounded-xl bg-[#F97316] flex items-center justify-center shadow-sm">
+                  <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6A2.25 2.25 0 016 3.75h2.25A2.25 2.25 0 0110.5 6v2.25a2.25 2.25 0 01-2.25 2.25H6a2.25 2.25 0 01-2.25-2.25V6zM3.75 15.75A2.25 2.25 0 016 13.5h2.25a2.25 2.25 0 012.25 2.25V18a2.25 2.25 0 01-2.25 2.25H6A2.25 2.25 0 013.75 18v-2.25zM13.5 6a2.25 2.25 0 012.25-2.25H18A2.25 2.25 0 0120.25 6v2.25A2.25 2.25 0 0118 10.5h-2.25a2.25 2.25 0 01-2.25-2.25V6zM13.5 15.75a2.25 2.25 0 012.25-2.25H18a2.25 2.25 0 012.25 2.25V18A2.25 2.25 0 0118 20.25h-2.25A2.25 2.25 0 0113.5 18v-2.25z" />
+                  </svg>
+                </div>
+                <div>
+                  <h3 className="text-[14px] font-semibold text-[var(--label-primary)]">Portfolio Heatmap</h3>
+                  <p className="text-[11px] text-[var(--label-tertiary)]">Returns by asset size</p>
+                </div>
+              </div>
+            </div>
+            <div className="p-4">
+              {assetsWithReturns.length > 0 ? (
+                <>
+                  {/* Treemap Grid */}
+                  <div className="grid gap-1.5" style={{
+                    gridTemplateColumns: 'repeat(auto-fill, minmax(80px, 1fr))',
+                    gridAutoRows: 'minmax(50px, auto)'
+                  }}>
+                    {assetsWithReturns
+                      .sort((a, b) => getAssetValue(b.asset) - getAssetValue(a.asset))
+                      .slice(0, 12)
+                      .map((item, index) => {
+                        const value = getAssetValue(item.asset);
+                        const returnPct = item.returnPercent;
+                        // Color based on return percentage
+                        const bgColor = returnPct > 20 ? '#059669' :
+                                       returnPct > 5 ? '#10B981' :
+                                       returnPct > 0 ? '#34D399' :
+                                       returnPct > -5 ? '#FCA5A5' :
+                                       returnPct > -20 ? '#F87171' : '#DC2626';
+                        // Size based on value (larger assets get more grid space)
+                        const gridSpan = index < 2 ? 2 : index < 5 ? 1 : 1;
+                        const rowSpan = index < 2 ? 2 : 1;
+
+                        return (
+                          <motion.div
+                            key={item.asset.id}
+                            initial={{ opacity: 0, scale: 0.9 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            transition={{ delay: index * 0.05 }}
+                            className="relative rounded-lg p-2 flex flex-col justify-between cursor-pointer hover:opacity-90 transition-opacity group"
+                            style={{
+                              backgroundColor: bgColor,
+                              gridColumn: `span ${gridSpan}`,
+                              gridRow: `span ${rowSpan}`,
+                              minHeight: rowSpan > 1 ? '100px' : '50px'
+                            }}
+                            title={`${item.asset.name}\n${formatCurrency(value)}\n${returnPct >= 0 ? '+' : ''}${returnPct.toFixed(2)}%`}
+                          >
+                            <p className="text-[10px] font-semibold text-white truncate leading-tight">
+                              {item.asset.symbol || item.asset.name.substring(0, 8)}
+                            </p>
+                            <p className="text-[12px] font-bold text-white/90">
+                              {returnPct >= 0 ? '+' : ''}{returnPct.toFixed(1)}%
+                            </p>
+                            {/* Hover tooltip */}
+                            <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-[var(--bg-primary)] rounded shadow-lg text-[11px] text-[var(--label-primary)] whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10">
+                              <p className="font-semibold">{item.asset.name}</p>
+                              <p className="text-[var(--label-secondary)]">{formatCompact(value)}</p>
+                            </div>
+                          </motion.div>
+                        );
+                      })}
+                  </div>
+                  {/* Legend */}
+                  <div className="flex items-center justify-center gap-3 mt-4 pt-3 border-t border-[var(--separator-opaque)]">
+                    <div className="flex items-center gap-1.5">
+                      <div className="w-3 h-3 rounded bg-[#059669]" />
+                      <span className="text-[10px] text-[var(--label-tertiary)]">{'>'}20%</span>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <div className="w-3 h-3 rounded bg-[#10B981]" />
+                      <span className="text-[10px] text-[var(--label-tertiary)]">5-20%</span>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <div className="w-3 h-3 rounded bg-[#34D399]" />
+                      <span className="text-[10px] text-[var(--label-tertiary)]">0-5%</span>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <div className="w-3 h-3 rounded bg-[#FCA5A5]" />
+                      <span className="text-[10px] text-[var(--label-tertiary)]">-5-0%</span>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <div className="w-3 h-3 rounded bg-[#DC2626]" />
+                      <span className="text-[10px] text-[var(--label-tertiary)]">{'<'}-20%</span>
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <div className="py-8 text-center">
+                  <p className="text-[13px] text-[var(--label-tertiary)]">Add assets to see heatmap</p>
+                </div>
+              )}
+            </div>
+          </Card>
+        </motion.div>
+        )}
+
+        {/* Sector Allocation Card */}
+        {isCardVisible('sector_allocation') && (
+        <motion.div variants={staggerItem}>
+          <Card padding="p-0" className="overflow-hidden h-full">
+            <div className="px-4 py-3.5 bg-gradient-to-r from-[#6366F1]/10 via-[#6366F1]/5 to-transparent border-b border-[var(--separator-opaque)] rounded-t-2xl">
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 rounded-xl bg-[#6366F1] flex items-center justify-center shadow-sm">
+                  <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 21h19.5m-18-18v18m10.5-18v18m6-13.5V21M6.75 6.75h.75m-.75 3h.75m-.75 3h.75m3-6h.75m-.75 3h.75m-.75 3h.75M6.75 21v-3.375c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21M3 3h12m-.75 4.5H21m-3.75 3.75h.008v.008h-.008v-.008zm0 3h.008v.008h-.008v-.008zm0 3h.008v.008h-.008v-.008z" />
+                  </svg>
+                </div>
+                <div>
+                  <h3 className="text-[14px] font-semibold text-[var(--label-primary)]">Sector Allocation</h3>
+                  <p className="text-[11px] text-[var(--label-tertiary)]">Equity sector distribution</p>
+                </div>
+              </div>
+            </div>
+            <div className="p-0">
+              {(() => {
+                // Calculate sector allocation from equity assets with sector data
+                const equityWithSector = assets.filter(a => a.category === 'EQUITY' && a.sector);
+                const equityWithoutSector = assets.filter(
+                  a => a.category === 'EQUITY' && !a.sector && a.symbol && a.asset_type !== 'MUTUAL_FUND'
+                );
+
+                if (equityWithSector.length === 0) {
+                  return (
+                    <div className="py-8 text-center">
+                      <p className="text-[13px] text-[var(--label-tertiary)]">No sector data available</p>
+                      <p className="text-[11px] text-[var(--label-quaternary)] mt-1">
+                        {equityWithoutSector.length > 0
+                          ? `${equityWithoutSector.length} stock${equityWithoutSector.length > 1 ? 's' : ''} missing sector data`
+                          : 'Add stocks to see sector breakdown'}
+                      </p>
+                      {equityWithoutSector.length > 0 && (
+                        <button
+                          onClick={fetchSectorsForAssets}
+                          disabled={fetchingSectors}
+                          className="mt-3 px-4 py-2 bg-[#6366F1] text-white text-[13px] font-medium rounded-lg hover:bg-[#5558E3] disabled:opacity-50 transition-colors"
+                        >
+                          {fetchingSectors ? (
+                            <span className="flex items-center justify-center gap-2">
+                              <svg className="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
+                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                              </svg>
+                              Fetching...
+                            </span>
+                          ) : (
+                            'Fetch Sector Data'
+                          )}
+                        </button>
+                      )}
+                    </div>
+                  );
+                }
+
+                const sectorTotals = equityWithSector.reduce((acc, asset) => {
+                  // Use current value, fallback to invested value if prices not loaded
+                  let value = getAssetValue(asset);
+                  if (!value || value === 0) {
+                    value = getInvestedValue(asset);
+                  }
+                  if (!acc[asset.sector]) {
+                    acc[asset.sector] = { value: 0, assets: [] };
+                  }
+                  acc[asset.sector].value += value || 0;
+                  acc[asset.sector].assets.push(asset);
+                  return acc;
+                }, {});
+
+                const totalSectorValue = Object.values(sectorTotals).reduce((sum, s) => sum + s.value, 0);
+
+                const sectorAllocation = Object.entries(sectorTotals)
+                  .map(([sector, data]) => ({
+                    sector,
+                    value: data.value,
+                    percent: totalSectorValue > 0 ? (data.value / totalSectorValue) * 100 : 0,
+                    count: data.assets.length,
+                  }))
+                  .sort((a, b) => b.value - a.value);
+
+                const sectorColors = {
+                  'IT': '#3B82F6',
+                  'Banking': '#10B981',
+                  'Pharma': '#EC4899',
+                  'FMCG': '#F59E0B',
+                  'Consumer': '#8B5CF6',
+                  'Industrial': '#6B7280',
+                  'Materials': '#78716C',
+                  'Energy': '#EF4444',
+                  'Utilities': '#06B6D4',
+                  'Telecom': '#14B8A6',
+                  'Real Estate': '#F97316',
+                  'Other': '#9CA3AF',
+                };
+
+                // If sectors exist but all values are 0, show recalculate button
+                if (totalSectorValue === 0) {
+                  const recalculateAndRefresh = async () => {
+                    setFetchingSectors(true);
+                    try {
+                      await assetService.recalculate();
+                      await fetchAssets();
+                    } catch (error) {
+                      console.error('Failed to recalculate:', error);
+                    }
+                    setFetchingSectors(false);
+                  };
+
+                  return (
+                    <div className="py-8 text-center">
+                      <p className="text-[13px] text-[var(--label-tertiary)]">Sector data loaded but values are missing</p>
+                      <p className="text-[11px] text-[var(--label-quaternary)] mt-1">
+                        Transaction data needs to be recalculated
+                      </p>
+                      <button
+                        onClick={recalculateAndRefresh}
+                        disabled={fetchingSectors}
+                        className="mt-3 px-4 py-2 bg-[#6366F1] text-white text-[13px] font-medium rounded-lg hover:bg-[#5558E3] disabled:opacity-50 transition-colors"
+                      >
+                        {fetchingSectors ? (
+                          <span className="flex items-center justify-center gap-2">
+                            <svg className="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
+                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                            </svg>
+                            Recalculating...
+                          </span>
+                        ) : (
+                          'Recalculate Values'
+                        )}
+                      </button>
+                    </div>
+                  );
+                }
+
+                return (
+                  <div className="flex">
+                    {/* Left Panel: Donut Chart */}
+                    <div className="w-[55%] p-4 border-r border-[var(--separator-opaque)]">
+                      <div className="flex justify-center mb-4">
+                        <div className="relative w-36 h-36">
+                          <svg className="w-36 h-36 -rotate-90" viewBox="0 0 100 100">
+                            {(() => {
+                              let cumulativePercent = 0;
+                              return sectorAllocation.map((sec, index) => {
+                                const circumference = 2 * Math.PI * 42;
+                                const strokeDasharray = `${(sec.percent / 100) * circumference} ${circumference}`;
+                                const strokeDashoffset = -((cumulativePercent / 100) * circumference);
+                                cumulativePercent += sec.percent;
+                                const color = sectorColors[sec.sector] || '#9CA3AF';
+                                return (
+                                  <motion.circle
+                                    key={sec.sector}
+                                    cx="50" cy="50" r="42"
+                                    fill="none"
+                                    stroke={color}
+                                    strokeWidth="8"
+                                    strokeDasharray={strokeDasharray}
+                                    strokeDashoffset={strokeDashoffset}
+                                    initial={{ opacity: 0 }}
+                                    animate={{ opacity: 1 }}
+                                    transition={{ duration: 0.5, delay: index * 0.1 }}
+                                  />
+                                );
+                              });
+                            })()}
+                          </svg>
+                          <div className="absolute inset-0 flex flex-col items-center justify-center">
+                            <span className="text-[18px] font-bold text-[var(--label-primary)] tabular-nums">{sectorAllocation.length}</span>
+                            <span className="text-[11px] text-[var(--label-tertiary)]">sectors</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Largest Sector */}
+                      <div className="p-3 bg-[var(--fill-quaternary)] rounded-xl">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2.5">
+                            <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ backgroundColor: `${sectorColors[sectorAllocation[0]?.sector] || '#9CA3AF'}20` }}>
+                              <div className="w-3 h-3 rounded-full" style={{ backgroundColor: sectorColors[sectorAllocation[0]?.sector] || '#9CA3AF' }} />
+                            </div>
+                            <div>
+                              <p className="text-[11px] text-[var(--label-tertiary)] font-semibold">Largest Sector</p>
+                              <p className="text-[14px] font-semibold text-[var(--label-primary)]">{sectorAllocation[0]?.sector}</p>
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            <p className="text-[18px] font-bold tabular-nums" style={{ color: sectorColors[sectorAllocation[0]?.sector] || '#9CA3AF' }}>
+                              {sectorAllocation[0]?.percent?.toFixed(0) || 0}%
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Right Panel: Sector List */}
+                    <div className="w-[45%] p-4 flex flex-col">
+                      <p className="text-[11px] text-[var(--label-tertiary)] font-semibold mb-3">Sectors</p>
+
+                      <div className="flex-1 space-y-2.5">
+                        {sectorAllocation.slice(0, 6).map((sec) => (
+                          <div key={sec.sector} className="flex items-center gap-2.5">
+                            <div className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: sectorColors[sec.sector] || '#9CA3AF' }} />
+                            <span className="flex-1 text-[13px] text-[var(--label-primary)] truncate">{sec.sector}</span>
+                            <span className="text-[12px] font-semibold text-[var(--label-secondary)] tabular-nums w-10 text-right">
+                              {sec.percent.toFixed(0)}%
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+
+                      {/* Bottom Summary */}
+                      <div className="pt-3 mt-auto border-t border-[var(--separator-opaque)]">
+                        <div className="flex items-center justify-between text-[12px]">
+                          <div className="flex items-center gap-2">
+                            <span className="text-[var(--label-tertiary)]">{equityWithSector.length} stocks</span>
+                            {equityWithoutSector.length > 0 && (
+                              <button
+                                onClick={fetchSectorsForAssets}
+                                disabled={fetchingSectors}
+                                className="text-[11px] text-[#6366F1] hover:underline disabled:opacity-50"
+                              >
+                                {fetchingSectors ? 'Fetching...' : `+${equityWithoutSector.length} more`}
+                              </button>
+                            )}
+                          </div>
+                          <span className="text-[var(--label-secondary)] font-semibold">{formatCompact(totalSectorValue)}</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
             </div>
           </Card>
         </motion.div>

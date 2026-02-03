@@ -8,22 +8,31 @@ import { useToast } from '../context/ToastContext';
 export default function QuickAddTransaction({ asset, onSuccess, onCancel }) {
   const toast = useToast();
   const quantityInputRef = useRef(null);
+  const amountInputRef = useRef(null);
   const [loading, setLoading] = useState(false);
-  const [touched, setTouched] = useState({ quantity: false, price: false });
+  const [touched, setTouched] = useState({ quantity: false, price: false, amount: false });
   const [formData, setFormData] = useState({
     type: 'BUY',
     quantity: '',
     price: '',
+    amount: '', // For fixed income
     date: new Date().toISOString().split('T')[0],
   });
 
-  // Auto-focus quantity input on mount
+  // Check if this is a fixed income asset
+  const isFixedIncome = asset.category === 'FIXED_INCOME';
+
+  // Auto-focus appropriate input on mount
   useEffect(() => {
     const timer = setTimeout(() => {
-      quantityInputRef.current?.focus();
+      if (isFixedIncome) {
+        amountInputRef.current?.focus();
+      } else {
+        quantityInputRef.current?.focus();
+      }
     }, 150);
     return () => clearTimeout(timer);
-  }, []);
+  }, [isFixedIncome]);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -37,24 +46,36 @@ export default function QuickAddTransaction({ asset, onSuccess, onCancel }) {
   // Validation logic
   const validation = useMemo(() => {
     const errors = {};
-    const quantity = parseFloat(formData.quantity);
-    const price = parseFloat(formData.price);
     const ownedQuantity = asset.quantity || 0;
 
-    // Quantity validation
-    if (formData.quantity === '') {
-      errors.quantity = 'Required';
-    } else if (isNaN(quantity) || quantity <= 0) {
-      errors.quantity = 'Must be greater than 0';
-    } else if (formData.type === 'SELL' && quantity > ownedQuantity) {
-      errors.quantity = `Max ${ownedQuantity} available`;
-    }
+    if (isFixedIncome) {
+      // Fixed income: just validate amount
+      const amount = parseFloat(formData.amount);
+      if (formData.amount === '') {
+        errors.amount = 'Required';
+      } else if (isNaN(amount) || amount <= 0) {
+        errors.amount = 'Must be greater than 0';
+      }
+    } else {
+      // Equity: validate quantity and price
+      const quantity = parseFloat(formData.quantity);
+      const price = parseFloat(formData.price);
 
-    // Price validation
-    if (formData.price === '') {
-      errors.price = 'Required';
-    } else if (isNaN(price) || price <= 0) {
-      errors.price = 'Must be greater than 0';
+      // Quantity validation
+      if (formData.quantity === '') {
+        errors.quantity = 'Required';
+      } else if (isNaN(quantity) || quantity <= 0) {
+        errors.quantity = 'Must be greater than 0';
+      } else if (formData.type === 'SELL' && quantity > ownedQuantity) {
+        errors.quantity = `Max ${ownedQuantity} available`;
+      }
+
+      // Price validation
+      if (formData.price === '') {
+        errors.price = 'Required';
+      } else if (isNaN(price) || price <= 0) {
+        errors.price = 'Must be greater than 0';
+      }
     }
 
     return {
@@ -62,33 +83,55 @@ export default function QuickAddTransaction({ asset, onSuccess, onCancel }) {
       isValid: Object.keys(errors).length === 0,
       ownedQuantity,
     };
-  }, [formData, asset.quantity]);
+  }, [formData, asset.quantity, isFixedIncome]);
 
-  const totalAmount = (parseFloat(formData.quantity) || 0) * (parseFloat(formData.price) || 0);
+  const totalAmount = isFixedIncome
+    ? (parseFloat(formData.amount) || 0)
+    : (parseFloat(formData.quantity) || 0) * (parseFloat(formData.price) || 0);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
 
     // Mark all fields as touched to show errors
-    setTouched({ quantity: true, price: true });
+    if (isFixedIncome) {
+      setTouched({ amount: true });
+    } else {
+      setTouched({ quantity: true, price: true });
+    }
 
     if (!validation.isValid) {
-      const firstError = validation.errors.quantity || validation.errors.price;
+      const firstError = validation.errors.amount || validation.errors.quantity || validation.errors.price;
       toast.error(firstError);
       return;
     }
 
     setLoading(true);
     try {
-      await transactionService.create({
-        asset_id: asset.id,
-        type: formData.type,
-        quantity: parseFloat(formData.quantity),
-        price: parseFloat(formData.price),
-        total_amount: totalAmount,
-        transaction_date: formData.date,
-      });
-      toast.success(`${formData.type === 'BUY' ? 'Buy' : 'Sell'} transaction recorded`);
+      if (isFixedIncome) {
+        // Fixed income: amount-based transaction
+        await transactionService.create({
+          asset_id: asset.id,
+          type: formData.type,
+          quantity: 1, // Fixed income uses quantity=1, amount in total_amount
+          price: parseFloat(formData.amount),
+          total_amount: parseFloat(formData.amount),
+          transaction_date: formData.date,
+        });
+      } else {
+        // Equity: quantity × price transaction
+        await transactionService.create({
+          asset_id: asset.id,
+          type: formData.type,
+          quantity: parseFloat(formData.quantity),
+          price: parseFloat(formData.price),
+          total_amount: totalAmount,
+          transaction_date: formData.date,
+        });
+      }
+      const actionLabel = isFixedIncome
+        ? (formData.type === 'BUY' ? 'Deposit' : 'Withdrawal')
+        : (formData.type === 'BUY' ? 'Buy' : 'Sell');
+      toast.success(`${actionLabel} transaction recorded`);
       onSuccess?.();
     } catch (error) {
       toast.error(error.response?.data?.error || 'Failed to add transaction');
@@ -109,6 +152,10 @@ export default function QuickAddTransaction({ asset, onSuccess, onCancel }) {
         : 'border-transparent focus:border-[var(--chart-primary)]/30 focus:ring-2 focus:ring-[var(--chart-primary)]/20'
     }`;
   };
+
+  // Get action labels based on asset type
+  const depositLabel = isFixedIncome ? 'Deposit' : 'Buy';
+  const withdrawLabel = isFixedIncome ? 'Withdraw' : 'Sell';
 
   return (
     <form onSubmit={handleSubmit} className="p-5">
@@ -142,7 +189,7 @@ export default function QuickAddTransaction({ asset, onSuccess, onCancel }) {
               isBuy ? 'text-white' : 'text-[var(--label-secondary)]'
             }`}
           >
-            Buy
+            {isFixedIncome ? 'Deposit' : 'Buy'}
           </button>
           <button
             type="button"
@@ -151,14 +198,14 @@ export default function QuickAddTransaction({ asset, onSuccess, onCancel }) {
               !isBuy ? 'text-white' : 'text-[var(--label-secondary)]'
             }`}
           >
-            Sell
+            {isFixedIncome ? 'Withdraw' : 'Sell'}
           </button>
         </div>
       </div>
 
-      {/* Available quantity hint for SELL */}
+      {/* Available quantity hint for SELL (equity only) */}
       <AnimatePresence>
-        {!isBuy && validation.ownedQuantity > 0 && (
+        {!isFixedIncome && !isBuy && validation.ownedQuantity > 0 && (
           <motion.div
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: 'auto' }}
@@ -180,70 +227,105 @@ export default function QuickAddTransaction({ asset, onSuccess, onCancel }) {
         )}
       </AnimatePresence>
 
-      {/* Quantity & Price Inputs */}
-      <div className="grid grid-cols-2 gap-3 mb-4">
-        <div>
+      {/* Fixed Income: Single Amount Input */}
+      {isFixedIncome ? (
+        <div className="mb-4">
           <div className="flex items-center justify-between mb-1.5">
             <label className="text-[11px] font-medium text-[var(--label-tertiary)] uppercase tracking-wider">
-              Quantity
+              Amount
             </label>
             <AnimatePresence>
-              {touched.quantity && validation.errors.quantity && (
+              {touched.amount && validation.errors.amount && (
                 <motion.span
                   initial={{ opacity: 0, x: 10 }}
                   animate={{ opacity: 1, x: 0 }}
                   exit={{ opacity: 0, x: 10 }}
                   className="text-[10px] font-medium text-[#DC2626]"
                 >
-                  {validation.errors.quantity}
+                  {validation.errors.amount}
                 </motion.span>
               )}
             </AnimatePresence>
           </div>
           <input
-            ref={quantityInputRef}
+            ref={amountInputRef}
             type="number"
-            name="quantity"
-            value={formData.quantity}
+            name="amount"
+            value={formData.amount}
             onChange={handleChange}
-            onBlur={() => handleBlur('quantity')}
-            step={asset.asset_type === 'MUTUAL_FUND' ? '0.001' : '1'}
-            min="0"
-            placeholder="0"
-            className={getInputClass('quantity')}
-          />
-        </div>
-        <div>
-          <div className="flex items-center justify-between mb-1.5">
-            <label className="text-[11px] font-medium text-[var(--label-tertiary)] uppercase tracking-wider">
-              {asset.asset_type === 'MUTUAL_FUND' ? 'NAV Per Unit' : 'Price / Unit'}
-            </label>
-            <AnimatePresence>
-              {touched.price && validation.errors.price && (
-                <motion.span
-                  initial={{ opacity: 0, x: 10 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  exit={{ opacity: 0, x: 10 }}
-                  className="text-[10px] font-medium text-[#DC2626]"
-                >
-                  {validation.errors.price}
-                </motion.span>
-              )}
-            </AnimatePresence>
-          </div>
-          <input
-            type="number"
-            name="price"
-            value={formData.price}
-            onChange={handleChange}
-            onBlur={() => handleBlur('price')}
+            onBlur={() => handleBlur('amount')}
             step="0.01"
             min="0"
             placeholder="0.00"
-            className={getInputClass('price')}
+            className={getInputClass('amount')}
           />
         </div>
-      </div>
+      ) : (
+        /* Equity: Quantity & Price Inputs */
+        <div className="grid grid-cols-2 gap-3 mb-4">
+          <div>
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="text-[11px] font-medium text-[var(--label-tertiary)] uppercase tracking-wider">
+                Quantity
+              </label>
+              <AnimatePresence>
+                {touched.quantity && validation.errors.quantity && (
+                  <motion.span
+                    initial={{ opacity: 0, x: 10 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: 10 }}
+                    className="text-[10px] font-medium text-[#DC2626]"
+                  >
+                    {validation.errors.quantity}
+                  </motion.span>
+                )}
+              </AnimatePresence>
+            </div>
+            <input
+              ref={quantityInputRef}
+              type="number"
+              name="quantity"
+              value={formData.quantity}
+              onChange={handleChange}
+              onBlur={() => handleBlur('quantity')}
+              step={asset.asset_type === 'MUTUAL_FUND' ? '0.001' : '1'}
+              min="0"
+              placeholder="0"
+              className={getInputClass('quantity')}
+            />
+          </div>
+          <div>
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="text-[11px] font-medium text-[var(--label-tertiary)] uppercase tracking-wider">
+                {asset.asset_type === 'MUTUAL_FUND' ? 'NAV Per Unit' : 'Price / Unit'}
+              </label>
+              <AnimatePresence>
+                {touched.price && validation.errors.price && (
+                  <motion.span
+                    initial={{ opacity: 0, x: 10 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: 10 }}
+                    className="text-[10px] font-medium text-[#DC2626]"
+                  >
+                    {validation.errors.price}
+                  </motion.span>
+                )}
+              </AnimatePresence>
+            </div>
+            <input
+              type="number"
+              name="price"
+              value={formData.price}
+              onChange={handleChange}
+              onBlur={() => handleBlur('price')}
+              step="0.01"
+              min="0"
+              placeholder="0.00"
+              className={getInputClass('price')}
+            />
+          </div>
+        </div>
+      )}
 
       {/* Date Input */}
       <div className="mb-5">
@@ -306,7 +388,9 @@ export default function QuickAddTransaction({ asset, onSuccess, onCancel }) {
               Recording...
             </span>
           ) : (
-            `Record ${isBuy ? 'Buy' : 'Sell'}`
+            isFixedIncome
+              ? `Record ${isBuy ? 'Deposit' : 'Withdrawal'}`
+              : `Record ${isBuy ? 'Buy' : 'Sell'}`
           )}
         </motion.button>
       </div>

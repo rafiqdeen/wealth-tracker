@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { assetService, ASSET_CONFIG } from '../services/assets';
 import { Card, SearchInput, AssetsSkeleton, Modal } from '../components/apple';
 import QuickAddTransaction from '../components/QuickAddTransaction';
+import AssetPriceChart from '../components/AssetPriceChart';
 import { spring, staggerContainer, staggerItem } from '../utils/animations';
 import { categoryColors } from '../constants/theme';
 import { formatCurrency, formatCompact } from '../utils/formatting';
@@ -16,7 +17,7 @@ export default function Assets() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const toast = useToast();
-  const { prices, loading: pricesLoading, fetchPrices } = usePrices();
+  const { prices, loading: pricesLoading, fetchPrices, refreshPrices, marketStatus, lastUpdated } = usePrices();
   const [assets, setAssets] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -38,6 +39,123 @@ export default function Assets() {
   const assetRefs = useRef({});
   const menuRef = useRef(null);
   const menuButtonRefs = useRef({}); // Track kebab button positions
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  // Auto-refresh state
+  const [autoRefreshEnabled, setAutoRefreshEnabled] = useState(() => {
+    return localStorage.getItem('autoRefresh_enabled') === 'true';
+  });
+  const [autoRefreshCountdown, setAutoRefreshCountdown] = useState(30 * 60); // 30 minutes in seconds
+  const autoRefreshIntervalRef = useRef(null);
+
+  // Handle manual price refresh
+  const handleRefreshPrices = async () => {
+    if (isRefreshing || pricesLoading) return;
+    setIsRefreshing(true);
+    try {
+      await refreshPrices(assets);
+      toast.success('Prices updated');
+      // Reset countdown after manual refresh
+      if (autoRefreshEnabled) {
+        setAutoRefreshCountdown(30 * 60);
+      }
+    } catch (error) {
+      toast.error('Failed to refresh prices');
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
+
+  // Toggle auto-refresh
+  const toggleAutoRefresh = () => {
+    const newValue = !autoRefreshEnabled;
+    setAutoRefreshEnabled(newValue);
+    localStorage.setItem('autoRefresh_enabled', newValue.toString());
+    if (newValue) {
+      setAutoRefreshCountdown(30 * 60);
+    }
+  };
+
+  // Auto-refresh effect
+  useEffect(() => {
+    // Clear existing interval
+    if (autoRefreshIntervalRef.current) {
+      clearInterval(autoRefreshIntervalRef.current);
+      autoRefreshIntervalRef.current = null;
+    }
+
+    // Only start interval if auto-refresh is enabled AND market is open
+    if (autoRefreshEnabled && marketStatus?.isOpen) {
+      autoRefreshIntervalRef.current = setInterval(() => {
+        setAutoRefreshCountdown(prev => {
+          if (prev <= 1) {
+            // Time to refresh
+            handleRefreshPrices();
+            return 30 * 60; // Reset to 30 minutes
+          }
+          return prev - 1;
+        });
+      }, 1000);
+    } else if (autoRefreshEnabled && !marketStatus?.isOpen) {
+      // Market closed, pause countdown but keep enabled
+      setAutoRefreshCountdown(30 * 60);
+    }
+
+    return () => {
+      if (autoRefreshIntervalRef.current) {
+        clearInterval(autoRefreshIntervalRef.current);
+      }
+    };
+  }, [autoRefreshEnabled, marketStatus?.isOpen, assets]);
+
+  // Format countdown for display
+  const formatCountdown = (seconds) => {
+    const mins = Math.floor(seconds / 60);
+    return `${mins}m`;
+  };
+
+  // Today's change filter - persisted in localStorage (default: stocks only)
+  // Options: 'stocks', 'mf', 'all'
+  const [todayFilter, setTodayFilter] = useState(() => {
+    const saved = localStorage.getItem('todayChangeFilter');
+    if (saved) {
+      // Migrate from old format if needed
+      try {
+        const parsed = JSON.parse(saved);
+        if (typeof parsed === 'object' && parsed !== null) {
+          // Old format: { stocks: true, mf: false }
+          if (parsed.stocks && parsed.mf) return 'all';
+          if (parsed.stocks) return 'stocks';
+          if (parsed.mf) return 'mf';
+          return 'stocks';
+        }
+        return parsed; // New format: string
+      } catch {
+        return 'stocks';
+      }
+    }
+    return 'stocks';
+  });
+  const [showTodayDropdown, setShowTodayDropdown] = useState(false);
+  const todayDropdownRef = useRef(null);
+
+  // Persist today filter to localStorage
+  useEffect(() => {
+    localStorage.setItem('todayChangeFilter', JSON.stringify(todayFilter));
+  }, [todayFilter]);
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (todayDropdownRef.current && !todayDropdownRef.current.contains(e.target)) {
+        setShowTodayDropdown(false);
+      }
+    };
+    if (showTodayDropdown) {
+      document.addEventListener('mousedown', handleClickOutside);
+      return () => document.removeEventListener('mousedown', handleClickOutside);
+    }
+  }, [showTodayDropdown]);
 
   // Handle highlight from search
   const highlightParam = searchParams.get('highlight');
@@ -96,8 +214,11 @@ export default function Assets() {
 
   const fetchAssets = async () => {
     try {
+      console.log('[Assets] Fetching assets...');
       const response = await assetService.getAll();
+      console.log('[Assets] Response:', response);
       const assetList = response.data.assets;
+      console.log('[Assets] Asset count:', assetList?.length);
       setAssets(assetList);
 
       const equityAssets = assetList.filter(a => a.category === 'EQUITY' && a.symbol);
@@ -338,25 +459,55 @@ export default function Assets() {
     return true; // Non-equity assets always have value
   };
 
-  // Day's change for equity assets
-  const getDayChange = (asset) => {
+  // Get price source for display (Yahoo, BSE, Google, MF API, etc.)
+  const getPriceSource = (asset) => {
     if (asset.category === 'EQUITY' && asset.symbol) {
       const priceKey = asset.asset_type === 'MUTUAL_FUND' ? asset.symbol : `${asset.symbol}.${asset.exchange === 'BSE' ? 'BO' : 'NS'}`;
       const priceData = prices[priceKey];
-      // Simple: if we have valid price data, show the change
-      if (priceData && typeof priceData.price === 'number' && priceData.price > 0 && asset.quantity) {
-        const currentValue = asset.quantity * priceData.price;
-        const changePercent = typeof priceData.changePercent === 'number' ? priceData.changePercent : 0;
-        // Day change = currentValue × changePercent / 100
-        const dayChangeAmount = currentValue * changePercent / 100;
+      if (priceData?.source) {
+        // Map source to display-friendly name
+        const sourceMap = {
+          'yahoo': 'Yahoo',
+          'bse': 'BSE',
+          'google': 'Google',
+          'mfapi': 'MF API',
+          'cached': 'Cached',
+          'live': 'Live',
+          'close': 'Close'
+        };
         return {
-          amount: dayChangeAmount,
-          percent: changePercent,
-          hasData: true  // We have price data, so show the change
+          name: sourceMap[priceData.source] || priceData.source,
+          raw: priceData.source,
+          fromBackup: priceData.fromBackup || false,
+          cacheAge: priceData.cacheAge // minutes since cached
         };
       }
     }
-    return { amount: 0, percent: 0, hasData: false };
+    return null;
+  };
+
+  // Day's change for equity assets
+  const getDayChange = (asset) => {
+    if (asset.category === 'EQUITY' && asset.symbol) {
+      const isMutualFund = asset.asset_type === 'MUTUAL_FUND';
+      const priceKey = isMutualFund ? asset.symbol : `${asset.symbol}.${asset.exchange === 'BSE' ? 'BO' : 'NS'}`;
+      const priceData = prices[priceKey];
+      // Simple: if we have valid price data, show the change
+      if (priceData && typeof priceData.price === 'number' && priceData.price > 0 && asset.quantity) {
+        const changePercent = typeof priceData.changePercent === 'number' ? priceData.changePercent : 0;
+        // Day change = quantity × (currentPrice - previousClose)
+        // Use previousClose if available, otherwise derive from changePercent
+        const previousClose = priceData.previousClose || (priceData.price / (1 + changePercent / 100));
+        const dayChangeAmount = asset.quantity * (priceData.price - previousClose);
+        return {
+          amount: dayChangeAmount,
+          percent: changePercent,
+          hasData: true,  // We have price data, so show the change
+          isMutualFund
+        };
+      }
+    }
+    return { amount: 0, percent: 0, hasData: false, isMutualFund: false };
   };
 
   // Calculate holding period
@@ -519,9 +670,25 @@ export default function Assets() {
   const totalGainLoss = totalCurrentValue - totalInvestedValue;
   const totalGainPercent = totalInvestedValue > 0 ? (totalGainLoss / totalInvestedValue) * 100 : 0;
 
-  // Calculate total day's change (only for assets with price)
-  const totalDayChange = assetsWithPrice.reduce((sum, asset) => sum + getDayChange(asset).amount, 0);
-  const totalDayChangePercent = totalCurrentValue > 0 ? (totalDayChange / (totalCurrentValue - totalDayChange)) * 100 : 0;
+  // Calculate total day's change (filtered by todayFilter - 'stocks', 'mf', or 'all')
+  const totalDayChange = assetsWithPrice.reduce((sum, asset) => {
+    const dayChange = getDayChange(asset);
+    // Apply filter based on selection
+    if (todayFilter === 'stocks' && dayChange.isMutualFund) return sum;
+    if (todayFilter === 'mf' && !dayChange.isMutualFund) return sum;
+    // 'all' includes everything
+    return sum + dayChange.amount;
+  }, 0);
+
+  // Calculate base value for percentage (only for filtered asset types)
+  const filteredDayBaseValue = assetsWithPrice.reduce((sum, asset) => {
+    const dayChange = getDayChange(asset);
+    if (todayFilter === 'stocks' && dayChange.isMutualFund) return sum;
+    if (todayFilter === 'mf' && !dayChange.isMutualFund) return sum;
+    if (asset.category !== 'EQUITY') return sum;
+    return sum + getAssetValue(asset);
+  }, 0);
+  const totalDayChangePercent = filteredDayBaseValue > 0 ? (totalDayChange / (filteredDayBaseValue - totalDayChange)) * 100 : 0;
 
   // Find top gainer and loser (by day's change percent)
   const equityAssets = filteredAssets.filter(a => a.category === 'EQUITY');
@@ -618,10 +785,80 @@ export default function Assets() {
           transition={spring.gentle}
           className="mb-5"
         >
-          <h1 className="text-[22px] font-bold text-[var(--label-primary)] mb-1">Assets</h1>
-          <p className="text-[14px] text-[var(--label-secondary)]">
-            Manage and track your investment portfolio
-          </p>
+          <div className="flex items-start justify-between">
+            <div>
+              <h1 className="text-[22px] font-bold text-[var(--label-primary)] mb-1">Assets</h1>
+              <p className="text-[14px] text-[var(--label-secondary)]">
+                Manage and track your investment portfolio
+              </p>
+            </div>
+            {/* Market Status & Refresh */}
+            <div className="flex items-center gap-2">
+              {/* Market Status Badge */}
+              {marketStatus && (
+                <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium ${
+                  marketStatus.isOpen
+                    ? 'bg-[#059669]/10 text-[#059669]'
+                    : 'bg-[var(--fill-tertiary)] text-[var(--label-secondary)]'
+                }`}>
+                  <span className={`w-1.5 h-1.5 rounded-full ${marketStatus.isOpen ? 'bg-[#059669] animate-pulse' : 'bg-[var(--label-tertiary)]'}`} />
+                  {marketStatus.isOpen ? 'Market Open' : marketStatus.reason || 'Closed'}
+                </div>
+              )}
+              {/* Auto-Refresh Toggle */}
+              <button
+                onClick={toggleAutoRefresh}
+                className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-medium transition-all ${
+                  autoRefreshEnabled
+                    ? marketStatus?.isOpen
+                      ? 'bg-[#059669]/15 text-[#059669] hover:bg-[#059669]/20'
+                      : 'bg-[var(--fill-tertiary)] text-[var(--label-tertiary)]'
+                    : 'bg-[var(--fill-tertiary)] text-[var(--label-secondary)] hover:bg-[var(--fill-secondary)]'
+                }`}
+                title={autoRefreshEnabled ? (marketStatus?.isOpen ? `Auto-refresh in ${formatCountdown(autoRefreshCountdown)}` : 'Paused (market closed)') : 'Enable auto-refresh'}
+              >
+                {autoRefreshEnabled && marketStatus?.isOpen && (
+                  <span className="w-1.5 h-1.5 rounded-full bg-[#059669] animate-pulse" />
+                )}
+                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                {autoRefreshEnabled ? (
+                  marketStatus?.isOpen ? formatCountdown(autoRefreshCountdown) : 'Paused'
+                ) : (
+                  'Auto'
+                )}
+              </button>
+              {/* Refresh Button */}
+              <button
+                onClick={handleRefreshPrices}
+                disabled={isRefreshing || pricesLoading}
+                className={`p-2 rounded-lg transition-all ${
+                  isRefreshing || pricesLoading
+                    ? 'bg-[var(--fill-tertiary)] text-[var(--label-tertiary)]'
+                    : 'bg-[var(--fill-tertiary)] text-[var(--label-secondary)] hover:bg-[var(--fill-secondary)] hover:text-[var(--label-primary)]'
+                }`}
+                title={lastUpdated ? `Last updated: ${lastUpdated.toLocaleTimeString()}` : 'Refresh prices'}
+              >
+                <svg
+                  className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`}
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                  strokeWidth={2}
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+              </button>
+            </div>
+          </div>
+          {/* Last Updated Time */}
+          {lastUpdated && (
+            <p className="text-[11px] text-[var(--label-tertiary)] mt-2">
+              Prices updated {lastUpdated.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
+              {marketStatus?.istTime && ` · IST ${marketStatus.istTime}`}
+            </p>
+          )}
         </motion.div>
 
       {/* Portfolio Summary Cards */}
@@ -687,9 +924,45 @@ export default function Assets() {
         </Card>
 
         {/* Card 4: Today's Change */}
-        <Card padding="p-0" className="overflow-hidden">
-          <div className={`px-4 py-3 bg-gradient-to-r ${hasEquityAssets && pricesLoading ? 'from-[var(--system-gray)]/8 via-[var(--system-gray)]/4' : totalDayChange !== 0 ? (totalDayChange >= 0 ? 'from-[#059669]/10 via-[#059669]/5' : 'from-[#DC2626]/10 via-[#DC2626]/5') : 'from-[var(--system-gray)]/8 via-[var(--system-gray)]/4'} to-transparent`}>
-            <p className="text-[11px] text-[var(--label-secondary)] uppercase tracking-wide font-medium">Today</p>
+        <Card padding="p-0" className="overflow-visible">
+          <div className={`px-4 py-3 rounded-xl bg-gradient-to-r ${hasEquityAssets && pricesLoading ? 'from-[var(--system-gray)]/8 via-[var(--system-gray)]/4' : totalDayChange !== 0 ? (totalDayChange >= 0 ? 'from-[#059669]/10 via-[#059669]/5' : 'from-[#DC2626]/10 via-[#DC2626]/5') : 'from-[var(--system-gray)]/8 via-[var(--system-gray)]/4'} to-transparent`}>
+            {/* Header with dropdown */}
+            <div className="flex items-center gap-1.5">
+              <p className="text-[11px] text-[var(--label-secondary)] uppercase tracking-wide font-medium">Today</p>
+              <span className="text-[10px] text-[var(--label-quaternary)]">·</span>
+              <div className="relative" ref={todayDropdownRef}>
+                <button
+                  onClick={() => setShowTodayDropdown(!showTodayDropdown)}
+                  className="flex items-center gap-0.5 text-[11px] font-medium text-[var(--label-secondary)] hover:text-[var(--label-primary)] transition-colors uppercase tracking-wide"
+                >
+                  {todayFilter === 'stocks' ? 'Stocks' : todayFilter === 'mf' ? 'MF' : 'All'}
+                  <svg className={`w-3 h-3 transition-transform ${showTodayDropdown ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                  </svg>
+                </button>
+                {showTodayDropdown && (
+                  <div className="absolute top-full left-0 mt-1 bg-[var(--bg-primary)] border border-[var(--separator)] rounded-lg shadow-lg py-1 min-w-[80px] z-50">
+                    {['stocks', 'mf', 'all'].map((option) => (
+                      <button
+                        key={option}
+                        onClick={() => {
+                          setTodayFilter(option);
+                          setShowTodayDropdown(false);
+                        }}
+                        className={`w-full px-3 py-1.5 text-left text-[12px] transition-colors ${
+                          todayFilter === option
+                            ? 'text-[var(--chart-primary)] font-semibold bg-[var(--chart-primary)]/10'
+                            : 'text-[var(--label-primary)] hover:bg-[var(--fill-tertiary)]'
+                        }`}
+                      >
+                        {option === 'stocks' ? 'Stocks' : option === 'mf' ? 'MF' : 'All'}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+            {/* Value */}
             {hasEquityAssets && pricesLoading ? (
               <>
                 <div className="flex items-center gap-2 mt-2">
@@ -701,19 +974,26 @@ export default function Assets() {
                 </div>
                 <p className="text-[12px] text-[var(--label-quaternary)] mt-1">Day change loading</p>
               </>
-            ) : totalDayChange !== 0 ? (
-              <>
-                <p className={`text-[22px] font-bold tabular-nums mt-1 ${totalDayChange >= 0 ? 'text-[#059669]' : 'text-[#DC2626]'}`}>
-                  {totalDayChange >= 0 ? '+' : '-'}{formatCurrency(Math.abs(totalDayChange))}
-                </p>
-                <p className={`text-[12px] font-semibold mt-0.5 ${totalDayChangePercent >= 0 ? 'text-[#059669]' : 'text-[#DC2626]'}`}>
-                  {totalDayChangePercent >= 0 ? '+' : ''}{totalDayChangePercent.toFixed(2)}% today
-                </p>
-              </>
             ) : (
               <>
-                <p className="text-[22px] font-bold text-[var(--label-quaternary)] tabular-nums mt-1">—</p>
-                <p className="text-[12px] font-medium text-[var(--label-tertiary)] mt-0.5">Market closed</p>
+                <p className={`text-[22px] font-bold tabular-nums mt-1 ${
+                  totalDayChange === 0 ? 'text-[var(--label-quaternary)]' :
+                  totalDayChange >= 0 ? 'text-[#059669]' : 'text-[#DC2626]'
+                }`}>
+                  {totalDayChange === 0
+                    ? '—'
+                    : `${totalDayChange >= 0 ? '+' : '-'}${formatCurrency(Math.abs(totalDayChange))}`
+                  }
+                </p>
+                <p className={`text-[12px] font-semibold mt-0.5 ${
+                  totalDayChange === 0 ? 'text-[var(--label-tertiary)]' :
+                  totalDayChangePercent >= 0 ? 'text-[#059669]' : 'text-[#DC2626]'
+                }`}>
+                  {totalDayChange === 0
+                    ? 'No change'
+                    : `${totalDayChangePercent >= 0 ? '+' : ''}${totalDayChangePercent.toFixed(2)}% today`
+                  }
+                </p>
               </>
             )}
           </div>
@@ -1082,15 +1362,23 @@ export default function Assets() {
                                                 <span className="text-[12px] text-[var(--label-tertiary)] font-medium">Avg</span>
                                                 <span className="text-[15px] font-semibold text-[var(--label-primary)] tabular-nums">₹{asset.avg_buy_price?.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</span>
                                               </div>
-                                              {currentPrice > 0 && (
-                                                <>
-                                                  <span className="text-[var(--label-quaternary)] text-[15px]">→</span>
-                                                  <div className="flex items-center gap-2">
-                                                    <span className="text-[12px] text-[var(--label-tertiary)] font-medium">LTP</span>
-                                                    <span className="text-[15px] font-semibold text-[var(--label-primary)] tabular-nums">₹{currentPrice.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</span>
-                                                  </div>
-                                                </>
-                                              )}
+                                              {currentPrice > 0 && (() => {
+                                                const priceSource = getPriceSource(asset);
+                                                return (
+                                                  <>
+                                                    <span className="text-[var(--label-quaternary)] text-[15px]">→</span>
+                                                    <div className="flex items-center gap-2">
+                                                      <span className="text-[12px] text-[var(--label-tertiary)] font-medium">LTP</span>
+                                                      <span className="text-[15px] font-semibold text-[var(--label-primary)] tabular-nums">₹{currentPrice.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</span>
+                                                      {priceSource && (
+                                                        <span className={`text-[10px] px-1.5 py-0.5 rounded ${priceSource.fromBackup ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400' : 'bg-[var(--fill-tertiary)] text-[var(--label-tertiary)]'}`} title={priceSource.cacheAge ? `Cached ${priceSource.cacheAge}m ago` : ''}>
+                                                          {priceSource.fromBackup ? 'Backup' : priceSource.name}
+                                                        </span>
+                                                      )}
+                                                    </div>
+                                                  </>
+                                                );
+                                              })()}
                                             </div>
                                           )}
 
@@ -1234,6 +1522,17 @@ export default function Assets() {
                                           <span className="text-[var(--label-quaternary)]">No transactions recorded</span>
                                         )}
                                       </div>
+
+                                      {/* Price Chart for Equity Assets */}
+                                      {asset.category === 'EQUITY' && asset.symbol && (
+                                        <div className="mx-4 md:ml-[52px] md:mr-6 mt-3 pt-3 border-t border-[var(--separator)]/20">
+                                          <AssetPriceChart
+                                            symbol={asset.asset_type === 'MUTUAL_FUND' ? asset.symbol : `${asset.symbol}.${asset.exchange === 'BSE' ? 'BO' : 'NS'}`}
+                                            type={asset.asset_type === 'MUTUAL_FUND' ? 'mf' : 'stock'}
+                                            assetName={asset.name}
+                                          />
+                                        </div>
+                                      )}
                                     </div>
                                   </motion.div>
                                 )}

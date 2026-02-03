@@ -43,24 +43,36 @@ router.post('/', async (req, res) => {
       return res.status(404).json({ error: 'Asset not found' });
     }
 
-    // Validate asset is EQUITY category
-    if (asset.category !== 'EQUITY') {
-      return res.status(400).json({ error: 'Transactions are only supported for EQUITY assets' });
+    // Validate asset category (EQUITY and FIXED_INCOME are supported)
+    const isFixedIncome = asset.category === 'FIXED_INCOME';
+    if (asset.category !== 'EQUITY' && asset.category !== 'FIXED_INCOME') {
+      return res.status(400).json({ error: 'Transactions are only supported for EQUITY and FIXED_INCOME assets' });
     }
 
-    // For SELL, validate quantity doesn't exceed current holdings
+    // For SELL/WITHDRAW, validate doesn't exceed current holdings
     if (transactionType === 'SELL') {
-      const currentQuantity = asset.quantity || 0;
-      if (quantity > currentQuantity) {
-        return res.status(400).json({
-          error: `Cannot sell ${quantity} units. Current holdings: ${currentQuantity}`
-        });
+      if (isFixedIncome) {
+        // For fixed income, check against current value (quantity * avg_buy_price)
+        const currentValue = (asset.quantity || 0) * (asset.avg_buy_price || 0);
+        if (totalAmount > currentValue) {
+          return res.status(400).json({
+            error: `Cannot withdraw ${totalAmount}. Current balance: ${currentValue.toFixed(2)}`
+          });
+        }
+      } else {
+        // For equity, check against quantity
+        const currentQuantity = asset.quantity || 0;
+        if (quantity > currentQuantity) {
+          return res.status(400).json({
+            error: `Cannot sell ${quantity} units. Current holdings: ${currentQuantity}`
+          });
+        }
       }
     }
 
-    // Calculate realized gain for SELL transactions (using weighted average)
+    // Calculate realized gain for SELL transactions (only for EQUITY, not FIXED_INCOME)
     let realizedGain = null;
-    if (transactionType === 'SELL') {
+    if (transactionType === 'SELL' && !isFixedIncome) {
       const avgBuyPrice = await getCurrentAvgBuyPrice(asset_id);
       const costBasis = avgBuyPrice * quantity;
       realizedGain = totalAmount - costBasis;

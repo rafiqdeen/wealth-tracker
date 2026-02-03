@@ -255,7 +255,7 @@ async function fetchYahooPrice(symbol) {
     }
 
     const price = meta.regularMarketPrice;
-    const previousClose = meta.chartPreviousClose || meta.previousClose;
+    const previousClose = meta.chartPreviousClose || meta.previousClose || meta.regularMarketPreviousClose;
 
     return {
       price,

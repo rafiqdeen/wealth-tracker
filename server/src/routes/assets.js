@@ -79,7 +79,7 @@ router.post('/', async (req, res) => {
       principal, interest_rate, start_date, maturity_date, institution,
       purchase_price, current_value, location, area_sqft, balance,
       weight_grams, purity, premium, sum_assured, policy_number,
-      purchase_date, notes
+      purchase_date, notes, sector
     } = req.body;
 
     if (!category || !asset_type || !name) {
@@ -153,15 +153,19 @@ router.post('/', async (req, res) => {
         if (existingAsset) {
           // Add to existing asset
           assetId = existingAsset.id;
+          // Update sector if provided and not already set
+          if (sector && !existingAsset.sector) {
+            await db.run('UPDATE assets SET sector = ? WHERE id = ?', [sector, assetId]);
+          }
         } else {
           // Create new asset
           const result = await db.run(
             `INSERT INTO assets (
-              user_id, category, asset_type, name, symbol, exchange, quantity, avg_buy_price, status
-            ) VALUES (?, ?, ?, ?, ?, ?, 0, 0, 'ACTIVE')`,
+              user_id, category, asset_type, name, symbol, exchange, quantity, avg_buy_price, status, sector
+            ) VALUES (?, ?, ?, ?, ?, ?, 0, 0, 'ACTIVE', ?)`,
             [
               req.user.id, upperCategory, upperAssetType, name,
-              symbol || null, exchange || null
+              symbol || null, exchange || null, sector || null
             ]
           );
           assetId = result.lastInsertRowid;
@@ -236,7 +240,7 @@ router.put('/:id', async (req, res) => {
       principal, interest_rate, start_date, maturity_date, institution,
       purchase_price, current_value, location, area_sqft, balance,
       weight_grams, purity, premium, sum_assured, policy_number,
-      purchase_date, notes
+      purchase_date, notes, sector
     } = req.body;
 
     await db.run(
@@ -244,27 +248,28 @@ router.put('/:id', async (req, res) => {
         category = COALESCE(?, category),
         asset_type = COALESCE(?, asset_type),
         name = COALESCE(?, name),
-        symbol = ?,
-        exchange = ?,
-        quantity = ?,
-        avg_buy_price = ?,
-        principal = ?,
-        interest_rate = ?,
-        start_date = ?,
-        maturity_date = ?,
-        institution = ?,
-        purchase_price = ?,
-        current_value = ?,
-        location = ?,
-        area_sqft = ?,
-        balance = ?,
-        weight_grams = ?,
-        purity = ?,
-        premium = ?,
-        sum_assured = ?,
-        policy_number = ?,
-        purchase_date = ?,
-        notes = ?,
+        symbol = COALESCE(?, symbol),
+        exchange = COALESCE(?, exchange),
+        quantity = COALESCE(?, quantity),
+        avg_buy_price = COALESCE(?, avg_buy_price),
+        principal = COALESCE(?, principal),
+        interest_rate = COALESCE(?, interest_rate),
+        start_date = COALESCE(?, start_date),
+        maturity_date = COALESCE(?, maturity_date),
+        institution = COALESCE(?, institution),
+        purchase_price = COALESCE(?, purchase_price),
+        current_value = COALESCE(?, current_value),
+        location = COALESCE(?, location),
+        area_sqft = COALESCE(?, area_sqft),
+        balance = COALESCE(?, balance),
+        weight_grams = COALESCE(?, weight_grams),
+        purity = COALESCE(?, purity),
+        premium = COALESCE(?, premium),
+        sum_assured = COALESCE(?, sum_assured),
+        policy_number = COALESCE(?, policy_number),
+        purchase_date = COALESCE(?, purchase_date),
+        notes = COALESCE(?, notes),
+        sector = COALESCE(?, sector),
         updated_at = CURRENT_TIMESTAMP
       WHERE id = ? AND user_id = ?`,
       [
@@ -273,7 +278,7 @@ router.put('/:id', async (req, res) => {
         principal, interest_rate, start_date, maturity_date, institution,
         purchase_price, current_value, location, area_sqft, balance,
         weight_grams, purity, premium, sum_assured, policy_number,
-        purchase_date, notes,
+        purchase_date, notes, sector,
         req.params.id, req.user.id
       ]
     );
@@ -344,6 +349,31 @@ router.get('/summary/overview', async (req, res) => {
   } catch (error) {
     console.error('Error fetching summary:', error);
     res.status(500).json({ error: 'Failed to fetch summary' });
+  }
+});
+
+// Recalculate all equity assets from their transactions
+router.post('/recalculate', async (req, res) => {
+  try {
+    // Get all equity assets for this user
+    const equityAssets = await db.all(
+      "SELECT id FROM assets WHERE user_id = ? AND category = 'EQUITY'",
+      [req.user.id]
+    );
+
+    let recalculated = 0;
+    for (const asset of equityAssets) {
+      await recalculateAssetFromTransactions(asset.id);
+      recalculated++;
+    }
+
+    res.json({
+      message: `Recalculated ${recalculated} equity assets`,
+      count: recalculated
+    });
+  } catch (error) {
+    console.error('Error recalculating assets:', error);
+    res.status(500).json({ error: 'Failed to recalculate assets' });
   }
 });
 

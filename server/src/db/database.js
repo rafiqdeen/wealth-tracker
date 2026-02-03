@@ -456,6 +456,13 @@ export async function initializeDb() {
     )
   `);
 
+  // Add sector column to assets if it doesn't exist
+  const hasColumnSector = await db.hasColumn('assets', 'sector');
+  if (!hasColumnSector) {
+    await db.exec(`ALTER TABLE assets ADD COLUMN sector TEXT`);
+    console.log('[DB] Added sector column to assets table');
+  }
+
   // Create indexes
   await db.exec(`
     CREATE INDEX IF NOT EXISTS idx_assets_user_id ON assets(user_id);
