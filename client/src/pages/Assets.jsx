@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -214,11 +214,8 @@ export default function Assets() {
 
   const fetchAssets = async () => {
     try {
-      console.log('[Assets] Fetching assets...');
       const response = await assetService.getAll();
-      console.log('[Assets] Response:', response);
       const assetList = response.data.assets;
-      console.log('[Assets] Asset count:', assetList?.length);
       setAssets(assetList);
 
       const equityAssets = assetList.filter(a => a.category === 'EQUITY' && a.symbol);
@@ -537,6 +534,44 @@ export default function Assets() {
     if (asset.asset_type === 'MUTUAL_FUND') return 'MF';
     return asset.exchange || 'NSE';
   };
+
+  // PERFORMANCE: Pre-calculate XIRR for all mutual funds
+  // This avoids expensive Newton-Raphson iteration during render
+  const xirrValues = useMemo(() => {
+    const values = {};
+
+    // Only calculate for MF assets with transactions and prices
+    assets.forEach(asset => {
+      if (asset.asset_type !== 'MUTUAL_FUND') return;
+
+      const txnData = transactionDates[asset.id];
+      if (!txnData?.transactions || txnData.transactions.length === 0) return;
+
+      // Check holding period (skip if < 30 days)
+      const firstDate = txnData.firstDate ? new Date(txnData.firstDate) : null;
+      const holdingDays = firstDate ? Math.floor((new Date() - firstDate) / (1000 * 60 * 60 * 24)) : 0;
+      if (holdingDays < 30) return;
+
+      // Get current value using price
+      const priceData = prices[asset.symbol];
+      if (!priceData?.price || priceData.unavailable) return;
+
+      const currentValue = asset.quantity * priceData.price;
+      if (currentValue <= 0) return;
+
+      // Calculate XIRR
+      const xirrRaw = calculateXIRRFromTransactions(txnData.transactions, currentValue);
+      if (!xirrRaw || isNaN(xirrRaw)) return;
+
+      // Cap at ±999.99% for display
+      values[asset.id] = {
+        xirr: Math.min(Math.max(xirrRaw, -999.99), 999.99),
+        capped: Math.abs(xirrRaw) > 999.99
+      };
+    });
+
+    return values;
+  }, [assets, transactionDates, prices]);
 
   // Filter options - only show categories with assets
   const filterOptions = [
@@ -1409,32 +1444,15 @@ export default function Assets() {
                                             </span>
                                           </div>
 
-                                          {/* XIRR for Mutual Funds - only show if holding period >= 30 days */}
-                                          {asset.asset_type === 'MUTUAL_FUND' && transactionDates[asset.id]?.transactions && currentValue > 0 && (() => {
-                                            const txnData = transactionDates[asset.id];
-                                            const firstDate = txnData.firstDate ? new Date(txnData.firstDate) : null;
-                                            const holdingDays = firstDate ? Math.floor((new Date() - firstDate) / (1000 * 60 * 60 * 24)) : 0;
-
-                                            // Only show XIRR for holdings >= 30 days
-                                            if (holdingDays < 30) return null;
-
-                                            const xirrRaw = calculateXIRRFromTransactions(txnData.transactions, currentValue);
-                                            if (!xirrRaw || isNaN(xirrRaw)) return null;
-
-                                            // Cap XIRR at ±999.99% for display
-                                            const xirr = Math.min(Math.max(xirrRaw, -999.99), 999.99);
-                                            const xirrPositive = xirr >= 0;
-                                            const xirrCapped = Math.abs(xirrRaw) > 999.99;
-
-                                            return (
-                                              <div className="flex items-center gap-2 pl-4 border-l border-[var(--separator)]">
-                                                <span className="text-[12px] text-[var(--label-tertiary)] font-semibold uppercase">XIRR</span>
-                                                <span className={`text-[16px] font-bold tabular-nums ${xirrPositive ? 'text-[#059669]' : 'text-[#DC2626]'}`}>
-                                                  {xirrPositive ? '+' : ''}{xirr.toFixed(2)}%{xirrCapped ? '+' : ''}
-                                                </span>
-                                              </div>
-                                            );
-                                          })()}
+                                          {/* XIRR for Mutual Funds - uses pre-calculated memoized value */}
+                                          {asset.asset_type === 'MUTUAL_FUND' && xirrValues[asset.id] && (
+                                            <div className="flex items-center gap-2 pl-4 border-l border-[var(--separator)]">
+                                              <span className="text-[12px] text-[var(--label-tertiary)] font-semibold uppercase">XIRR</span>
+                                              <span className={`text-[16px] font-bold tabular-nums ${xirrValues[asset.id].xirr >= 0 ? 'text-[#059669]' : 'text-[#DC2626]'}`}>
+                                                {xirrValues[asset.id].xirr >= 0 ? '+' : ''}{xirrValues[asset.id].xirr.toFixed(2)}%{xirrValues[asset.id].capped ? '+' : ''}
+                                              </span>
+                                            </div>
+                                          )}
 
                                           {/* Portfolio Weight */}
                                           <div className="flex items-center gap-2 pl-4 border-l border-[var(--separator)]">

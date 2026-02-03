@@ -9,7 +9,6 @@ export function AuthProvider({ children }) {
 
   useEffect(() => {
     const token = localStorage.getItem('token');
-    console.log('[Auth] Initial check - token exists:', !!token);
     if (token) {
       fetchUser();
     } else {
@@ -19,12 +18,9 @@ export function AuthProvider({ children }) {
 
   const fetchUser = async () => {
     try {
-      console.log('[Auth] Fetching user...');
       const response = await api.get('/auth/me');
-      console.log('[Auth] User fetched:', response.data.user);
       setUser(response.data.user);
     } catch (error) {
-      console.error('[Auth] fetchUser error:', error);
       localStorage.removeItem('token');
     } finally {
       setLoading(false);

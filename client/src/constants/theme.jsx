@@ -96,28 +96,3 @@ export const ANIMATION = {
   STAGGER_DELAY_MAX: 0.2,   // Cap at 200ms total delay
   CHILDREN_DELAY: 0.05,     // 50ms before stagger starts
 };
-
-// Typography scale (reduced from 9 to 6 sizes)
-export const TYPOGRAPHY = {
-  caption: 'text-[11px]',
-  label: 'text-[13px]',
-  body: 'text-[15px]',
-  callout: 'text-[17px]',
-  title: 'text-[28px]',
-  largeTitle: 'text-[34px]',
-};
-
-// Standard border radius values
-export const RADIUS = {
-  sm: 'rounded-lg',      // 8px
-  md: 'rounded-xl',      // 12px
-  lg: 'rounded-2xl',     // 16px
-  full: 'rounded-full',
-};
-
-// Standard shadows
-export const SHADOW = {
-  sm: 'shadow-[0_1px_2px_rgba(0,0,0,0.04)]',
-  md: 'shadow-[0_1px_3px_rgba(0,0,0,0.08),0_2px_8px_rgba(0,0,0,0.04)]',
-  lg: 'shadow-[0_4px_12px_rgba(0,0,0,0.08),0_2px_4px_rgba(0,0,0,0.04)]',
-};

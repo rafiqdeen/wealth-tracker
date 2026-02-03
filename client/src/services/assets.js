@@ -4,9 +4,6 @@ export const assetService = {
   // Get all assets
   getAll: () => api.get('/assets'),
 
-  // Get assets by category
-  getByCategory: (category) => api.get(`/assets/category/${category}`),
-
   // Get single asset
   getById: (id) => api.get(`/assets/${id}`),
 

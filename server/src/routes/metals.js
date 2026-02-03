@@ -2,6 +2,7 @@ import express from 'express';
 import dns from 'dns';
 import db from '../db/database.js';
 import { authenticateToken } from '../middleware/auth.js';
+import { getISTTime } from '../utils/time.js';
 
 // Force IPv4 first to avoid IPv6 connection issues
 dns.setDefaultResultOrder('ipv4first');
@@ -124,15 +125,6 @@ async function fetchMetalPriceINR(metal = 'gold') {
     },
     fetchedAt: new Date().toISOString()
   };
-}
-
-// Get current time in IST (UTC+5:30)
-function getISTTime() {
-  const now = new Date();
-  // Convert to IST by adding 5 hours 30 minutes to UTC
-  const istOffset = 5.5 * 60 * 60 * 1000; // 5.5 hours in milliseconds
-  const istTime = new Date(now.getTime() + istOffset + (now.getTimezoneOffset() * 60 * 1000));
-  return istTime;
 }
 
 // Check if we should fetch new price (after 11:30 AM IST and no fetch today after 11:30)

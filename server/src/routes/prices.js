@@ -4,28 +4,13 @@ import db from '../db/database.js';
 import { authenticateToken } from '../middleware/auth.js';
 import { fetchPriceWithFallback, getCircuitBreakerStates, resetCircuitBreaker, resetAllCircuitBreakers } from '../services/priceProviders.js';
 import { getSyncStatus, triggerManualSync, updateSymbolPriority, getRecentSyncJobs } from '../services/priceSync.js';
+import { getRandomUserAgent, getYahooHeaders } from '../utils/userAgents.js';
+import { getISTTime, getISTHourMinute, getISTDay, isWithinMarketHours, isWeekend } from '../utils/time.js';
 
 // Force IPv4 first to avoid IPv6 connection issues
 dns.setDefaultResultOrder('ipv4first');
 
 const router = express.Router();
-
-// Modern browser User-Agent strings for rotation (from yfinance PR #2277)
-const USER_AGENTS = [
-  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36',
-  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36',
-  'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36',
-  'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:134.0) Gecko/20100101 Firefox/134.0',
-  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:134.0) Gecko/20100101 Firefox/134.0',
-  'Mozilla/5.0 (X11; Linux x86_64; rv:134.0) Gecko/20100101 Firefox/134.0',
-  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.3 Safari/605.1.15',
-  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36 Edg/133.0.0.0',
-];
-
-// Get random User-Agent
-function getRandomUserAgent() {
-  return USER_AGENTS[Math.floor(Math.random() * USER_AGENTS.length)];
-}
 
 // Smart cache durations based on market status
 // Market open: 15 min (prices change frequently)
@@ -148,9 +133,10 @@ async function getYahooSession() {
 
 // Fetch stock/ETF price from Yahoo Finance with timeout and retry
 // Uses cookie + crumb for bypassing rate limits
+// OPTIMIZED: Quick fail on rate limit to trigger fallback chain faster
 async function fetchYahooPrice(symbol, retries = 2) {
   let rateLimitRetries = 0;
-  const maxRateLimitRetries = 4; // More retries for rate limiting
+  const maxRateLimitRetries = 1; // Fail fast on rate limit - let fallback handle it
 
   // Get session with cookie + crumb
   const session = await getYahooSession();
@@ -188,18 +174,17 @@ async function fetchYahooPrice(symbol, retries = 2) {
       });
       clearTimeout(timeoutId);
 
-      // Handle rate limiting (429) with minimal retries
+      // Handle rate limiting (429) - fail fast to trigger fallback providers
       if (response.status === 429) {
         rateLimitRetries++;
-        console.log(`[Yahoo] ${symbol}: Rate limited (429), retry ${rateLimitRetries}/${maxRateLimitRetries}`);
+        console.log(`[Yahoo] ${symbol}: Rate limited (429), attempt ${rateLimitRetries}/${maxRateLimitRetries + 1}`);
         if (rateLimitRetries > maxRateLimitRetries) {
-          console.log(`[Yahoo] ${symbol}: Max rate limit retries exceeded`);
-          return null;
+          // Throw error to trigger fallback chain via circuit breaker
+          console.log(`[Yahoo] ${symbol}: Rate limited - triggering fallback to BSE/Google`);
+          throw new Error('Yahoo rate limited (429) - using fallback');
         }
-        // Exponential backoff for rate limiting (3s, 6s, 12s)
-        const retryAfter = 3 * Math.pow(2, rateLimitRetries - 1);
-        console.log(`[Yahoo] ${symbol}: Waiting ${retryAfter}s before retry`);
-        await new Promise(resolve => setTimeout(resolve, retryAfter * 1000));
+        // Single short retry before fallback (2 seconds)
+        await new Promise(resolve => setTimeout(resolve, 2000));
         continue;
       }
 
@@ -418,23 +403,20 @@ async function checkMarketStatus() {
     return marketStatusCache.status;
   }
 
-  // Get current IST time
-  const istOffset = 5.5 * 60 * 60 * 1000;
-  const istTime = new Date(now + istOffset + new Date().getTimezoneOffset() * 60 * 1000);
+  // Get current IST time using centralized utility
+  const istTime = getISTTime();
   const timeStr = istTime.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
-  const day = istTime.getDay();
+  const day = getISTDay();
 
   // Quick weekend check (no API call needed)
-  if (day === 0 || day === 6) {
+  if (isWeekend()) {
     const status = { isOpen: false, reason: 'Weekend', istTime: timeStr };
     marketStatusCache = { status, checkedAt: now };
     return status;
   }
 
   // Market hours: 9:15 AM to 3:30 PM IST
-  const hours = istTime.getHours();
-  const minutes = istTime.getMinutes();
-  const timeInMinutes = hours * 60 + minutes;
+  const { timeInMinutes } = getISTHourMinute();
   const marketOpen = 9 * 60 + 15;
   const marketClose = 15 * 60 + 30;
 

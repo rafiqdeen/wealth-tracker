@@ -817,8 +817,23 @@ export default function ManageAsset() {
     const validCurrentPrice = currentPrice && !isNaN(currentPrice) ? currentPrice : 0;
     const effectivePrice = validCurrentPrice || latestTxnPrice || avgBuyPrice;
 
-    const invested = quantity * avgBuyPrice;
-    const currentValueCalc = effectivePrice * quantity;
+    // Calculate invested and current value based on asset category
+    let invested, currentValueCalc;
+
+    if (asset?.category === 'REAL_ESTATE' || asset?.category === 'PHYSICAL') {
+      // Real Estate and Physical assets use purchase_price and current_value
+      invested = parseFloat(asset?.purchase_price) || 0;
+      currentValueCalc = parseFloat(asset?.current_value) || invested;
+    } else if (asset?.category === 'SAVINGS') {
+      // Savings use balance
+      invested = parseFloat(asset?.balance) || 0;
+      currentValueCalc = invested;
+    } else {
+      // Equity and others use quantity * price
+      invested = quantity * avgBuyPrice;
+      currentValueCalc = effectivePrice * quantity;
+    }
+
     const gainLoss = currentValueCalc - invested;
     const returnPct = invested > 0 && !isNaN(gainLoss) ? (gainLoss / invested) * 100 : 0;
     const isPositive = gainLoss >= 0;
@@ -826,6 +841,9 @@ export default function ManageAsset() {
 
     let firstDate = sortedByDateAsc.length > 0 ? new Date(sortedByDateAsc[0].transaction_date) : null;
     if (!firstDate && isFixedIncome && asset?.start_date) firstDate = new Date(asset.start_date);
+    if (!firstDate && (asset?.category === 'REAL_ESTATE' || asset?.category === 'PHYSICAL') && asset?.purchase_date) {
+      firstDate = new Date(asset.purchase_date);
+    }
     let holdingPeriod = '—';
     if (firstDate) {
       const days = Math.floor((new Date() - firstDate) / (1000 * 60 * 60 * 24));

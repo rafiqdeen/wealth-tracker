@@ -83,7 +83,6 @@ export default function Dashboard() {
   const fetchData = async (forceRefresh = false) => {
     // Increment request ID to track this specific request
     const currentRequestId = ++fetchRequestId.current;
-    console.log('[Dashboard] fetchData started, requestId:', currentRequestId);
 
     if (forceRefresh) {
       setRefreshing(true);
@@ -91,22 +90,18 @@ export default function Dashboard() {
     }
     try {
       // Step 1: Fetch assets, chart data, and goals in parallel
-      console.log('[Dashboard] Fetching assets, chart data, and goals...');
       const [assetsRes, chartRes, goalsRes] = await Promise.all([
         assetService.getAll(),
         portfolioService.getCumulativeInvestments(selectedPeriod),
         goalService.getAll().catch(() => ({ data: { goals: [] } }))
       ]);
-      console.log('[Dashboard] Responses received:', { assetsRes, chartRes, goalsRes });
 
       // Check if this request is still valid (no newer request started)
       if (fetchRequestId.current !== currentRequestId || !isMounted.current) {
-        console.log('[Dashboard] Discarding stale response');
         return; // Discard stale response
       }
 
       const assetList = assetsRes.data.assets;
-      console.log('[Dashboard] Asset count:', assetList?.length);
       setAssets(assetList);
       setCumulativeData(chartRes.data.data || []);
       setInvestmentSummary(chartRes.data.summary || null);

@@ -480,11 +480,14 @@ export async function initializeDb() {
     CREATE INDEX IF NOT EXISTS idx_goals_user_status ON goals(user_id, status);
     CREATE INDEX IF NOT EXISTS idx_goal_asset_links_goal_id ON goal_asset_links(goal_id);
     CREATE INDEX IF NOT EXISTS idx_goal_asset_links_asset_id ON goal_asset_links(asset_id);
+    CREATE INDEX IF NOT EXISTS idx_goal_asset_links_goal_type ON goal_asset_links(goal_id, link_type);
     CREATE INDEX IF NOT EXISTS idx_goal_contributions_goal_id ON goal_contributions(goal_id);
     CREATE INDEX IF NOT EXISTS idx_goal_history_goal_id_date ON goal_history(goal_id, date);
     CREATE INDEX IF NOT EXISTS idx_metal_prices_metal_date ON metal_prices(metal, fetched_at);
     CREATE INDEX IF NOT EXISTS idx_price_sync_jobs_status ON price_sync_jobs(status);
-    CREATE INDEX IF NOT EXISTS idx_symbol_priority_priority ON symbol_priority(priority DESC)
+    CREATE INDEX IF NOT EXISTS idx_symbol_priority_priority ON symbol_priority(priority DESC);
+    CREATE INDEX IF NOT EXISTS idx_symbol_priority_ranking ON symbol_priority(priority DESC, request_count DESC);
+    CREATE INDEX IF NOT EXISTS idx_transactions_asset_date ON transactions(asset_id, transaction_date)
   `);
 
   // Run migration for existing equity assets (local only for now)

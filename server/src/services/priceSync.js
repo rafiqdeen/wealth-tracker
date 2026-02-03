@@ -17,6 +17,7 @@
 
 import db from '../db/database.js';
 import { fetchPriceWithFallback } from './priceProviders.js';
+import { getISTTime as getISTTimeUtil, getISTDay, getISTHourMinute, isWeekend, isWithinMarketHours } from '../utils/time.js';
 
 // Sync configuration
 const SYNC_INTERVAL_MARKET_OPEN = 15 * 60 * 1000;   // 15 minutes
@@ -30,19 +31,18 @@ let isRunning = false;
 let lastPostMarketSyncDate = null; // Track if we've done post-market sync today
 
 /**
- * Get current IST time info
+ * Get current IST time info (wraps centralized utility)
  */
 function getISTTime() {
-  const now = new Date();
-  const istOffset = 5.5 * 60 * 60 * 1000;
-  const istTime = new Date(now.getTime() + istOffset + now.getTimezoneOffset() * 60 * 1000);
+  const istTime = getISTTimeUtil();
+  const { hours, minutes, timeInMinutes } = getISTHourMinute();
 
   return {
     date: istTime,
-    hours: istTime.getHours(),
-    minutes: istTime.getMinutes(),
-    day: istTime.getDay(), // 0 = Sunday, 6 = Saturday
-    timeInMinutes: istTime.getHours() * 60 + istTime.getMinutes()
+    hours,
+    minutes,
+    day: getISTDay(),
+    timeInMinutes
   };
 }
 
@@ -50,16 +50,10 @@ function getISTTime() {
  * Check if market is currently open (IST)
  */
 function isMarketOpen() {
-  const ist = getISTTime();
-
   // Weekend check
-  if (ist.day === 0 || ist.day === 6) return false;
-
-  // Market hours: 9:15 AM to 3:30 PM IST
-  const marketOpen = 9 * 60 + 15;   // 9:15 AM
-  const marketClose = 15 * 60 + 30; // 3:30 PM
-
-  return ist.timeInMinutes >= marketOpen && ist.timeInMinutes <= marketClose;
+  if (isWeekend()) return false;
+  // Market hours check
+  return isWithinMarketHours();
 }
 
 /**

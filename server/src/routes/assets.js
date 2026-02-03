@@ -1,7 +1,7 @@
 import express from 'express';
 import db from '../db/database.js';
 import { authenticateToken } from '../middleware/auth.js';
-import { recalculateAssetFromTransactions } from '../utils/assetCalculations.js';
+import { recalculateAssetFromTransactions, recalculateMultipleAssets } from '../utils/assetCalculations.js';
 
 const router = express.Router();
 
@@ -353,19 +353,19 @@ router.get('/summary/overview', async (req, res) => {
 });
 
 // Recalculate all equity assets from their transactions
+// Uses batch query to avoid N+1 problem (2 queries instead of N+1)
 router.post('/recalculate', async (req, res) => {
   try {
-    // Get all equity assets for this user
+    // Get all equity asset IDs for this user
     const equityAssets = await db.all(
       "SELECT id FROM assets WHERE user_id = ? AND category = 'EQUITY'",
       [req.user.id]
     );
 
-    let recalculated = 0;
-    for (const asset of equityAssets) {
-      await recalculateAssetFromTransactions(asset.id);
-      recalculated++;
-    }
+    const assetIds = equityAssets.map(a => a.id);
+
+    // Batch recalculate all assets (single query for all transactions)
+    const { recalculated } = await recalculateMultipleAssets(assetIds);
 
     res.json({
       message: `Recalculated ${recalculated} equity assets`,

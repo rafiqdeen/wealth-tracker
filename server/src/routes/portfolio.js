@@ -144,6 +144,7 @@ router.get('/latest', async (req, res) => {
 
 // Backfill history from transactions - CLEARS ALL and rebuilds from scratch
 // Accepts optional currentValue and currentInvested to project historical values
+// Optimized: Single pass through transactions + batch insert (was O(n*m), now O(n+m))
 router.post('/backfill', async (req, res) => {
   try {
     const { currentValue, currentInvested } = req.body;
@@ -185,52 +186,64 @@ router.post('/backfill', async (req, res) => {
       monthlyDates.push(todayStr);
     }
 
-    // Use only monthly dates for a cleaner chart (not every transaction date)
+    // Use only monthly dates for a cleaner chart
     const allDates = monthlyDates;
 
-    // Calculate total invested from transactions (for gain ratio calculation)
-    const totalInvestedFromTxns = transactions.reduce((sum, t) => {
-      return sum + (t.type === 'BUY' ? (t.total_amount || 0) : -(t.total_amount || 0));
-    }, 0);
+    // OPTIMIZATION: Pre-calculate cumulative invested by date in SINGLE PASS
+    // Instead of filtering all transactions for each date (O(n*m)),
+    // we build a running total and snapshot at each target date (O(n+m))
+    const cumulativeByDate = {};
+    let runningTotal = 0;
+    let txnIndex = 0;
 
-    // Calculate gain ratio: if we have current value, use it to project historical values
-    // gainRatio = currentValue / currentInvested (e.g., 1.15 means 15% gain)
+    for (const targetDate of allDates) {
+      // Add all transactions up to this date
+      while (txnIndex < transactions.length && transactions[txnIndex].transaction_date <= targetDate) {
+        const txn = transactions[txnIndex];
+        runningTotal += txn.type === 'BUY' ? (txn.total_amount || 0) : -(txn.total_amount || 0);
+        txnIndex++;
+      }
+      cumulativeByDate[targetDate] = runningTotal;
+    }
+
+    // Calculate gain ratio for value projection
+    const totalInvestedFromTxns = runningTotal;
     const gainRatio = (currentValue && currentInvested && currentInvested > 0)
       ? currentValue / currentInvested
       : 1;
 
-    let backfilledCount = 0;
+    // OPTIMIZATION: Batch insert all rows in single statement
+    // Instead of N separate INSERTs, use one INSERT with multiple VALUES
+    const values = [];
+    const params = [];
     const debugData = [];
 
-    for (const date of allDates) {
-      // Calculate cumulative invested up to this date
-      const txnsUpToDate = transactions.filter(t => t.transaction_date <= date);
-
-      const investedUpToDate = txnsUpToDate.reduce((sum, t) => {
-        // BUY adds to invested, SELL subtracts
-        return sum + (t.type === 'BUY' ? (t.total_amount || 0) : -(t.total_amount || 0));
-      }, 0);
-
-      // Project value based on current gain ratio
-      // This assumes proportional growth over time (simplified model)
+    for (let i = 0; i < allDates.length; i++) {
+      const date = allDates[i];
+      const investedUpToDate = cumulativeByDate[date];
       const projectedValue = investedUpToDate * gainRatio;
 
-      await db.run(
-        `INSERT INTO portfolio_history (user_id, date, total_value, total_invested, day_change)
-        VALUES (?, ?, ?, ?, 0)`,
-        [req.user.id, date, projectedValue, investedUpToDate]
-      );
-      backfilledCount++;
+      values.push('(?, ?, ?, ?, 0)');
+      params.push(req.user.id, date, projectedValue, investedUpToDate);
 
       // Debug: track first few and last few entries
-      if (backfilledCount <= 3 || allDates.indexOf(date) >= allDates.length - 3) {
-        debugData.push({ date, invested: investedUpToDate, value: projectedValue, txnCount: txnsUpToDate.length });
+      if (i < 3 || i >= allDates.length - 3) {
+        debugData.push({ date, invested: investedUpToDate, value: projectedValue });
       }
+    }
+
+    // Single batch insert
+    if (values.length > 0) {
+      await db.run(
+        `INSERT INTO portfolio_history (user_id, date, total_value, total_invested, day_change)
+        VALUES ${values.join(', ')}`,
+        params
+      );
     }
 
     res.json({
       message: 'Backfill complete - history rebuilt from transactions',
-      backfilled: backfilledCount,
+      backfilled: allDates.length,
       totalTransactions: transactions.length,
       gainRatio: gainRatio.toFixed(4),
       dateRange: {
