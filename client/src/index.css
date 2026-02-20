@@ -3,13 +3,14 @@
 :root {
   /* System Font - Match reference design */
   --font-system: "Inter", -apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, sans-serif;
+  --font-display: "Plus Jakarta Sans", "Inter", -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
 
   /* Primary Colors - Finance Dashboard */
-  --system-blue: #1A1D29;        /* Deep Navy - Primary brand, buttons */
+  --system-blue: #1A1D29;        /* Deep Navy - Brand dark (not blue) */
   --system-blue-light: #4F7DF3;  /* Bright Blue - Charts, links, accents */
   --system-blue-muted: #E8EEFB;  /* Light Blue - Chart fills, backgrounds */
-  --system-green: #22C55E;       /* Green - Positive/Gains */
-  --system-red: #EF4444;         /* Red - Destructive actions */
+  --system-green: #059669;       /* Green - Positive/Gains */
+  --system-red: #DC2626;         /* Red - Destructive actions */
   --system-amber: #F59E0B;       /* Amber - Warnings */
   --system-orange: #F97316;
   --system-yellow: #EAB308;
@@ -51,13 +52,13 @@
   --chart-primary: #4F7DF3;      /* Bright Blue - Main bars */
   --chart-secondary: #C7D7FE;    /* Light Blue - Secondary bars */
   --chart-tertiary: #E8EEFB;     /* Very Light Blue - Fills */
-  --chart-positive: #22C55E;     /* Green - Positive values */
-  --chart-negative: #EF4444;     /* Red - Negative values */
+  --chart-positive: #059669;     /* Green - Positive values */
+  --chart-negative: #DC2626;     /* Red - Negative values */
 
   /* Category Colors */
   --category-equity: #4F7DF3;    /* Blue */
   --category-mf: #8B5CF6;        /* Purple */
-  --category-fixed: #22C55E;     /* Green */
+  --category-fixed: #059669;     /* Green */
   --category-realestate: #F59E0B;/* Amber */
   --category-physical: #F97316;  /* Orange */
   --category-savings: #14B8A6;   /* Teal */
@@ -221,4 +222,9 @@ input:-webkit-autofill:focus {
   background: rgba(255, 255, 255, 0.7);
   backdrop-filter: blur(20px) saturate(180%);
   -webkit-backdrop-filter: blur(20px) saturate(180%);
+}
+
+/* Display font utility */
+.font-display {
+  font-family: var(--font-display);
 }

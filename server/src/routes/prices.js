@@ -5,7 +5,7 @@ import { authenticateToken } from '../middleware/auth.js';
 import { fetchPriceWithFallback, getCircuitBreakerStates, resetCircuitBreaker, resetAllCircuitBreakers } from '../services/priceProviders.js';
 import { getSyncStatus, triggerManualSync, updateSymbolPriority, getRecentSyncJobs } from '../services/priceSync.js';
 import { getRandomUserAgent, getYahooHeaders } from '../utils/userAgents.js';
-import { getISTTime, getISTHourMinute, getISTDay, isWithinMarketHours, isWeekend } from '../utils/time.js';
+import { getISTTime, getISTHourMinute, getISTDay, isWithinMarketHours, isWeekend, IST_OFFSET_MS } from '../utils/time.js';
 
 // Force IPv4 first to avoid IPv6 connection issues
 dns.setDefaultResultOrder('ipv4first');
@@ -19,6 +19,7 @@ const router = express.Router();
 const CACHE_DURATION_MARKET_OPEN = 15 * 60 * 1000;      // 15 minutes
 const CACHE_DURATION_MARKET_CLOSED = 12 * 60 * 60 * 1000; // 12 hours
 const CACHE_DURATION_MUTUAL_FUND = 24 * 60 * 60 * 1000;   // 24 hours
+
 
 /**
  * Get appropriate cache duration based on asset type and market status
@@ -141,8 +142,8 @@ async function fetchYahooPrice(symbol, retries = 2) {
   // Get session with cookie + crumb
   const session = await getYahooSession();
 
-  // Add random initial delay to avoid pattern detection (100-500ms)
-  const initialDelay = 100 + Math.random() * 400;
+  // Add random initial delay to avoid pattern detection (200-1000ms)
+  const initialDelay = 200 + Math.random() * 800;
   await new Promise(r => setTimeout(r, initialDelay));
 
   for (let attempt = 0; attempt <= retries; attempt++) {
@@ -456,7 +457,7 @@ async function checkMarketStatus() {
       if (meta?.regularMarketTime) {
         // Convert last trade timestamp to IST
         const lastTradeTime = new Date(meta.regularMarketTime * 1000);
-        const lastTradeIST = new Date(lastTradeTime.getTime() + istOffset + lastTradeTime.getTimezoneOffset() * 60 * 1000);
+        const lastTradeIST = new Date(lastTradeTime.getTime() + IST_OFFSET_MS + lastTradeTime.getTimezoneOffset() * 60 * 1000);
 
         // Check if last trade was today and recent (within 15 mins)
         const sameDay = lastTradeIST.toDateString() === istTime.toDateString();
@@ -633,7 +634,7 @@ async function processBatch(items, processor, concurrency = 5, delayMs = 100) {
 
     // Add randomized delay between batches to avoid pattern detection
     if (i + concurrency < items.length) {
-      const randomDelay = delayMs + Math.random() * 1000; // Add 0-1s random jitter
+      const randomDelay = delayMs + Math.random() * 2000; // Add 0-2s random jitter
       await new Promise(resolve => setTimeout(resolve, randomDelay));
     }
   }
@@ -693,9 +694,9 @@ router.post('/bulk', authenticateToken, async (req, res) => {
 
     // Second pass: fetch symbols that need fresh data with timeout protection
     if (symbolsToFetch.length > 0) {
-      // Set a timeout for the entire fetch operation (15 seconds)
-      // This ensures we return cached data before Vercel's 30s timeout
-      const FETCH_TIMEOUT = 15000;
+      // Set a timeout for the entire fetch operation
+      // 45s for local mode, enough time for 30 symbols at concurrency 2 with delays
+      const FETCH_TIMEOUT = 45000;
       const fetchStartTime = Date.now();
 
       // Pre-fetch Yahoo session to avoid rate limits on crumb endpoint
@@ -731,9 +732,22 @@ router.post('/bulk', authenticateToken, async (req, res) => {
               : await fetchPriceWithFallback(symbol, fetchYahooPrice);
 
             if (priceData && priceData.price) {
+              const priceSource = priceData.source || source;
+
+              // Sanity check: reject wildly wrong prices from fallback providers
+              // Compares against previously cached price to catch scraping errors
+              const staleEntry = cachedPrices[symbol];
+              if (staleEntry && staleEntry.price > 0 && priceSource !== 'yahoo') {
+                const ratio = priceData.price / staleEntry.price;
+                if (ratio > 5 || ratio < 0.2) {
+                  console.warn(`[Price] REJECTED ${symbol}: ${priceSource} returned ₹${priceData.price} vs cached ₹${staleEntry.price} (${ratio.toFixed(1)}x deviation — likely scraping error)`);
+                  failedCount++;
+                  return; // Keep stale cache
+                }
+              }
+
               fetchedCount++;
               // Cache immediately with the actual source
-              const priceSource = priceData.source || source;
               await cachePrice(symbol, priceData, priceSource);
               console.log(`[Price] FETCHED: ${symbol} = ${priceData.price} (via ${priceSource})`);
               results[symbol] = {
@@ -757,7 +771,7 @@ router.post('/bulk', authenticateToken, async (req, res) => {
             // Stale cache was already pre-populated, just log
             console.log(`[Price] STALE FALLBACK: ${symbol} (error: ${err.message})`);
           }
-        }, 3, 500); // Concurrency of 3, 500ms delay between batches (faster!)
+        }, 2, 1000); // Concurrency of 2, 1s delay between batches
       };
 
       // Race between fetch and timeout
@@ -896,118 +910,6 @@ router.get('/sync/cron', async (req, res) => {
   }
 });
 
-// Get historical price data for charts
-router.get('/historical/:symbol', authenticateToken, async (req, res) => {
-  try {
-    const { symbol } = req.params;
-    const { range = '1mo', type = 'stock' } = req.query;
-
-    // Map range to Yahoo Finance intervals
-    const rangeMap = {
-      '1mo': { range: '1mo', interval: '1d' },
-      '3mo': { range: '3mo', interval: '1d' },
-      '6mo': { range: '6mo', interval: '1d' },
-      '1y': { range: '1y', interval: '1wk' },
-      '5y': { range: '5y', interval: '1mo' },
-    };
-
-    const params = rangeMap[range] || rangeMap['1mo'];
-
-    if (type === 'mf') {
-      // Mutual Fund - use MFAPI
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 10000);
-
-      try {
-        const response = await fetch(`https://api.mfapi.in/mf/${symbol}`, {
-          signal: controller.signal
-        });
-        clearTimeout(timeoutId);
-
-        if (!response.ok) {
-          throw new Error(`MFAPI error: ${response.status}`);
-        }
-
-        const data = await response.json();
-        if (!data.data || data.data.length === 0) {
-          return res.status(404).json({ error: 'No historical data found' });
-        }
-
-        // Filter data based on range
-        const now = new Date();
-        const rangeMonths = { '1mo': 1, '3mo': 3, '6mo': 6, '1y': 12, '5y': 60 };
-        const months = rangeMonths[range] || 1;
-        const cutoffDate = new Date(now);
-        cutoffDate.setMonth(cutoffDate.getMonth() - months);
-
-        const historicalData = data.data
-          .map(item => {
-            const [day, month, year] = item.date.split('-');
-            const date = new Date(`${year}-${month}-${day}`);
-            return { date: date.toISOString().split('T')[0], close: parseFloat(item.nav) };
-          })
-          .filter(item => new Date(item.date) >= cutoffDate)
-          .reverse(); // Oldest first
-
-        res.json({ historical: historicalData, symbol, range });
-      } catch (error) {
-        clearTimeout(timeoutId);
-        throw error;
-      }
-    } else {
-      // Stock/ETF - use Yahoo Finance
-      const session = await getYahooSession();
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 15000);
-
-      try {
-        let url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?interval=${params.interval}&range=${params.range}`;
-        if (session?.crumb) {
-          url += `&crumb=${encodeURIComponent(session.crumb)}`;
-        }
-
-        const headers = {
-          'User-Agent': getRandomUserAgent(),
-          'Accept': 'application/json',
-        };
-        if (session?.cookie) {
-          headers['Cookie'] = session.cookie;
-        }
-
-        const response = await fetch(url, { signal: controller.signal, headers });
-        clearTimeout(timeoutId);
-
-        if (!response.ok) {
-          throw new Error(`Yahoo Finance error: ${response.status}`);
-        }
-
-        const data = await response.json();
-        const result = data.chart.result?.[0];
-
-        if (!result || !result.timestamp) {
-          return res.status(404).json({ error: 'No historical data found' });
-        }
-
-        const timestamps = result.timestamp;
-        const closes = result.indicators.quote[0].close;
-
-        const historicalData = timestamps.map((ts, i) => ({
-          date: new Date(ts * 1000).toISOString().split('T')[0],
-          close: closes[i],
-        })).filter(item => item.close !== null);
-
-        res.json({ historical: historicalData, symbol, range });
-      } catch (error) {
-        clearTimeout(timeoutId);
-        throw error;
-      }
-    }
-  } catch (error) {
-    console.error('Error fetching historical data:', error);
-    res.status(500).json({ error: 'Failed to fetch historical data' });
-  }
-});
-
 // Get company info (sector, industry) for a stock
 router.get('/company-info/:symbol', authenticateToken, async (req, res) => {
   try {
@@ -1102,6 +1004,97 @@ router.get('/company-info/:symbol', authenticateToken, async (req, res) => {
   } catch (error) {
     console.error('Error fetching company info:', error);
     res.status(500).json({ error: 'Failed to fetch company info' });
+  }
+});
+
+// Benchmark cache (Nifty 50 1Y return)
+let benchmarkCache = { data: null, fetchedAt: 0 };
+const BENCHMARK_CACHE_DURATION = 4 * 60 * 60 * 1000; // 4 hours
+
+// GET /api/prices/benchmark - Get Nifty 50 1Y return for benchmark comparison
+router.get('/benchmark', authenticateToken, async (req, res) => {
+  try {
+    const now = Date.now();
+
+    // Return cached data if fresh
+    if (benchmarkCache.data && (now - benchmarkCache.fetchedAt) < BENCHMARK_CACHE_DURATION) {
+      return res.json(benchmarkCache.data);
+    }
+
+    let result = null;
+
+    try {
+      const session = await getYahooSession();
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 15000);
+
+      let url = `https://query1.finance.yahoo.com/v8/finance/chart/%5ENSEI?interval=1d&range=1y`;
+      if (session?.crumb) {
+        url += `&crumb=${encodeURIComponent(session.crumb)}`;
+      }
+
+      const headers = {
+        'User-Agent': getRandomUserAgent(),
+        'Accept': 'application/json',
+      };
+      if (session?.cookie) {
+        headers['Cookie'] = session.cookie;
+      }
+
+      const response = await fetch(url, { signal: controller.signal, headers });
+      clearTimeout(timeoutId);
+
+      if (response.ok) {
+        const data = await response.json();
+        const chartResult = data.chart.result?.[0];
+
+        if (chartResult) {
+          const closes = chartResult.indicators?.quote?.[0]?.close;
+          if (closes && closes.length > 1) {
+            // Find first and last valid close prices
+            const firstClose = closes.find(c => c !== null && c > 0);
+            const lastClose = [...closes].reverse().find(c => c !== null && c > 0);
+
+            if (firstClose && lastClose) {
+              const niftyOneYearReturn = ((lastClose - firstClose) / firstClose) * 100;
+
+              result = {
+                niftyOneYearReturn: Math.round(niftyOneYearReturn * 100) / 100,
+                niftyCurrentPrice: Math.round(lastClose * 100) / 100,
+                niftyYearAgoPrice: Math.round(firstClose * 100) / 100,
+                fetchedAt: new Date().toISOString(),
+              };
+            }
+          }
+        }
+      }
+    } catch (fetchError) {
+      console.error('[Benchmark] Fetch error:', fetchError.message);
+    }
+
+    // If fetch failed, try stale cache
+    if (!result && benchmarkCache.data) {
+      console.log('[Benchmark] Using stale cache');
+      return res.json(benchmarkCache.data);
+    }
+
+    // Last resort: hardcoded fallback
+    if (!result) {
+      console.log('[Benchmark] Using hardcoded fallback');
+      result = {
+        niftyOneYearReturn: 8.5,
+        niftyCurrentPrice: null,
+        niftyYearAgoPrice: null,
+        fetchedAt: new Date().toISOString(),
+      };
+    }
+
+    // Update cache
+    benchmarkCache = { data: result, fetchedAt: now };
+    res.json(result);
+  } catch (error) {
+    console.error('[Benchmark] Error:', error);
+    res.status(500).json({ error: 'Failed to fetch benchmark data' });
   }
 });
 

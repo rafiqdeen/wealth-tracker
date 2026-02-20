@@ -1,12 +1,15 @@
 import { useState, useEffect, useCallback } from 'react';
 import { motion } from 'framer-motion';
-import { PieChart, Pie, Cell, ResponsiveContainer } from 'recharts';
 import { goalService, GOAL_CATEGORIES, PROGRESS_MODES } from '../services/goals';
 import { assetService } from '../services/assets';
-import { Card, Button, BottomSheet } from '../components/apple';
+import { Card, Button, BottomSheet, CircularProgress, AnimatedNumber } from '../components/apple';
 import { spring, tapScale } from '../utils/animations';
+import { getAssetValue as getAssetValuePure } from '../utils/portfolio';
 import { formatCurrency, formatCompact } from '../utils/formatting';
+import { calculateFixedIncomeValue, getCompoundingFrequency, generateRecurringDepositSchedule } from '../utils/interest';
 import { useToast } from '../context/ToastContext';
+import { usePrices } from '../context/PriceContext';
+import { metalService, PURITY_FACTORS } from '../services/metals';
 
 // Goal category icons
 const GoalIcon = ({ category, className = "w-6 h-6" }) => {
@@ -63,31 +66,19 @@ const GoalIcon = ({ category, className = "w-6 h-6" }) => {
   return icons[GOAL_CATEGORIES[category]?.icon] || icons.target;
 };
 
-// Helper to get asset value
-const getAssetValue = (asset) => {
-  if (asset.quantity && asset.avg_buy_price) {
-    return asset.quantity * asset.avg_buy_price;
-  } else if (asset.current_value) {
-    return asset.current_value;
-  } else if (asset.principal) {
-    return asset.principal;
-  } else if (asset.balance) {
-    return asset.balance;
-  } else if (asset.purchase_price) {
-    return asset.purchase_price;
-  }
-  return 0;
-};
-
 export default function Goals() {
   const toast = useToast();
+  const { prices, fetchPrices } = usePrices();
   const [goals, setGoals] = useState([]);
   const [assets, setAssets] = useState([]);
   const [assetAllocations, setAssetAllocations] = useState({}); // Track allocations per asset
   const [loading, setLoading] = useState(true);
+  const [metalPrices, setMetalPrices] = useState({});
+  const [fixedIncomeCalcs, setFixedIncomeCalcs] = useState({});
   const [showAddGoal, setShowAddGoal] = useState(false);
   const [editingGoal, setEditingGoal] = useState(null);
   const [showContributions, setShowContributions] = useState(null);
+  const [showCompleted, setShowCompleted] = useState(false);
   const [contributions, setContributions] = useState([]);
   const [formData, setFormData] = useState({
     name: '',
@@ -123,6 +114,65 @@ export default function Goals() {
       const fetchedAssets = response.data.assets || [];
       setAssets(fetchedAssets);
 
+      // Fetch equity prices
+      const equityAssets = fetchedAssets.filter(a => a.category === 'EQUITY' && a.symbol);
+      if (equityAssets.length > 0) {
+        fetchPrices(equityAssets);
+      }
+
+      // Fetch metal prices for gold/silver
+      const hasGold = fetchedAssets.some(a => a.category === 'PHYSICAL' && a.asset_type === 'GOLD');
+      const hasSilver = fetchedAssets.some(a => a.category === 'PHYSICAL' && a.asset_type === 'SILVER');
+      if (hasGold || hasSilver) {
+        try {
+          const fetches = [];
+          if (hasGold) fetches.push(metalService.getPrice('gold').then(r => ({ metal: 'gold', data: r.data })));
+          if (hasSilver) fetches.push(metalService.getPrice('silver').then(r => ({ metal: 'silver', data: r.data })));
+          const results = await Promise.all(fetches);
+          const mp = {};
+          for (const { metal, data } of results) {
+            mp[metal] = { pricePerGram24K: data.pricePerGram24K, purityPrices: data.purityPrices };
+          }
+          setMetalPrices(mp);
+        } catch (e) {
+          console.error('Error fetching metal prices:', e);
+        }
+      }
+
+      // Calculate Fixed Income values (compound interest)
+      const fixedIncomeAssets = fetchedAssets.filter(a => a.category === 'FIXED_INCOME' && a.interest_rate);
+      if (fixedIncomeAssets.length > 0) {
+        const calcs = {};
+        const recurringDepositTypes = ['PPF', 'RD', 'EPF', 'VPF', 'SSY'];
+        await Promise.all(fixedIncomeAssets.map(async (asset) => {
+          try {
+            const txnRes = await assetService.getTransactions(asset.id);
+            const transactions = txnRes.data.transactions || [];
+            const compoundingFreq = getCompoundingFrequency(asset.asset_type);
+            if (transactions.length > 0) {
+              if (asset.asset_type === 'PPF') {
+                const ppfResult = generateRecurringDepositSchedule(transactions, asset.interest_rate, asset.start_date);
+                if (ppfResult) {
+                  calcs[asset.id] = { principal: ppfResult.summary.totalDeposited, currentValue: ppfResult.summary.currentValue, interest: ppfResult.summary.totalInterest };
+                }
+              } else {
+                calcs[asset.id] = calculateFixedIncomeValue(transactions, asset.interest_rate, new Date(), compoundingFreq);
+              }
+            } else if (asset.principal) {
+              if (!recurringDepositTypes.includes(asset.asset_type)) {
+                const startDate = asset.start_date || asset.created_at?.split('T')[0] || new Date().toISOString().split('T')[0];
+                calcs[asset.id] = calculateFixedIncomeValue([{ type: 'BUY', total_amount: asset.principal, transaction_date: startDate }], asset.interest_rate, new Date(), compoundingFreq);
+              } else {
+                calcs[asset.id] = { principal: asset.principal, currentValue: asset.principal, interest: 0 };
+              }
+            }
+          } catch (e) {
+            console.error(`Failed to calculate FI for asset ${asset.id}:`, e);
+          }
+        }));
+        setFixedIncomeCalcs(calcs);
+      }
+
       // Fetch allocations for each asset
       const allocations = {};
       for (const asset of fetchedAssets) {
@@ -138,6 +188,9 @@ export default function Goals() {
       console.error('Failed to load assets:', error);
     }
   };
+
+  const valueDeps = { prices, fixedIncomeCalcs, metalPrices, PURITY_FACTORS };
+  const getAssetValue = (asset) => getAssetValuePure(asset, valueDeps);
 
   const resetForm = () => {
     setFormData({
@@ -355,7 +408,7 @@ export default function Goals() {
     for (const link of formData.linked_assets) {
       const asset = assets.find(a => a.id === link.asset_id);
       if (asset && link.link_type !== 'TRACKER') {
-        const assetValue = getAssetValue(asset);
+        const assetValue = getAssetValue(asset) || 0;
         linkedValue += assetValue * (link.allocation_percent / 100);
       }
     }
@@ -386,21 +439,116 @@ export default function Goals() {
   const inProgressGoals = goals.filter(g => getProgress(g) > 0 && getProgress(g) < 100).length;
   const notStartedGoals = goals.filter(g => getProgress(g) === 0).length;
 
-  // Category breakdown for mini donut chart
-  const categoryBreakdown = Object.entries(
-    goals.reduce((acc, goal) => {
-      const categoryConfig = GOAL_CATEGORIES[goal.category] || GOAL_CATEGORIES.CUSTOM;
-      if (!acc[goal.category]) {
-        acc[goal.category] = { value: 0, color: categoryConfig.color, label: categoryConfig.label };
+  // Group goals by status for sectioned layout
+  const goalsByStatus = {
+    almostThere: goals.filter(g => { const p = getProgress(g); return p >= 90 && p < 100; }),
+    inProgress: goals.filter(g => { const p = getProgress(g); return p > 0 && p < 90; }),
+    notStarted: goals.filter(g => getProgress(g) === 0),
+    completed: goals.filter(g => getProgress(g) >= 100),
+  };
+
+  // Projection engine
+  // Uses server-provided avg_monthly_contribution (from real transaction history)
+  // and projected_annual_return (interest rate for FI, XIRR for equity)
+  // to compute estimated completion via compound SIP formula.
+  const getGoalProjection = (goal) => {
+    const currentValue = goal.current_value || 0;
+    const targetAmount = goal.target_amount || 0;
+    const remaining = Math.max(0, targetAmount - currentValue);
+
+    if (remaining <= 0) return null;
+
+    const now = new Date();
+    const hasDeadline = !!goal.target_date;
+
+    // Server-computed: avg monthly investment into linked assets (from transaction history)
+    const avgMonthlyRate = goal.avg_monthly_contribution || 0;
+    // Server-computed: weighted annual return rate (interest rate for FI, XIRR for equity)
+    const annualReturn = goal.projected_annual_return || 0;
+    const monthlyReturn = annualReturn / 100 / 12;
+
+    // Estimate months to completion using compound SIP formula:
+    // FV = PV*(1+r)^n + PMT*[((1+r)^n - 1)/r]
+    // Solve for n via binary search
+    let estimatedMonthsToGo = null;
+    if (avgMonthlyRate > 0) {
+      if (monthlyReturn > 0.0001) {
+        // Binary search for n where FV >= target
+        let lo = 0, hi = 1200; // max 100 years
+        for (let i = 0; i < 50; i++) {
+          const mid = (lo + hi) / 2;
+          const growthFactor = Math.pow(1 + monthlyReturn, mid);
+          const fv = currentValue * growthFactor + avgMonthlyRate * ((growthFactor - 1) / monthlyReturn);
+          if (fv >= targetAmount) hi = mid;
+          else lo = mid;
+        }
+        estimatedMonthsToGo = Math.ceil(hi);
+      } else {
+        // No return (r≈0): simple linear projection
+        estimatedMonthsToGo = Math.ceil(remaining / avgMonthlyRate);
       }
-      acc[goal.category].value += goal.target_amount || 0;
-      return acc;
-    }, {})
-  ).map(([, data]) => ({
-    name: data.label,
-    value: data.value,
-    color: data.color,
-  })).filter(item => item.value > 0);
+    }
+
+    // Deadline-specific
+    let monthlyRequired = null;
+    let isOnTrack = null;
+    let isOverdue = false;
+
+    if (hasDeadline) {
+      const target = new Date(goal.target_date);
+      isOverdue = target <= now;
+
+      if (!isOverdue) {
+        const monthsRemaining = Math.max(1, (target - now) / (1000 * 60 * 60 * 24 * 30.44));
+
+        if (monthlyReturn > 0.0001) {
+          // Monthly required considering compound growth:
+          // target = currentValue*(1+r)^n + PMT*[((1+r)^n - 1)/r]
+          // PMT = [target - currentValue*(1+r)^n] * r / ((1+r)^n - 1)
+          const growthFactor = Math.pow(1 + monthlyReturn, monthsRemaining);
+          const futureCurrentValue = currentValue * growthFactor;
+          const gap = targetAmount - futureCurrentValue;
+          if (gap > 0) {
+            monthlyRequired = gap * monthlyReturn / (growthFactor - 1);
+          } else {
+            monthlyRequired = 0; // Existing investments will grow to cover it
+          }
+        } else {
+          monthlyRequired = remaining / monthsRemaining;
+        }
+
+        // On-track: current pace meets or exceeds what's needed
+        if (monthlyRequired != null) {
+          isOnTrack = avgMonthlyRate >= monthlyRequired * 0.9; // 10% tolerance
+        }
+      }
+    }
+
+    return {
+      hasDeadline,
+      isOverdue,
+      remaining,
+      avgMonthlyRate,
+      annualReturn,
+      estimatedMonthsToGo,
+      monthlyRequired,
+      isOnTrack,
+      hasPaceData: avgMonthlyRate > 0,
+    };
+  };
+
+  const formatProjectionTime = (months) => {
+    if (months == null) return 'N/A';
+    if (months < 1) return '< 1 month';
+    if (months < 12) {
+      const m = Math.ceil(months);
+      return `~${m} month${m !== 1 ? 's' : ''}`;
+    }
+    const years = Math.floor(months / 12);
+    const rem = Math.round(months % 12);
+    if (rem === 0) return `~${years}y`;
+    return `~${years}y ${rem}mo`;
+  };
 
   const previewData = calculatePreviewProgress();
 
@@ -458,6 +606,269 @@ export default function Goals() {
     );
   }
 
+  const renderGoalCard = (goal) => {
+    const progress = getProgress(goal);
+    const timeRemaining = getTimeRemaining(goal.target_date);
+    const categoryConfig = GOAL_CATEGORIES[goal.category] || GOAL_CATEGORIES.CUSTOM;
+    const isCompleted = progress >= 100;
+    const isNearCompletion = progress >= 90 && !isCompleted;
+    const cardColor = isCompleted ? '#059669' : categoryConfig.color;
+    const projection = getGoalProjection(goal);
+
+    return (
+      <motion.div
+        key={goal.id}
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={spring.gentle}
+        className="h-full"
+      >
+        <div className="group h-full rounded-2xl overflow-hidden bg-[var(--bg-primary)] border border-[var(--separator-opaque)] shadow-sm hover:shadow-md transition-all flex flex-col">
+          {/* Header */}
+          <div
+            className="px-4 py-3 relative overflow-hidden"
+            style={{
+              background: `linear-gradient(to right, ${cardColor}15 0%, ${cardColor}05 60%, transparent 100%)`
+            }}
+          >
+            <div className="flex items-center justify-between relative">
+              <div className="flex items-center gap-3 min-w-0 flex-1">
+                <div
+                  className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0 shadow-sm"
+                  style={{ backgroundColor: cardColor, color: 'white' }}
+                >
+                  {isCompleted ? (
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+                    </svg>
+                  ) : (
+                    <GoalIcon category={goal.category} className="w-4 h-4" />
+                  )}
+                </div>
+                <div className="min-w-0">
+                  <h3 className="text-[15px] font-semibold text-[var(--label-primary)] truncate">{goal.name}</h3>
+                  <p className="text-[11px] text-[var(--label-tertiary)]">{categoryConfig.label}</p>
+                </div>
+              </div>
+              <div className="flex items-center shrink-0 ml-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                <motion.button
+                  whileTap={tapScale}
+                  onClick={() => handleEdit(goal)}
+                  className="p-1.5 text-[var(--label-tertiary)] hover:text-[var(--system-blue)] hover:bg-[var(--fill-tertiary)] rounded-lg transition-colors"
+                >
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125" />
+                  </svg>
+                </motion.button>
+                <motion.button
+                  whileTap={tapScale}
+                  onClick={() => handleDelete(goal.id)}
+                  className="p-1.5 text-[var(--label-tertiary)] hover:text-[var(--system-red)] hover:bg-[var(--system-red)]/10 rounded-lg transition-colors"
+                >
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
+                  </svg>
+                </motion.button>
+              </div>
+            </div>
+          </div>
+
+          {/* Card Body */}
+          <div className="p-4 flex-1 flex flex-col">
+            {/* Amount & Circular Progress */}
+            <div className="mb-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <span className="text-[22px] font-bold text-[var(--label-primary)]">
+                    {formatCompact(goal.current_value || 0)}
+                  </span>
+                  <span className="text-[13px] text-[var(--label-tertiary)] ml-1">
+                    / {formatCompact(goal.target_amount)}
+                  </span>
+                </div>
+                <div className="relative shrink-0">
+                  <CircularProgress value={progress} max={100} size={48} strokeWidth={4} color={cardColor} />
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <span className="text-[12px] font-bold tabular-nums" style={{ color: cardColor }}>
+                      {progress.toFixed(0)}%
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Info Row */}
+            <div className="mb-3 flex items-start gap-1.5 text-[11px] text-[var(--label-secondary)]">
+              {goal.progress_mode !== 'MANUAL' && goal.linked_assets_count > 0 ? (
+                <>
+                  <svg className="w-3.5 h-3.5 text-[var(--label-tertiary)] shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M13.19 8.688a4.5 4.5 0 011.242 7.244l-4.5 4.5a4.5 4.5 0 01-6.364-6.364l1.757-1.757m13.35-.622l1.757-1.757a4.5 4.5 0 00-6.364-6.364l-4.5 4.5a4.5 4.5 0 001.242 7.244" />
+                  </svg>
+                  <span className="line-clamp-2">
+                    {goal.linked_assets_names?.join(', ')}
+                    {goal.progress_mode === 'HYBRID' && goal.manual_current_amount > 0 && (
+                      <span className="text-[var(--system-purple)]">
+                        {' '}+ {formatCompact(goal.manual_current_amount)} manual
+                      </span>
+                    )}
+                  </span>
+                </>
+              ) : (
+                <span className="text-[var(--label-tertiary)]">
+                  {goal.progress_mode === 'MANUAL' ? 'Manual tracking' : 'No assets linked'}
+                </span>
+              )}
+            </div>
+
+            {/* Notes */}
+            {goal.notes && (
+              <div className="mb-3 pl-2.5 py-1 border-l-2" style={{ borderColor: cardColor }}>
+                <p className="text-[11px] text-[var(--label-secondary)] line-clamp-2">{goal.notes}</p>
+              </div>
+            )}
+
+            {/* Projection */}
+            {!isCompleted && projection && (
+              <div className="mb-3 p-3 rounded-xl bg-[var(--bg-tertiary)]/50 border border-[var(--separator-opaque)]/50">
+                {projection.isOverdue ? (
+                  /* Overdue */
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-1.5">
+                      <div className="w-1.5 h-1.5 rounded-full bg-[var(--system-red)]" />
+                      <span className="text-[11px] font-medium text-[var(--system-red)]">Past deadline</span>
+                    </div>
+                    <span className="text-[11px] font-semibold text-[var(--label-secondary)] tabular-nums">
+                      {formatCompact(projection.remaining)} remaining
+                    </span>
+                  </div>
+                ) : !projection.hasPaceData ? (
+                  /* No transaction data yet */
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] text-[var(--label-tertiary)]">No investment history yet</span>
+                    {projection.monthlyRequired != null && (
+                      <span className="text-[11px] font-semibold text-[var(--label-secondary)] tabular-nums">
+                        Need {formatCompact(projection.monthlyRequired)}/mo
+                      </span>
+                    )}
+                  </div>
+                ) : (
+                  /* Active goal with pace data */
+                  <div className="space-y-2.5">
+                    {/* Avg pace + return rate */}
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-1.5">
+                        <svg className="w-3 h-3 text-[var(--label-tertiary)]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 18L9 11.25l4.306 4.307a11.95 11.95 0 015.814-5.519l2.74-1.22m0 0l-5.94-2.28m5.94 2.28l-2.28 5.941" />
+                        </svg>
+                        <span className="text-[11px] text-[var(--label-tertiary)]">Avg. pace</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-[12px] font-bold text-[var(--label-primary)] tabular-nums">
+                          {formatCompact(projection.avgMonthlyRate)}/mo
+                        </span>
+                        {projection.annualReturn > 0 && (
+                          <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-[var(--fill-tertiary)] text-[var(--label-tertiary)] tabular-nums">
+                            {projection.annualReturn.toFixed(1)}% p.a.
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Pace bar -- only when target date exists */}
+                    {projection.monthlyRequired != null && projection.monthlyRequired > 0 && (
+                      <div>
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="text-[10px] text-[var(--label-quaternary)]">
+                            {formatCompact(projection.monthlyRequired)}/mo required
+                          </span>
+                          {(() => {
+                            const paceRatio = projection.avgMonthlyRate / projection.monthlyRequired;
+                            return (
+                              <span className={`text-[10px] font-semibold tabular-nums ${
+                                paceRatio >= 1 ? 'text-[#059669]' :
+                                paceRatio >= 0.7 ? 'text-amber-600' : 'text-[var(--system-red)]'
+                              }`}>
+                                {(paceRatio * 100).toFixed(0)}%
+                              </span>
+                            );
+                          })()}
+                        </div>
+                        <div className="h-1.5 bg-[var(--fill-secondary)] rounded-full overflow-hidden">
+                          {(() => {
+                            const paceRatio = projection.avgMonthlyRate / projection.monthlyRequired;
+                            return (
+                              <motion.div
+                                initial={{ width: 0 }}
+                                animate={{ width: `${Math.min(100, paceRatio * 100)}%` }}
+                                transition={{ duration: 0.6, ease: "easeOut" }}
+                                className="h-full rounded-full"
+                                style={{
+                                  backgroundColor: paceRatio >= 1 ? '#059669' :
+                                    paceRatio >= 0.7 ? '#F59E0B' : 'var(--system-red)'
+                                }}
+                              />
+                            );
+                          })()}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Estimated completion */}
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] text-[var(--label-tertiary)]">Est. completion</span>
+                      <div className="flex items-center gap-1.5">
+                        {projection.isOnTrack !== null && (
+                          <div className={`w-1.5 h-1.5 rounded-full ${
+                            projection.isOnTrack ? 'bg-[#059669]' : 'bg-amber-500'
+                          }`} />
+                        )}
+                        <span className="text-[12px] font-medium text-[var(--label-secondary)] tabular-nums">
+                          {formatProjectionTime(projection.estimatedMonthsToGo)}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Footer */}
+            <div className="mt-auto pt-3 border-t border-[var(--separator-opaque)] flex items-center justify-between">
+              {isCompleted ? (
+                <div className="flex items-center gap-1.5 text-[#059669]">
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  <span className="text-[12px] font-semibold">Goal achieved!</span>
+                </div>
+              ) : isNearCompletion ? (
+                <div className="flex items-center gap-1.5 text-[var(--system-amber)]">
+                  <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z" />
+                  </svg>
+                  <span className="text-[12px] font-semibold">Almost there!</span>
+                </div>
+              ) : (
+                <span className="text-[12px] text-[var(--label-secondary)]">
+                  {formatCompact(goal.target_amount - (goal.current_value || 0))} to go
+                </span>
+              )}
+              {timeRemaining && (
+                <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full ${
+                  timeRemaining.isOverdue
+                    ? 'bg-[var(--system-red)]/10 text-[var(--system-red)]'
+                    : 'bg-[var(--fill-tertiary)] text-[var(--label-tertiary)]'
+                }`}>
+                  {timeRemaining.text}
+                </span>
+              )}
+            </div>
+          </div>
+        </div>
+      </motion.div>
+    );
+  };
+
   return (
     <div className="h-full overflow-auto">
       <div className="p-4 md:px-12 md:py-6">
@@ -465,7 +876,7 @@ export default function Goals() {
           {/* Header */}
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div>
-              <h1 className="text-[28px] font-bold text-[var(--label-primary)] tracking-tight">Goals</h1>
+              <h1 className="text-[28px] font-bold text-[var(--label-primary)] tracking-tight" style={{ fontFamily: 'var(--font-display)' }}>Goals</h1>
               <p className="text-[14px] text-[var(--label-tertiary)] mt-1">
                 {goals.length > 0
                   ? `${goals.length} goal${goals.length > 1 ? 's' : ''} · ${completedGoals} completed`
@@ -490,130 +901,61 @@ export default function Goals() {
             )}
           </div>
 
-          {/* Summary Cards */}
+          {/* Unified Progress Hero */}
           {goals.length > 0 && (
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-              {/* Overall Progress Card */}
-              <div className="rounded-2xl bg-[var(--bg-primary)] border border-[var(--separator-opaque)] p-4 shadow-sm">
-                <div className="flex items-center justify-between mb-3">
-                  <span className="text-[12px] font-medium text-[var(--label-tertiary)] uppercase tracking-wide">Overall Progress</span>
-                  <span className={`px-2 py-0.5 rounded-md text-[10px] font-semibold ${
-                    overallProgress >= 75 ? 'bg-[#059669]/10 text-[#059669]' :
-                    overallProgress >= 50 ? 'bg-[var(--system-blue)]/10 text-[var(--system-blue)]' :
-                    overallProgress >= 25 ? 'bg-[var(--system-orange)]/10 text-[var(--system-orange)]' :
-                    'bg-[var(--fill-tertiary)] text-[var(--label-tertiary)]'
-                  }`}>
-                    {overallProgress >= 75 ? 'Excellent' : overallProgress >= 50 ? 'Good' : overallProgress >= 25 ? 'On Track' : 'Starting'}
-                  </span>
-                </div>
-
-                <div className="flex items-baseline gap-1.5 mb-3">
-                  <span className="text-[32px] font-bold text-[var(--label-primary)] leading-none tabular-nums">
-                    {overallProgress.toFixed(0)}
-                  </span>
-                  <span className="text-[18px] font-bold text-[var(--label-tertiary)]">%</span>
-                </div>
-
-                <div className="h-2 bg-[var(--fill-tertiary)] rounded-full overflow-hidden mb-3">
-                  <motion.div
-                    initial={{ width: 0 }}
-                    animate={{ width: `${Math.min(overallProgress, 100)}%` }}
-                    transition={{ duration: 1, ease: "easeOut" }}
-                    className="h-full rounded-full bg-gradient-to-r from-[var(--system-blue)] to-[var(--system-purple)]"
+            <div className="rounded-2xl bg-[var(--bg-primary)] border border-[var(--separator-opaque)] p-5 shadow-sm">
+              <div className="flex flex-col sm:flex-row items-center gap-5">
+                {/* Large CircularProgress */}
+                <div className="relative shrink-0">
+                  <CircularProgress
+                    value={overallProgress}
+                    max={100}
+                    size={100}
+                    strokeWidth={8}
+                    color={overallProgress >= 75 ? '#059669' : 'var(--system-blue)'}
                   />
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <span className="text-[24px] font-bold text-[var(--label-primary)] tabular-nums">
+                      {overallProgress.toFixed(0)}%
+                    </span>
+                  </div>
                 </div>
 
-                <div className="flex items-center justify-between text-[11px]">
-                  <span className="text-[var(--label-tertiary)]">
-                    <span className="font-semibold text-[var(--label-secondary)]">{formatCompact(totalCurrentValue)}</span> saved
-                  </span>
-                  <span className="text-[var(--label-tertiary)]">
-                    <span className="font-semibold text-[var(--system-orange)]">{formatCompact(totalRemaining)}</span> to go
-                  </span>
+                {/* Amounts */}
+                <div className="flex-1 min-w-0 text-center sm:text-left">
+                  <div className="flex items-baseline gap-2 justify-center sm:justify-start mb-1">
+                    <span className="text-[32px] font-bold text-[var(--label-primary)]" style={{ fontFamily: 'var(--font-display)' }}>
+                      {formatCompact(totalCurrentValue)}
+                    </span>
+                    <span className="text-[15px] text-[var(--label-tertiary)]">
+                      / {formatCompact(totalGoalValue)}
+                    </span>
+                  </div>
+                  <p className="text-[13px] text-[var(--label-tertiary)]">
+                    <span className="text-[var(--system-orange)] font-medium">{formatCompact(totalRemaining)}</span> remaining across {goals.length} goal{goals.length !== 1 ? 's' : ''}
+                  </p>
                 </div>
-              </div>
 
-              {/* Goals Status Card */}
-              <div className="rounded-2xl bg-[var(--bg-primary)] border border-[var(--separator-opaque)] p-4 shadow-sm">
-                <span className="text-[12px] font-medium text-[var(--label-tertiary)] uppercase tracking-wide">Status</span>
-
-                <div className="mt-3 space-y-3">
-                  {/* Completed */}
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
+                {/* Status pills */}
+                <div className="flex sm:flex-col gap-2 shrink-0">
+                  {completedGoals > 0 && (
+                    <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-[#059669]/10">
                       <div className="w-2 h-2 rounded-full bg-[#059669]" />
-                      <span className="text-[13px] text-[var(--label-secondary)]">Completed</span>
+                      <span className="text-[12px] font-semibold text-[#059669] tabular-nums">{completedGoals} Done</span>
                     </div>
-                    <span className="text-[15px] font-bold text-[#059669] tabular-nums">{completedGoals}</span>
-                  </div>
-
-                  {/* In Progress */}
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
+                  )}
+                  {inProgressGoals > 0 && (
+                    <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-[var(--system-blue)]/10">
                       <div className="w-2 h-2 rounded-full bg-[var(--system-blue)]" />
-                      <span className="text-[13px] text-[var(--label-secondary)]">In Progress</span>
+                      <span className="text-[12px] font-semibold text-[var(--system-blue)] tabular-nums">{inProgressGoals} Active</span>
                     </div>
-                    <span className="text-[15px] font-bold text-[var(--system-blue)] tabular-nums">{inProgressGoals}</span>
-                  </div>
-
-                  {/* Not Started */}
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
+                  )}
+                  {notStartedGoals > 0 && (
+                    <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-[var(--fill-tertiary)]">
                       <div className="w-2 h-2 rounded-full bg-[var(--label-quaternary)]" />
-                      <span className="text-[13px] text-[var(--label-secondary)]">Not Started</span>
+                      <span className="text-[12px] font-semibold text-[var(--label-tertiary)] tabular-nums">{notStartedGoals} Pending</span>
                     </div>
-                    <span className="text-[15px] font-bold text-[var(--label-tertiary)] tabular-nums">{notStartedGoals}</span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Category Card */}
-              <div className="rounded-2xl bg-[var(--bg-primary)] border border-[var(--separator-opaque)] p-4 shadow-sm">
-                <span className="text-[12px] font-medium text-[var(--label-tertiary)] uppercase tracking-wide">By Category</span>
-
-                {/* Chart + Legend */}
-                <div className="flex items-center gap-4 mt-3">
-                  {/* Donut Chart */}
-                  <div className="w-[72px] h-[72px] shrink-0">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <PieChart>
-                        <Pie
-                          data={categoryBreakdown.length > 0 ? categoryBreakdown : [{ value: 1, color: 'var(--fill-secondary)' }]}
-                          cx="50%"
-                          cy="50%"
-                          innerRadius={20}
-                          outerRadius={32}
-                          paddingAngle={2}
-                          dataKey="value"
-                        >
-                          {(categoryBreakdown.length > 0 ? categoryBreakdown : [{ value: 1, color: 'var(--fill-secondary)' }]).map((entry, index) => (
-                            <Cell key={`cell-${index}`} fill={entry.color} />
-                          ))}
-                        </Pie>
-                      </PieChart>
-                    </ResponsiveContainer>
-                  </div>
-
-                  {/* Legend */}
-                  <div className="flex-1 space-y-2 min-w-0">
-                    {categoryBreakdown.length > 0 ? categoryBreakdown.slice(0, 3).map((item, index) => (
-                      <div key={index} className="flex items-center gap-2">
-                        <div
-                          className="w-2 h-2 rounded-full shrink-0"
-                          style={{ backgroundColor: item.color }}
-                        />
-                        <span className="text-[12px] text-[var(--label-secondary)] truncate flex-1">{item.name}</span>
-                        <span className="text-[12px] font-semibold text-[var(--label-primary)] shrink-0 tabular-nums">
-                          {formatCompact(item.value)}
-                        </span>
-                      </div>
-                    )) : (
-                      <p className="text-[12px] text-[var(--label-tertiary)]">No categories yet</p>
-                    )}
-                    {categoryBreakdown.length > 3 && (
-                      <p className="text-[10px] text-[var(--label-quaternary)]">+{categoryBreakdown.length - 3} more</p>
-                    )}
-                  </div>
+                  )}
                 </div>
               </div>
             </div>
@@ -684,186 +1026,137 @@ export default function Goals() {
               </Card>
             </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {goals.map((goal) => {
-                const progress = getProgress(goal);
-                const timeRemaining = getTimeRemaining(goal.target_date);
-                const categoryConfig = GOAL_CATEGORIES[goal.category] || GOAL_CATEGORIES.CUSTOM;
-                const isCompleted = progress >= 100;
-                const cardColor = isCompleted ? '#059669' : categoryConfig.color;
-
-                return (
-                  <motion.div
-                    key={goal.id}
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={spring.gentle}
-                    className="h-full"
-                  >
-                    {/* Goal Card */}
-                    <div className="group h-full rounded-2xl overflow-hidden bg-[var(--bg-primary)] border border-[var(--separator-opaque)] shadow-sm hover:shadow-md transition-all flex flex-col">
-                      {/* Header */}
-                      <div
-                        className="px-4 py-3 relative overflow-hidden"
-                        style={{
-                          background: `linear-gradient(to right, ${cardColor}15 0%, ${cardColor}05 60%, transparent 100%)`
-                        }}
-                      >
-                        <div className="flex items-center justify-between relative">
-                          <div className="flex items-center gap-3 min-w-0 flex-1">
-                            {/* Icon */}
-                            <div
-                              className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0 shadow-sm"
-                              style={{
-                                backgroundColor: cardColor,
-                                color: 'white'
-                              }}
-                            >
-                              {isCompleted ? (
-                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                                  <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
-                                </svg>
-                              ) : (
-                                <GoalIcon category={goal.category} className="w-4 h-4" />
-                              )}
-                            </div>
-                            {/* Title + Category */}
-                            <div className="min-w-0">
-                              <h3 className="text-[15px] font-semibold text-[var(--label-primary)] truncate">
-                                {goal.name}
-                              </h3>
-                              <p className="text-[11px] text-[var(--label-tertiary)]">{categoryConfig.label}</p>
-                            </div>
-                          </div>
-
-                          {/* Actions - visible on hover */}
-                          <div className="flex items-center shrink-0 ml-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                            <motion.button
-                              whileTap={tapScale}
-                              onClick={() => handleEdit(goal)}
-                              className="p-1.5 text-[var(--label-tertiary)] hover:text-[var(--system-blue)] hover:bg-[var(--fill-tertiary)] rounded-lg transition-colors"
-                            >
-                              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                                <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125" />
-                              </svg>
-                            </motion.button>
-                            <motion.button
-                              whileTap={tapScale}
-                              onClick={() => handleDelete(goal.id)}
-                              className="p-1.5 text-[var(--label-tertiary)] hover:text-[var(--system-red)] hover:bg-[var(--system-red)]/10 rounded-lg transition-colors"
-                            >
-                              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                                <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
-                              </svg>
-                            </motion.button>
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Card Body */}
-                      <div className="p-4 flex-1 flex flex-col">
-                        {/* Amount & Progress */}
-                        <div className="mb-3">
-                          <div className="flex items-baseline justify-between mb-2">
-                            <div>
-                              <span className="text-[24px] font-bold text-[var(--label-primary)]">
-                                {formatCompact(goal.current_value || 0)}
-                              </span>
-                              <span className="text-[13px] text-[var(--label-tertiary)] ml-1">
-                                / {formatCompact(goal.target_amount)}
-                              </span>
-                            </div>
-                            <span
-                              className="text-[17px] font-bold"
-                              style={{ color: cardColor }}
-                            >
-                              {progress.toFixed(0)}%
-                            </span>
-                          </div>
-
-                          {/* Progress Bar */}
-                          <div className="h-2 bg-[var(--fill-tertiary)] rounded-full overflow-hidden">
-                            <motion.div
-                              initial={{ width: 0 }}
-                              animate={{ width: `${Math.min(progress, 100)}%` }}
-                              transition={{ duration: 0.8, ease: "easeOut" }}
-                              className="h-full rounded-full"
-                              style={{
-                                background: isCompleted
-                                  ? 'linear-gradient(to right, #059669, #10B981)'
-                                  : `linear-gradient(to right, ${cardColor}, ${cardColor}CC)`
-                              }}
-                            />
-                          </div>
-                        </div>
-
-                        {/* Info Row - Show linked asset names */}
-                        <div className="mb-3 flex items-start gap-1.5 text-[11px] text-[var(--label-secondary)]">
-                          {goal.progress_mode !== 'MANUAL' && goal.linked_assets_count > 0 ? (
-                            <>
-                              <svg className="w-3.5 h-3.5 text-[var(--label-tertiary)] shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                                <path strokeLinecap="round" strokeLinejoin="round" d="M13.19 8.688a4.5 4.5 0 011.242 7.244l-4.5 4.5a4.5 4.5 0 01-6.364-6.364l1.757-1.757m13.35-.622l1.757-1.757a4.5 4.5 0 00-6.364-6.364l-4.5 4.5a4.5 4.5 0 001.242 7.244" />
-                              </svg>
-                              <span className="line-clamp-2">
-                                {goal.linked_assets_names?.join(', ')}
-                                {goal.progress_mode === 'HYBRID' && goal.manual_current_amount > 0 && (
-                                  <span className="text-[var(--system-purple)]">
-                                    {' '}+ {formatCompact(goal.manual_current_amount)} manual
-                                  </span>
-                                )}
-                              </span>
-                            </>
-                          ) : (
-                            <span className="text-[var(--label-tertiary)]">
-                              {goal.progress_mode === 'MANUAL' ? 'Manual tracking' : 'No assets linked'}
-                            </span>
-                          )}
-                        </div>
-
-                        {/* Notes - Show if configured */}
-                        {goal.notes && (
-                          <div
-                            className="mb-3 pl-2.5 py-1 border-l-2"
-                            style={{ borderColor: cardColor }}
-                          >
-                            <p className="text-[11px] text-[var(--label-secondary)] line-clamp-2">
-                              {goal.notes}
-                            </p>
-                          </div>
-                        )}
-
-                        {/* Footer - Push to bottom with flex-1 spacer */}
-                        <div className="mt-auto pt-3 border-t border-[var(--separator-opaque)] flex items-center justify-between">
-                          {/* Remaining or completed message */}
-                          {isCompleted ? (
-                            <div className="flex items-center gap-1.5 text-[#059669]">
-                              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                                <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                              </svg>
-                              <span className="text-[12px] font-semibold">Goal achieved!</span>
-                            </div>
-                          ) : (
-                            <span className="text-[12px] text-[var(--label-secondary)]">
-                              {formatCurrency(goal.target_amount - (goal.current_value || 0))} to go
-                            </span>
-                          )}
-
-                          {/* Time remaining badge */}
-                          {timeRemaining && (
-                            <span className={`text-[10px] font-medium px-2 py-1 rounded-full ${
-                              timeRemaining.isOverdue
-                                ? 'bg-[var(--system-red)]/10 text-[var(--system-red)]'
-                                : 'bg-[var(--fill-tertiary)] text-[var(--label-tertiary)]'
-                            }`}>
-                              {timeRemaining.text}
-                            </span>
-                          )}
-                        </div>
-                      </div>
+            <div className="space-y-6">
+              {/* Almost There Section */}
+              {goalsByStatus.almostThere.length > 0 && (
+                <div>
+                  <div className="flex items-center gap-3 mb-3">
+                    <div className="flex items-center gap-2">
+                      <div className="w-1.5 h-4 rounded-full bg-amber-500" />
+                      <h3 className="text-[14px] font-semibold text-[var(--label-secondary)]">Almost There</h3>
+                      <span className="text-[12px] font-medium px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-600 tabular-nums">
+                        {goalsByStatus.almostThere.length}
+                      </span>
                     </div>
-                  </motion.div>
-                );
-              })}
+                    <div className="flex-1 h-px bg-[var(--separator-opaque)]" />
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {goalsByStatus.almostThere.map(renderGoalCard)}
+                  </div>
+                </div>
+              )}
+
+              {/* In Progress Section */}
+              {goalsByStatus.inProgress.length > 0 && (
+                <div>
+                  <div className="flex items-center gap-3 mb-3">
+                    <div className="flex items-center gap-2">
+                      <div className="w-1.5 h-4 rounded-full bg-[var(--system-blue)]" />
+                      <h3 className="text-[14px] font-semibold text-[var(--label-secondary)]">In Progress</h3>
+                      <span className="text-[12px] font-medium px-2 py-0.5 rounded-full bg-[var(--system-blue)]/10 text-[var(--system-blue)] tabular-nums">
+                        {goalsByStatus.inProgress.length}
+                      </span>
+                    </div>
+                    <div className="flex-1 h-px bg-[var(--separator-opaque)]" />
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {goalsByStatus.inProgress.map(renderGoalCard)}
+                  </div>
+                </div>
+              )}
+
+              {/* Not Started Section */}
+              {goalsByStatus.notStarted.length > 0 && (
+                <div>
+                  <div className="flex items-center gap-3 mb-3">
+                    <div className="flex items-center gap-2">
+                      <div className="w-1.5 h-4 rounded-full bg-[var(--label-quaternary)]" />
+                      <h3 className="text-[14px] font-semibold text-[var(--label-secondary)]">Not Started</h3>
+                      <span className="text-[12px] font-medium px-2 py-0.5 rounded-full bg-[var(--fill-tertiary)] text-[var(--label-tertiary)] tabular-nums">
+                        {goalsByStatus.notStarted.length}
+                      </span>
+                    </div>
+                    <div className="flex-1 h-px bg-[var(--separator-opaque)]" />
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {goalsByStatus.notStarted.map(renderGoalCard)}
+                  </div>
+                </div>
+              )}
+
+              {/* Completed Section - Collapsible */}
+              {goalsByStatus.completed.length > 0 && (
+                <div>
+                  <button
+                    onClick={() => setShowCompleted(!showCompleted)}
+                    className="flex items-center gap-3 w-full mb-3"
+                  >
+                    <div className="flex items-center gap-2">
+                      <div className="w-1.5 h-4 rounded-full bg-[#059669]" />
+                      <h3 className="text-[14px] font-semibold text-[var(--label-secondary)]">Completed</h3>
+                      <span className="text-[12px] font-medium px-2 py-0.5 rounded-full bg-[#059669]/10 text-[#059669] tabular-nums">
+                        {goalsByStatus.completed.length}
+                      </span>
+                    </div>
+                    <div className="flex-1 h-px bg-[var(--separator-opaque)]" />
+                    <svg
+                      className={`w-4 h-4 text-[var(--label-tertiary)] transition-transform ${showCompleted ? 'rotate-180' : ''}`}
+                      fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}
+                    >
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
+                    </svg>
+                  </button>
+                  {showCompleted && (
+                    <div className="space-y-2">
+                      {goalsByStatus.completed.map((goal) => {
+                        const categoryConfig = GOAL_CATEGORIES[goal.category] || GOAL_CATEGORIES.CUSTOM;
+                        return (
+                          <motion.div
+                            key={goal.id}
+                            initial={{ opacity: 0, y: 8 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={spring.gentle}
+                            className="group flex items-center gap-3 p-3 rounded-xl bg-[var(--fill-tertiary)]/50 hover:bg-[var(--fill-tertiary)] transition-colors"
+                          >
+                            <div className="w-7 h-7 rounded-lg bg-[#059669] flex items-center justify-center shrink-0">
+                              <svg className="w-3.5 h-3.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+                              </svg>
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <span className="text-[14px] font-medium text-[var(--label-primary)]">{goal.name}</span>
+                              <span className="text-[12px] text-[var(--label-tertiary)] ml-2">{categoryConfig.label}</span>
+                            </div>
+                            <span className="text-[14px] font-semibold text-[var(--label-primary)] tabular-nums shrink-0">
+                              {formatCompact(goal.target_amount)}
+                            </span>
+                            <div className="flex items-center shrink-0 ml-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                              <motion.button
+                                whileTap={tapScale}
+                                onClick={() => handleEdit(goal)}
+                                className="p-1 text-[var(--label-tertiary)] hover:text-[var(--system-blue)] rounded-md transition-colors"
+                              >
+                                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                                  <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125" />
+                                </svg>
+                              </motion.button>
+                              <motion.button
+                                whileTap={tapScale}
+                                onClick={() => handleDelete(goal.id)}
+                                className="p-1 text-[var(--label-tertiary)] hover:text-[var(--system-red)] rounded-md transition-colors"
+                              >
+                                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                                  <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
+                                </svg>
+                              </motion.button>
+                            </div>
+                          </motion.div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -1098,7 +1391,7 @@ export default function Goals() {
                           }
                         }
 
-                        const allocatedValue = isLinked ? assetValue * (linkedAsset.allocation_percent / 100) : 0;
+                        const allocatedValue = isLinked ? (assetValue || 0) * (linkedAsset.allocation_percent / 100) : 0;
 
                         return (
                           <div

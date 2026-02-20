@@ -14,6 +14,14 @@ export function PriceProvider({ children }) {
   const [lastUpdated, setLastUpdated] = useState(null);
   const [marketStatus, setMarketStatus] = useState(null);
 
+  // Ref to always have the latest prices (avoids stale closure in async callbacks)
+  const pricesRef = useRef({});
+  pricesRef.current = prices;
+
+  // Ref for lastUpdated to avoid stale closure
+  const lastUpdatedRef = useRef(null);
+  lastUpdatedRef.current = lastUpdated;
+
   // Track in-flight requests to prevent duplicates
   const fetchPromiseRef = useRef(null);
   const fetchedSymbolsRef = useRef(new Set());
@@ -63,12 +71,13 @@ export function PriceProvider({ children }) {
   }, []);
 
   // Check if we need to fetch prices (not in cache or stale)
+  // Uses refs to avoid stale closure and unnecessary recreations
   const needsFetch = useCallback((symbolKey) => {
-    const cached = prices[symbolKey];
+    const cached = pricesRef.current[symbolKey];
     if (!cached || cached.unavailable) return true;
-    if (!lastUpdated) return true;
-    return Date.now() - lastUpdated.getTime() > CACHE_DURATION;
-  }, [prices, lastUpdated]);
+    if (!lastUpdatedRef.current) return true;
+    return Date.now() - lastUpdatedRef.current.getTime() > CACHE_DURATION;
+  }, []); // No dependencies - uses refs for latest values
 
   // Fetch prices for given assets
   // IMPORTANT: Always returns a Promise that resolves to the complete prices object
@@ -95,14 +104,13 @@ export function PriceProvider({ children }) {
       symbolsToFetch = allSymbols.filter(s => needsFetch(s.symbol));
     }
 
-    // If nothing to fetch, return current prices from state
-    // We need to get the latest state value, not the closure value
+    // If nothing to fetch, return current prices from ref (always latest)
     if (symbolsToFetch.length === 0) {
-      // Return the prices we need for the requested symbols
       const result = {};
+      const currentPrices = pricesRef.current;
       for (const s of allSymbols) {
-        if (prices[s.symbol]) {
-          result[s.symbol] = prices[s.symbol];
+        if (currentPrices[s.symbol]) {
+          result[s.symbol] = currentPrices[s.symbol];
         }
       }
       return result;
@@ -117,11 +125,12 @@ export function PriceProvider({ children }) {
         const fetchedPrices = await fetchPromiseRef.current;
         // Merge with existing cached prices for symbols we already have
         const result = {};
+        const currentPrices = pricesRef.current;
         for (const s of allSymbols) {
           if (fetchedPrices[s.symbol]) {
             result[s.symbol] = fetchedPrices[s.symbol];
-          } else if (prices[s.symbol]) {
-            result[s.symbol] = prices[s.symbol];
+          } else if (currentPrices[s.symbol]) {
+            result[s.symbol] = currentPrices[s.symbol];
           }
         }
         return result;
@@ -138,8 +147,8 @@ export function PriceProvider({ children }) {
         const newPrices = response.data?.prices || {};
         const newMarketStatus = response.data?.marketStatus;
 
-        // Build the merged prices object to return
-        const mergedPrices = { ...prices };
+        // Use ref for latest prices to avoid stale closure overwriting concurrent updates
+        const mergedPrices = { ...pricesRef.current };
 
         // Add new prices
         for (const [symbol, data] of Object.entries(newPrices)) {
@@ -156,7 +165,8 @@ export function PriceProvider({ children }) {
           }
         }
 
-        // Update React state
+        // Update React state and ref atomically
+        pricesRef.current = mergedPrices;
         setPrices(mergedPrices);
 
         // Save valid prices to backup
@@ -171,7 +181,7 @@ export function PriceProvider({ children }) {
         console.error('Error fetching prices:', error);
         // On error, try to use backup prices
         const backup = loadBackupPrices();
-        const mergedPrices = { ...prices };
+        const mergedPrices = { ...pricesRef.current };
 
         if (Object.keys(backup).length > 0) {
           for (const s of symbolsToFetch) {
@@ -179,6 +189,7 @@ export function PriceProvider({ children }) {
               mergedPrices[s.symbol] = { ...backup[s.symbol], fromBackup: true };
             }
           }
+          pricesRef.current = mergedPrices;
           setPrices(mergedPrices);
         }
         return mergedPrices;
@@ -191,7 +202,7 @@ export function PriceProvider({ children }) {
 
     fetchPromiseRef.current = fetchPromise;
     return fetchPromise;
-  }, [prices, getSymbolKey, needsFetch, loadBackupPrices, saveBackupPrices]);
+  }, [getSymbolKey, needsFetch, loadBackupPrices, saveBackupPrices]); // No prices dependency - uses pricesRef
 
   // Get price for a specific asset
   const getPrice = useCallback((asset) => {
@@ -208,6 +219,7 @@ export function PriceProvider({ children }) {
 
   // Clear all prices (useful for logout)
   const clearPrices = useCallback(() => {
+    pricesRef.current = {};
     setPrices({});
     setLastUpdated(null);
     setMarketStatus(null);

@@ -1,25 +1,98 @@
 import express from 'express';
 import db from '../db/database.js';
 import { authenticateToken } from '../middleware/auth.js';
+import {
+  calculateFixedIncomeValue,
+  calculateCompoundInterest,
+  getCompoundingFrequency,
+  generateRecurringDepositSchedule,
+  calculateXIRRFromTransactions,
+} from '../utils/interest.js';
 
 const router = express.Router();
 
 // Apply auth middleware to all routes
 router.use(authenticateToken);
 
-// Helper: Calculate asset value
-function getAssetValue(asset) {
-  if (asset.quantity && asset.avg_buy_price) {
-    return asset.quantity * asset.avg_buy_price;
-  } else if (asset.current_value) {
-    return asset.current_value;
-  } else if (asset.principal) {
-    return asset.principal;
-  } else if (asset.balance) {
-    return asset.balance;
-  } else if (asset.purchase_price) {
-    return asset.purchase_price;
+// Purity factors for gold (matching client-side)
+const GOLD_PURITY_FACTORS = {
+  '24K': 1.000, '22K': 0.916, '18K': 0.750, '14K': 0.585,
+};
+
+const RECURRING_DEPOSIT_TYPES = ['PPF', 'RD', 'EPF', 'VPF', 'SSY'];
+
+// Helper: Calculate asset value using live cached prices and compound interest
+// For equity: uses price_cache table
+// For gold/silver: uses metal_prices table
+// For fixed income: calculates compound interest from transactions
+// Falls back to stored values when no live data available
+async function getAssetValueLive(asset) {
+  const assetId = asset.id || asset.asset_id;
+
+  // Equity: use cached live price
+  if (asset.category === 'EQUITY' && asset.quantity && asset.symbol) {
+    const priceKey = asset.asset_type === 'MUTUAL_FUND'
+      ? asset.symbol
+      : `${asset.symbol}.${asset.exchange === 'BSE' ? 'BO' : 'NS'}`;
+    const cached = await db.get('SELECT price FROM price_cache WHERE symbol = ?', [priceKey]);
+    if (cached && cached.price > 0) {
+      return asset.quantity * cached.price;
+    }
   }
+
+  // Gold/Silver: use cached metal price
+  if (asset.category === 'PHYSICAL' && (asset.asset_type === 'GOLD' || asset.asset_type === 'SILVER') && asset.weight_grams) {
+    const metal = asset.asset_type === 'GOLD' ? 'gold' : 'silver';
+    const cached = await db.get(
+      'SELECT price_per_gram_24k FROM metal_prices WHERE metal = ? ORDER BY fetched_at DESC LIMIT 1',
+      [metal]
+    );
+    if (cached && cached.price_per_gram_24k > 0) {
+      const purityFactor = GOLD_PURITY_FACTORS[asset.purity] || 1;
+      return Math.round(asset.weight_grams * cached.price_per_gram_24k * purityFactor);
+    }
+  }
+
+  // Fixed Income: calculate compound interest from transactions
+  if (asset.category === 'FIXED_INCOME' && asset.interest_rate && assetId) {
+    const transactions = await db.all(
+      'SELECT type, total_amount, transaction_date FROM transactions WHERE asset_id = ? ORDER BY transaction_date',
+      [assetId]
+    );
+
+    if (transactions.length > 0) {
+      if (asset.asset_type === 'PPF') {
+        const result = generateRecurringDepositSchedule(transactions, asset.interest_rate, asset.start_date);
+        if (result) return result.summary.currentValue;
+      } else {
+        const freq = getCompoundingFrequency(asset.asset_type);
+        const calc = calculateFixedIncomeValue(transactions, asset.interest_rate, new Date(), freq);
+        return calc.currentValue;
+      }
+    } else if (asset.principal) {
+      if (!RECURRING_DEPOSIT_TYPES.includes(asset.asset_type)) {
+        const startDate = asset.start_date || asset.created_at?.split('T')[0] || new Date().toISOString().split('T')[0];
+        const freq = getCompoundingFrequency(asset.asset_type);
+        return calculateCompoundInterest(asset.principal, asset.interest_rate, startDate, new Date(), freq);
+      }
+      return asset.principal;
+    }
+  }
+
+  // Real Estate: appreciation calculation
+  if (asset.category === 'REAL_ESTATE' && asset.appreciation_rate && asset.purchase_price && asset.purchase_date) {
+    const purchasePrice = parseFloat(asset.purchase_price);
+    const rate = parseFloat(asset.appreciation_rate) / 100;
+    const years = (new Date() - new Date(asset.purchase_date)) / (365.25 * 24 * 60 * 60 * 1000);
+    if (years >= 0) return Math.round(purchasePrice * Math.pow(1 + rate, years));
+  }
+
+  // Fallback chain for other asset types
+  if (asset.quantity && asset.avg_buy_price) return asset.quantity * asset.avg_buy_price;
+  if (asset.current_value) return asset.current_value;
+  if (asset.principal) return asset.principal;
+  if (asset.balance) return asset.balance;
+  if (asset.purchase_price) return asset.purchase_price;
   return 0;
 }
 
@@ -34,7 +107,9 @@ async function calculateGoalProgress(goalId, userId) {
     SELECT gal.id as link_id, gal.goal_id, gal.asset_id, gal.link_type,
            gal.allocation_percent, gal.allocation_mode, gal.fixed_allocation_amount,
            gal.initial_value_snapshot, gal.link_date,
-           a.name, a.asset_type, a.category as asset_category,
+           a.id, a.name, a.asset_type, a.category, a.category as asset_category,
+           a.symbol, a.exchange, a.weight_grams, a.purity,
+           a.interest_rate, a.start_date, a.appreciation_rate, a.purchase_date,
            a.quantity, a.avg_buy_price, a.current_value, a.principal, a.balance, a.purchase_price
     FROM goal_asset_links gal
     JOIN assets a ON gal.asset_id = a.id
@@ -45,7 +120,7 @@ async function calculateGoalProgress(goalId, userId) {
   const linkedAssets = [];
 
   for (const link of links) {
-    const assetValue = getAssetValue(link);
+    const assetValue = await getAssetValueLive(link);
     let allocatedValue = 0;
 
     if (link.link_type === 'FUNDING') {
@@ -132,8 +207,11 @@ router.get('/', async (req, res) => {
     const placeholders = goalIds.map(() => '?').join(',');
     const allLinks = await db.all(`
       SELECT gal.goal_id, gal.link_type, gal.allocation_percent, gal.allocation_mode,
-             gal.fixed_allocation_amount, a.id as asset_id, a.name as asset_name,
-             a.asset_type, a.quantity, a.avg_buy_price, a.current_value,
+             gal.fixed_allocation_amount, gal.initial_value_snapshot,
+             a.id as asset_id, a.name as asset_name,
+             a.asset_type, a.category, a.symbol, a.exchange, a.weight_grams, a.purity,
+             a.interest_rate, a.start_date, a.appreciation_rate, a.purchase_date,
+             a.quantity, a.avg_buy_price, a.current_value,
              a.principal, a.balance, a.purchase_price
       FROM goal_asset_links gal
       JOIN assets a ON gal.asset_id = a.id
@@ -147,14 +225,38 @@ router.get('/', async (req, res) => {
       return acc;
     }, {});
 
-    // Enrich goals with progress data (no additional queries needed)
-    const enrichedGoals = goals.map(goal => {
+    // Batch-fetch transactions for ALL linked assets in ONE query
+    const linkedAssetIds = [...new Set(allLinks.map(l => l.asset_id))];
+    let txnsByAsset = {};
+    if (linkedAssetIds.length > 0) {
+      const txnPlaceholders = linkedAssetIds.map(() => '?').join(',');
+      const allTxns = await db.all(
+        `SELECT * FROM transactions WHERE asset_id IN (${txnPlaceholders}) ORDER BY transaction_date`,
+        linkedAssetIds
+      );
+      txnsByAsset = allTxns.reduce((acc, t) => {
+        if (!acc[t.asset_id]) acc[t.asset_id] = [];
+        acc[t.asset_id].push(t);
+        return acc;
+      }, {});
+    }
+
+    // Enrich goals with progress + projection data
+    const enrichedGoals = await Promise.all(goals.map(async (goal) => {
       const links = linksByGoal[goal.id] || [];
       let linkedAssetsValue = 0;
+      let initialLinkedValue = 0;
       const linkedAssetNames = [];
 
+      // Projection accumulators
+      let totalAvgMonthlyContribution = 0;
+      let weightedReturnNumerator = 0;
+      let totalAllocatedValue = 0;
+      const assetValueMap = {};  // cache asset values for XIRR
+
       for (const link of links) {
-        const assetValue = getAssetValue(link);
+        const assetValue = await getAssetValueLive(link);
+        assetValueMap[link.asset_id] = assetValue;
         let allocatedValue = 0;
 
         if (link.link_type === 'FUNDING') {
@@ -164,6 +266,53 @@ router.get('/', async (req, res) => {
             allocatedValue = assetValue * (link.allocation_percent / 100);
           }
           linkedAssetsValue += allocatedValue;
+
+          // Sum initial value snapshots (value at time of linking) weighted by allocation
+          if (link.initial_value_snapshot != null) {
+            if (link.allocation_mode === 'FIXED_AMOUNT' && link.fixed_allocation_amount) {
+              initialLinkedValue += Math.min(link.fixed_allocation_amount, link.initial_value_snapshot);
+            } else {
+              initialLinkedValue += link.initial_value_snapshot * (link.allocation_percent / 100);
+            }
+          }
+
+          // --- Projection: avg monthly contribution from transaction history ---
+          const txns = txnsByAsset[link.asset_id] || [];
+          const buyTxns = txns.filter(t => t.type === 'BUY');
+          if (buyTxns.length > 0) {
+            const totalBought = buyTxns.reduce((s, t) => s + (parseFloat(t.total_amount) || 0), 0);
+            const firstTxnDate = new Date(buyTxns[0].transaction_date);
+            const monthsSinceFirst = Math.max(1, (new Date() - firstTxnDate) / (1000 * 60 * 60 * 24 * 30.44));
+            const avgMonthly = totalBought / monthsSinceFirst;
+            const allocPct = link.allocation_percent / 100;
+            totalAvgMonthlyContribution += avgMonthly * allocPct;
+          }
+
+          // --- Projection: annual return rate ---
+          let annualReturn = 0;
+          if (link.category === 'EQUITY') {
+            // XIRR for equity/MF assets
+            const txns = txnsByAsset[link.asset_id] || [];
+            if (txns.length > 0 && assetValue > 0) {
+              const firstTxnDate = new Date(txns[0].transaction_date);
+              const holdingDays = (new Date() - firstTxnDate) / (1000 * 60 * 60 * 24);
+              if (holdingDays >= 30) {
+                const xirr = calculateXIRRFromTransactions(txns, assetValue);
+                if (xirr && isFinite(xirr) && Math.abs(xirr) <= 200) {
+                  annualReturn = xirr;
+                }
+              }
+            }
+          } else if (link.category === 'FIXED_INCOME' && link.interest_rate) {
+            annualReturn = parseFloat(link.interest_rate) || 0;
+          } else if (link.category === 'REAL_ESTATE' && link.appreciation_rate) {
+            annualReturn = parseFloat(link.appreciation_rate) || 0;
+          }
+
+          if (allocatedValue > 0) {
+            weightedReturnNumerator += annualReturn * allocatedValue;
+            totalAllocatedValue += allocatedValue;
+          }
         }
         if (link.asset_name) linkedAssetNames.push(link.asset_name);
       }
@@ -182,15 +331,23 @@ router.get('/', async (req, res) => {
         ? Math.min((currentValue / goal.target_amount) * 100, 100)
         : 0;
 
+      // Weighted projected annual return across all linked assets
+      const projectedAnnualReturn = totalAllocatedValue > 0
+        ? weightedReturnNumerator / totalAllocatedValue
+        : 0;
+
       return {
         ...goal,
         current_value: currentValue,
         linked_assets_value: linkedAssetsValue,
+        initial_linked_value: initialLinkedValue,
         progress_percent: progressPercent,
         linked_assets_count: links.length,
         linked_assets_names: linkedAssetNames,
+        avg_monthly_contribution: Math.round(totalAvgMonthlyContribution),
+        projected_annual_return: Math.round(projectedAnnualReturn * 100) / 100,
       };
-    });
+    }));
 
     res.json({ goals: enrichedGoals });
   } catch (error) {
@@ -285,7 +442,7 @@ router.post('/', async (req, res) => {
         const asset = await db.get('SELECT * FROM assets WHERE id = ? AND user_id = ?', [link.asset_id, req.user.id]);
 
         if (asset) {
-          const assetValue = getAssetValue(asset);
+          const assetValue = await getAssetValueLive(asset);
           await db.run(`
             INSERT INTO goal_asset_links (goal_id, asset_id, link_type, allocation_percent, initial_value_snapshot)
             VALUES (?, ?, ?, ?, ?)
@@ -449,7 +606,7 @@ router.get('/:id/links', async (req, res) => {
     const enrichedLinks = [];
     for (const link of links) {
       const asset = await db.get('SELECT * FROM assets WHERE id = ?', [link.asset_id]);
-      const assetValue = asset ? getAssetValue(asset) : 0;
+      const assetValue = asset ? await getAssetValueLive(asset) : 0;
       let allocatedValue = 0;
 
       if (link.link_type === 'FUNDING') {
@@ -530,7 +687,7 @@ router.post('/:id/links', async (req, res) => {
       return res.status(400).json({ error: 'Asset is already linked to this goal' });
     }
 
-    const assetValue = getAssetValue(asset);
+    const assetValue = await getAssetValueLive(asset);
 
     const result = await db.run(`
       INSERT INTO goal_asset_links (goal_id, asset_id, link_type, allocation_percent, allocation_mode, fixed_allocation_amount, initial_value_snapshot)
@@ -842,7 +999,7 @@ router.get('/asset-allocations/:assetId', async (req, res) => {
 
     const allocations = await getAssetAllocations(req.params.assetId, req.user.id);
     const totalAllocated = allocations.reduce((sum, a) => sum + (a.allocation_percent || 0), 0);
-    const assetValue = getAssetValue(asset);
+    const assetValue = await getAssetValueLive(asset);
 
     res.json({
       asset_id: asset.id,
@@ -908,7 +1065,7 @@ router.post('/migrate', async (req, res) => {
           const asset = await db.get('SELECT * FROM assets WHERE id = ? AND user_id = ?', [assetId, req.user.id]);
 
           if (asset) {
-            const assetValue = getAssetValue(asset);
+            const assetValue = await getAssetValueLive(asset);
             await db.run(`
               INSERT OR IGNORE INTO goal_asset_links (goal_id, asset_id, link_type, allocation_percent, initial_value_snapshot)
               VALUES (?, ?, 'FUNDING', 100, ?)

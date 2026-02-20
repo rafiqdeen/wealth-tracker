@@ -5,13 +5,15 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { assetService, ASSET_CONFIG } from '../services/assets';
 import { Card, SearchInput, AssetsSkeleton, Modal } from '../components/apple';
 import QuickAddTransaction from '../components/QuickAddTransaction';
-import AssetPriceChart from '../components/AssetPriceChart';
-import { spring, staggerContainer, staggerItem } from '../utils/animations';
+
+import { spring, staggerContainer, staggerItem, tapScale } from '../utils/animations';
+import { getAssetValue as getAssetValuePure, getInvestedValue as getInvestedValuePure } from '../utils/portfolio';
 import { categoryColors } from '../constants/theme';
 import { formatCurrency, formatCompact } from '../utils/formatting';
 import { calculateFixedIncomeValue, getCompoundingFrequency, calculateXIRRFromTransactions, generateRecurringDepositSchedule } from '../utils/interest';
 import { useToast } from '../context/ToastContext';
 import { usePrices } from '../context/PriceContext';
+import { metalService, PURITY_FACTORS } from '../services/metals';
 
 export default function Assets() {
   const navigate = useNavigate();
@@ -40,6 +42,7 @@ export default function Assets() {
   const menuRef = useRef(null);
   const menuButtonRefs = useRef({}); // Track kebab button positions
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [metalPrices, setMetalPrices] = useState({}); // { gold: { pricePerGram24K, previousPricePerGram24K, changePercent }, silver: { ... } }
 
   // Auto-refresh state
   const [autoRefreshEnabled, setAutoRefreshEnabled] = useState(() => {
@@ -76,7 +79,8 @@ export default function Assets() {
     }
   };
 
-  // Auto-refresh effect
+  // Auto-refresh effect — uses normal fetchPrices (respects server cache from priceSync)
+  // Only manual refresh button triggers forceRefresh
   useEffect(() => {
     // Clear existing interval
     if (autoRefreshIntervalRef.current) {
@@ -89,8 +93,11 @@ export default function Assets() {
       autoRefreshIntervalRef.current = setInterval(() => {
         setAutoRefreshCountdown(prev => {
           if (prev <= 1) {
-            // Time to refresh
-            handleRefreshPrices();
+            // Use fetchPrices (not refreshPrices) to leverage server-side cache
+            // priceSync already keeps server cache fresh every 15 min
+            if (!pricesLoading) {
+              fetchPrices(assets);
+            }
             return 30 * 60; // Reset to 30 minutes
           }
           return prev - 1;
@@ -236,6 +243,13 @@ export default function Assets() {
         parallelFetches.push(fetchTransactionDates(fixedIncomeAssets));
       }
 
+      // Fetch metal prices for gold/silver day change
+      const hasGold = assetList.some(a => a.category === 'PHYSICAL' && a.asset_type === 'GOLD');
+      const hasSilver = assetList.some(a => a.category === 'PHYSICAL' && a.asset_type === 'SILVER');
+      if (hasGold || hasSilver) {
+        parallelFetches.push(fetchMetalPrices(hasGold, hasSilver));
+      }
+
       // Wait for all parallel fetches to complete before setting loading to false
       // This ensures prices are available for "Today's" change calculations
       if (parallelFetches.length > 0) {
@@ -344,6 +358,27 @@ export default function Assets() {
     }
   };
 
+  const fetchMetalPrices = async (hasGold, hasSilver) => {
+    try {
+      const fetches = [];
+      if (hasGold) fetches.push(metalService.getPrice('gold').then(r => ({ metal: 'gold', data: r.data })));
+      if (hasSilver) fetches.push(metalService.getPrice('silver').then(r => ({ metal: 'silver', data: r.data })));
+      const results = await Promise.all(fetches);
+      const mp = {};
+      for (const { metal, data } of results) {
+        mp[metal] = {
+          pricePerGram24K: data.pricePerGram24K,
+          previousPricePerGram24K: data.previousPricePerGram24K,
+          changePercent: data.changePercent,
+          purityPrices: data.purityPrices,
+        };
+      }
+      setMetalPrices(mp);
+    } catch (error) {
+      console.error('Error fetching metal prices:', error);
+    }
+  };
+
   const handleDelete = (asset, e) => {
     e.preventDefault();
     e.stopPropagation();
@@ -372,47 +407,15 @@ export default function Assets() {
     setAssetToDelete(null);
   };
 
-  // Asset value calculations - returns null for equity if price unavailable
-  const getAssetValue = (asset) => {
-    if (asset.category === 'EQUITY' && asset.quantity && asset.symbol) {
-      const priceKey = asset.asset_type === 'MUTUAL_FUND' ? asset.symbol : `${asset.symbol}.${asset.exchange === 'BSE' ? 'BO' : 'NS'}`;
-      const priceData = prices[priceKey];
-      // Return value only if price is available, otherwise null (never use buyPrice)
-      if (priceData && !priceData.unavailable && typeof priceData.price === 'number' && priceData.price > 0) {
-        return asset.quantity * priceData.price;
-      }
-      return null; // Price unavailable - don't use buyPrice
-    }
-    if (asset.category === 'FIXED_INCOME') {
-      const calc = fixedIncomeCalcs[asset.id];
-      if (calc) return calc.currentValue;
-      if (asset.principal) return asset.principal;
-    }
-    if (asset.quantity && asset.avg_buy_price) return asset.quantity * asset.avg_buy_price;
-    if (asset.principal) return asset.principal;
-    if (asset.current_value) return asset.current_value;
-    if (asset.purchase_price) return asset.purchase_price;
-    if (asset.balance) return asset.balance;
-    return 0;
-  };
+  const valueDeps = { prices, fixedIncomeCalcs, metalPrices, PURITY_FACTORS };
+  const getAssetValue = (asset) => getAssetValuePure(asset, valueDeps);
+  const getInvestedValue = (asset) => getInvestedValuePure(asset, { fixedIncomeCalcs });
 
   const getInterestEarned = (asset) => {
     if (asset.category === 'FIXED_INCOME') {
       const calc = fixedIncomeCalcs[asset.id];
       if (calc) return calc.interest;
     }
-    return 0;
-  };
-
-  const getInvestedValue = (asset) => {
-    if (asset.quantity && asset.avg_buy_price) return asset.quantity * asset.avg_buy_price;
-    if (asset.category === 'FIXED_INCOME') {
-      const calc = fixedIncomeCalcs[asset.id];
-      if (calc) return calc.principal;
-    }
-    if (asset.principal) return asset.principal;
-    if (asset.purchase_price) return asset.purchase_price;
-    if (asset.balance) return asset.balance;
     return 0;
   };
 
@@ -499,11 +502,32 @@ export default function Assets() {
         return {
           amount: dayChangeAmount,
           percent: changePercent,
-          hasData: true,  // We have price data, so show the change
+          hasData: true,
           isMutualFund
         };
       }
     }
+
+    // Gold/Silver day change from metal prices
+    if (asset.category === 'PHYSICAL' && (asset.asset_type === 'GOLD' || asset.asset_type === 'SILVER')) {
+      const metal = asset.asset_type === 'GOLD' ? 'gold' : 'silver';
+      const mp = metalPrices[metal];
+      if (mp && mp.pricePerGram24K && mp.previousPricePerGram24K && asset.weight_grams) {
+        const purityFactor = PURITY_FACTORS[asset.purity] || 1;
+        const currentPricePerGram = mp.pricePerGram24K * purityFactor;
+        const prevPricePerGram = mp.previousPricePerGram24K * purityFactor;
+        const currentValue = asset.weight_grams * currentPricePerGram;
+        const prevValue = asset.weight_grams * prevPricePerGram;
+        const changePercent = typeof mp.changePercent === 'number' ? mp.changePercent : 0;
+        return {
+          amount: currentValue - prevValue,
+          percent: changePercent,
+          hasData: true,
+          isMutualFund: false
+        };
+      }
+    }
+
     return { amount: 0, percent: 0, hasData: false, isMutualFund: false };
   };
 
@@ -706,22 +730,23 @@ export default function Assets() {
   const totalGainPercent = totalInvestedValue > 0 ? (totalGainLoss / totalInvestedValue) * 100 : 0;
 
   // Calculate total day's change (filtered by todayFilter - 'stocks', 'mf', or 'all')
+  // Top card only includes EQUITY assets (stocks + MF), never physical/other
   const totalDayChange = assetsWithPrice.reduce((sum, asset) => {
+    if (asset.category !== 'EQUITY') return sum;
     const dayChange = getDayChange(asset);
-    // Apply filter based on selection
     if (todayFilter === 'stocks' && dayChange.isMutualFund) return sum;
     if (todayFilter === 'mf' && !dayChange.isMutualFund) return sum;
-    // 'all' includes everything
     return sum + dayChange.amount;
   }, 0);
 
-  // Calculate base value for percentage (only for filtered asset types)
+  // Calculate base value for percentage (EQUITY only)
   const filteredDayBaseValue = assetsWithPrice.reduce((sum, asset) => {
+    if (asset.category !== 'EQUITY') return sum;
     const dayChange = getDayChange(asset);
+    if (!dayChange.hasData) return sum;
     if (todayFilter === 'stocks' && dayChange.isMutualFund) return sum;
     if (todayFilter === 'mf' && !dayChange.isMutualFund) return sum;
-    if (asset.category !== 'EQUITY') return sum;
-    return sum + getAssetValue(asset);
+    return sum + (getAssetValue(asset) || 0);
   }, 0);
   const totalDayChangePercent = filteredDayBaseValue > 0 ? (totalDayChange / (filteredDayBaseValue - totalDayChange)) * 100 : 0;
 
@@ -1040,7 +1065,7 @@ export default function Assets() {
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         transition={{ delay: 0.1 }}
-        className="mb-4"
+        className="mb-4 sticky top-0 z-20"
       >
         <Card padding="p-0">
           <div className="flex flex-col lg:flex-row lg:items-center gap-3 p-3.5">
@@ -1090,16 +1115,27 @@ export default function Assets() {
                 />
               </div>
 
-              {/* Sort */}
-              <select
-                value={sortBy}
-                onChange={(e) => setSortBy(e.target.value)}
-                className="px-4 py-2.5 bg-[var(--bg-tertiary)] border-none rounded-lg text-[14px] font-medium text-[var(--label-primary)] cursor-pointer focus:outline-none focus:ring-2 focus:ring-[var(--chart-primary)]/30"
-              >
-                {sortOptions.map(opt => (
-                  <option key={opt.value} value={opt.value}>{opt.label}</option>
+              {/* Sort Pills */}
+              <div className="flex items-center gap-1">
+                {[
+                  { value: 'value', label: 'Value' },
+                  { value: 'returns', label: 'Gain %' },
+                  { value: 'name', label: 'Name' },
+                ].map(opt => (
+                  <motion.button
+                    key={opt.value}
+                    whileTap={tapScale}
+                    onClick={() => setSortBy(opt.value)}
+                    className={`px-3 py-1.5 rounded-lg text-[12px] font-medium transition-all ${
+                      sortBy === opt.value
+                        ? 'bg-[var(--system-blue)] text-white'
+                        : 'bg-[var(--fill-tertiary)] text-[var(--label-secondary)]'
+                    }`}
+                  >
+                    {opt.label}
+                  </motion.button>
                 ))}
-              </select>
+              </div>
             </div>
           </div>
         </Card>
@@ -1354,7 +1390,7 @@ export default function Assets() {
 
                                 {/* Day's Change */}
                                 <div className="col-span-3 md:col-span-2 text-right">
-                                  {asset.category === 'EQUITY' && dayChange.hasData ? (
+                                  {dayChange.hasData ? (
                                     <>
                                       <p className={`text-[14px] font-semibold tabular-nums ${dayChange.percent >= 0 ? 'text-[#059669]' : 'text-[#DC2626]'}`}>
                                         {dayChange.percent >= 0 ? '+' : ''}{dayChange.percent.toFixed(2)}%
@@ -1541,16 +1577,6 @@ export default function Assets() {
                                         )}
                                       </div>
 
-                                      {/* Price Chart for Equity Assets */}
-                                      {asset.category === 'EQUITY' && asset.symbol && (
-                                        <div className="mx-4 md:ml-[52px] md:mr-6 mt-3 pt-3 border-t border-[var(--separator)]/20">
-                                          <AssetPriceChart
-                                            symbol={asset.asset_type === 'MUTUAL_FUND' ? asset.symbol : `${asset.symbol}.${asset.exchange === 'BSE' ? 'BO' : 'NS'}`}
-                                            type={asset.asset_type === 'MUTUAL_FUND' ? 'mf' : 'stock'}
-                                            assetName={asset.name}
-                                          />
-                                        </div>
-                                      )}
                                     </div>
                                   </motion.div>
                                 )}
@@ -1656,7 +1682,7 @@ export default function Assets() {
               <div className="flex items-center gap-3">
                 <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${
                   assetToDelete.category === 'EQUITY' ? 'bg-[#4F7DF3]' :
-                  assetToDelete.category === 'FIXED_INCOME' ? 'bg-[#22C55E]' :
+                  assetToDelete.category === 'FIXED_INCOME' ? 'bg-[#059669]' :
                   assetToDelete.category === 'REAL_ESTATE' ? 'bg-[#F59E0B]' :
                   assetToDelete.category === 'GOLD' ? 'bg-[#EAB308]' :
                   assetToDelete.category === 'CASH' ? 'bg-[#6366F1]' :

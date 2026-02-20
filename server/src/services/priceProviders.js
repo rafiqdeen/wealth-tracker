@@ -287,6 +287,15 @@ export async function fetchPriceWithFallback(symbol, yahooFetcher) {
       const result = await provider.breaker.execute(provider.fn);
 
       if (result && result.price && result.price > 0) {
+        // Sanity check: if previousClose is available, reject prices that deviate >5x
+        // This catches scraping errors (e.g., Google returning market cap instead of price)
+        if (result.previousClose && result.previousClose > 0) {
+          const ratio = result.price / result.previousClose;
+          if (ratio > 5 || ratio < 0.2) {
+            console.warn(`[PriceProvider] ${symbol}: ${provider.name} price ₹${result.price} vs previousClose ₹${result.previousClose} (${ratio.toFixed(1)}x) — likely bad data, skipping`);
+            continue; // Try next provider
+          }
+        }
         console.log(`[PriceProvider] ${symbol} fetched from ${provider.name}: ${result.price}`);
         return {
           ...result,

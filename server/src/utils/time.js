@@ -2,7 +2,7 @@
  * Centralized time utilities for IST (Indian Standard Time) calculations
  */
 
-const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000; // +5:30 hours in milliseconds
+export const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000; // +5:30 hours in milliseconds
 
 /**
  * Get current time in IST

@@ -58,7 +58,7 @@ export function PageSpinner({ message }) {
       role="status"
       aria-busy="true"
       aria-label={message || "Loading"}
-      className="min-h-[60vh] flex flex-col items-center justify-center gap-4"
+      className="flex-1 flex flex-col items-center justify-center gap-4"
     >
       <Spinner size="lg" label={message || "Loading"} />
       {message && (

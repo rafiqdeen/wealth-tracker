@@ -108,9 +108,21 @@ async function fetchMetalPriceINR(metal = 'gold') {
   const internationalPriceINR = (metalPriceUSD * usdToInr) / TROY_OUNCE_TO_GRAMS;
   const pricePerGramINR = internationalPriceINR * indiaPremium;
 
+  // Compute previous close INR per gram for day-change calculation
+  const prevMetalUSD = metalData.previousClose || metalPriceUSD;
+  const prevUsdToInr = forexData.previousClose || usdToInr;
+  const prevInternationalINR = (prevMetalUSD * prevUsdToInr) / TROY_OUNCE_TO_GRAMS;
+  const prevPricePerGramINR = prevInternationalINR * indiaPremium;
+
+  const changePercent = prevPricePerGramINR > 0
+    ? ((pricePerGramINR - prevPricePerGramINR) / prevPricePerGramINR) * 100
+    : 0;
+
   return {
     metal,
     pricePerGram24K: Math.round(pricePerGramINR * 100) / 100, // Round to 2 decimals
+    previousPricePerGram24K: Math.round(prevPricePerGramINR * 100) / 100,
+    changePercent: Math.round(changePercent * 100) / 100,
     metalPriceUSD,
     usdToInr,
     indiaPremium,
@@ -211,6 +223,9 @@ router.get('/price/:metal', authenticateToken, async (req, res) => {
       return res.status(400).json({ error: 'Invalid metal. Use "gold" or "silver"' });
     }
 
+    // Metal prices update once daily — cache for 30 minutes
+    res.set('Cache-Control', 'private, max-age=1800');
+
     // Check if we should auto-fetch new price
     if (await shouldFetchNewPrice(metal)) {
       try {
@@ -220,6 +235,8 @@ router.get('/price/:metal', authenticateToken, async (req, res) => {
         return res.json({
           metal,
           pricePerGram24K: freshData.pricePerGram24K,
+          previousPricePerGram24K: freshData.previousPricePerGram24K,
+          changePercent: freshData.changePercent,
           purityPrices: getPurityPrices(freshData.pricePerGram24K, metal),
           currency: 'INR',
           fetchedAt: saved.fetched_at,
@@ -245,6 +262,8 @@ router.get('/price/:metal', authenticateToken, async (req, res) => {
         return res.json({
           metal,
           pricePerGram24K: freshData.pricePerGram24K,
+          previousPricePerGram24K: freshData.previousPricePerGram24K,
+          changePercent: freshData.changePercent,
           purityPrices: getPurityPrices(freshData.pricePerGram24K, metal),
           currency: 'INR',
           fetchedAt: saved.fetched_at,
@@ -260,9 +279,23 @@ router.get('/price/:metal', authenticateToken, async (req, res) => {
       }
     }
 
+    // For cached responses, derive previous close from prior day's entry
+    const previousEntry = await db.get(
+      `SELECT price_per_gram_24k FROM metal_prices
+       WHERE metal = ? AND DATE(fetched_at) < DATE(?)
+       ORDER BY fetched_at DESC LIMIT 1`,
+      [metal, cached.fetched_at]
+    );
+    const cachedPrevPrice = previousEntry?.price_per_gram_24k || cached.price_per_gram_24k;
+    const cachedChangePercent = cachedPrevPrice > 0
+      ? Math.round(((cached.price_per_gram_24k - cachedPrevPrice) / cachedPrevPrice) * 100 * 100) / 100
+      : 0;
+
     res.json({
       metal,
       pricePerGram24K: cached.price_per_gram_24k,
+      previousPricePerGram24K: cachedPrevPrice,
+      changePercent: cachedChangePercent,
       purityPrices: getPurityPrices(cached.price_per_gram_24k, metal),
       currency: 'INR',
       fetchedAt: cached.fetched_at,
@@ -289,6 +322,8 @@ router.post('/price/:metal/refresh', authenticateToken, async (req, res) => {
     res.json({
       metal,
       pricePerGram24K: freshData.pricePerGram24K,
+      previousPricePerGram24K: freshData.previousPricePerGram24K,
+      changePercent: freshData.changePercent,
       purityPrices: getPurityPrices(freshData.pricePerGram24K, metal),
       currency: 'INR',
       fetchedAt: saved.fetched_at,

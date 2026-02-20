@@ -1,4 +1,5 @@
-import { createClient } from '@libsql/client';
+// === TURSO IMPORT COMMENTED OUT — using 100% local SQLite ===
+// import { createClient } from '@libsql/client';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { existsSync } from 'fs';
@@ -14,218 +15,95 @@ const __dirname = dirname(__filename);
 // createRequire for loading CommonJS modules in ESM
 const require = createRequire(import.meta.url);
 
-// Determine database mode
-const DB_MODE = process.env.DB_MODE || 'local';
-const IS_TURSO = DB_MODE === 'turso';
-
-console.log('[DB] Mode:', DB_MODE, 'IS_TURSO:', IS_TURSO);
-console.log('[DB] TURSO_DATABASE_URL:', process.env.TURSO_DATABASE_URL ? 'set' : 'NOT SET');
-console.log('[DB] TURSO_AUTH_TOKEN:', process.env.TURSO_AUTH_TOKEN ? 'set' : 'NOT SET');
+// === LOCAL-ONLY MODE — Turso/Vercel disabled ===
+console.log('[DB] Mode: local (Turso disabled)');
 
 let localDb = null;
-let tursoClient = null;
 let connectionInitialized = false;
 
-// Lazy initialization for better serverless compatibility
 function getConnection() {
-  if (connectionInitialized) {
-    return IS_TURSO ? tursoClient : localDb;
-  }
+  if (connectionInitialized) return localDb;
 
-  if (IS_TURSO) {
-    // Turso Cloud Database - lazy init
-    if (!tursoClient) {
-      if (!process.env.TURSO_DATABASE_URL) {
-        throw new Error('TURSO_DATABASE_URL environment variable is not set');
-      }
-      if (!process.env.TURSO_AUTH_TOKEN) {
-        throw new Error('TURSO_AUTH_TOKEN environment variable is not set');
-      }
-      try {
-        tursoClient = createClient({
-          url: process.env.TURSO_DATABASE_URL,
-          authToken: process.env.TURSO_AUTH_TOKEN,
-        });
-        console.log('[DB] Connected to Turso cloud database');
-      } catch (e) {
-        console.error('[DB] Failed to create Turso client:', e.message);
-        throw e;
-      }
-    }
-  } else {
-    // Local SQLite Database - lazy init
-    // Only load better-sqlite3 when NOT in Turso mode
-    if (!localDb) {
-      try {
-        const Database = require('better-sqlite3');
-        // Check data folder first, then root
-        const dataPath = join(__dirname, '../../data/wealth.db');
-        const rootPath = join(__dirname, '../../wealth.db');
-        const dbPath = existsSync(dataPath) ? dataPath : rootPath;
-        localDb = new Database(dbPath);
-        localDb.pragma('foreign_keys = ON');
-        console.log('[DB] Connected to local SQLite database:', dbPath);
-      } catch (e) {
-        console.error('[DB] Failed to load better-sqlite3:', e.message);
-        throw new Error('Local SQLite database not available. Set DB_MODE=turso for cloud database.');
-      }
+  if (!localDb) {
+    try {
+      const Database = require('better-sqlite3');
+      const dataPath = join(__dirname, '../../data/wealth.db');
+      const rootPath = join(__dirname, '../../wealth.db');
+      const dbPath = existsSync(dataPath) ? dataPath : rootPath;
+      localDb = new Database(dbPath);
+      localDb.pragma('foreign_keys = ON');
+      localDb.pragma('journal_mode = WAL');  // Better concurrent read performance
+      console.log('[DB] Connected to local SQLite database:', dbPath);
+    } catch (e) {
+      console.error('[DB] Failed to load better-sqlite3:', e.message);
+      throw new Error('Local SQLite database not available.');
     }
   }
 
   connectionInitialized = true;
-  return IS_TURSO ? tursoClient : localDb;
+  return localDb;
 }
 
 /**
- * Database wrapper providing consistent async interface for both local SQLite and Turso
+ * Database wrapper — local SQLite only (Turso branches commented out)
  */
 const db = {
-  /**
-   * Execute a query and return all rows
-   * @param {string} sql - SQL query
-   * @param {Array} args - Query parameters
-   * @returns {Promise<Array>} - Array of rows
-   */
   async all(sql, args = []) {
-    getConnection(); // Ensure connection is initialized
-    if (IS_TURSO) {
-      const result = await tursoClient.execute({ sql, args });
-      return result.rows;
-    } else {
-      return localDb.prepare(sql).all(...args);
-    }
+    getConnection();
+    return localDb.prepare(sql).all(...args);
   },
 
-  /**
-   * Execute a query and return the first row
-   * @param {string} sql - SQL query
-   * @param {Array} args - Query parameters
-   * @returns {Promise<Object|undefined>} - First row or undefined
-   */
   async get(sql, args = []) {
-    getConnection(); // Ensure connection is initialized
-    if (IS_TURSO) {
-      const result = await tursoClient.execute({ sql, args });
-      return result.rows[0];
-    } else {
-      return localDb.prepare(sql).get(...args);
-    }
+    getConnection();
+    return localDb.prepare(sql).get(...args);
   },
 
-  /**
-   * Execute a query (INSERT, UPDATE, DELETE) and return result info
-   * @param {string} sql - SQL query
-   * @param {Array} args - Query parameters
-   * @returns {Promise<{lastInsertRowid: number, changes: number}>}
-   */
   async run(sql, args = []) {
-    getConnection(); // Ensure connection is initialized
-    if (IS_TURSO) {
-      const result = await tursoClient.execute({ sql, args });
-      return {
-        lastInsertRowid: Number(result.lastInsertRowid),
-        changes: result.rowsAffected,
-      };
-    } else {
-      const stmt = localDb.prepare(sql);
-      const result = stmt.run(...args);
-      return {
-        lastInsertRowid: Number(result.lastInsertRowid),
-        changes: result.changes,
-      };
-    }
+    getConnection();
+    const stmt = localDb.prepare(sql);
+    const result = stmt.run(...args);
+    return {
+      lastInsertRowid: Number(result.lastInsertRowid),
+      changes: result.changes,
+    };
   },
 
-  /**
-   * Execute raw SQL (for schema operations)
-   * @param {string} sql - SQL statement
-   */
   async exec(sql) {
-    getConnection(); // Ensure connection is initialized
-    if (IS_TURSO) {
-      // Split multiple statements and execute each
-      const statements = sql.split(';').filter(s => s.trim());
-      for (const stmt of statements) {
-        if (stmt.trim()) {
-          await tursoClient.execute(stmt);
-        }
-      }
-    } else {
-      localDb.exec(sql);
-    }
+    getConnection();
+    localDb.exec(sql);
   },
 
-  /**
-   * Execute multiple statements in a batch (for Turso optimization)
-   * @param {Array<{sql: string, args: Array}>} statements
-   */
   async batch(statements) {
-    getConnection(); // Ensure connection is initialized
-    if (IS_TURSO) {
-      return await tursoClient.batch(statements);
-    } else {
-      // For local, execute sequentially
-      const results = [];
-      for (const { sql, args } of statements) {
-        results.push(localDb.prepare(sql).run(...(args || [])));
-      }
-      return results;
+    getConnection();
+    const results = [];
+    for (const { sql, args } of statements) {
+      results.push(localDb.prepare(sql).run(...(args || [])));
     }
+    return results;
   },
 
-  /**
-   * Check if a column exists in a table
-   * @param {string} table - Table name
-   * @param {string} column - Column name
-   * @returns {Promise<boolean>}
-   */
   async hasColumn(table, column) {
-    getConnection(); // Ensure connection is initialized
-    if (IS_TURSO) {
-      const result = await tursoClient.execute(`PRAGMA table_info(${table})`);
-      return result.rows.some(row => row.name === column);
-    } else {
-      const columns = localDb.prepare(`PRAGMA table_info(${table})`).all();
-      return columns.some(col => col.name === column);
-    }
+    getConnection();
+    const columns = localDb.prepare(`PRAGMA table_info(${table})`).all();
+    return columns.some(col => col.name === column);
   },
 
-  /**
-   * Get table info
-   * @param {string} table - Table name
-   * @returns {Promise<Array>}
-   */
   async tableInfo(table) {
-    getConnection(); // Ensure connection is initialized
-    if (IS_TURSO) {
-      const result = await tursoClient.execute(`PRAGMA table_info(${table})`);
-      return result.rows;
-    } else {
-      return localDb.prepare(`PRAGMA table_info(${table})`).all();
-    }
+    getConnection();
+    return localDb.prepare(`PRAGMA table_info(${table})`).all();
   },
 
-  // For backward compatibility - direct access to local db (sync operations)
-  // Only use during migration period
   get local() {
-    getConnection(); // Ensure connection is initialized
-    if (!localDb) {
-      throw new Error('Local database not available in Turso mode');
-    }
+    getConnection();
     return localDb;
   },
 
-  // Check if using Turso
   get isTurso() {
-    return IS_TURSO;
+    return false;
   },
 
-  // Prepare statement (for local only - backward compatibility)
   prepare(sql) {
-    getConnection(); // Ensure connection is initialized
-    if (IS_TURSO) {
-      throw new Error('prepare() not available in Turso mode. Use db.all(), db.get(), or db.run() instead.');
-    }
+    getConnection();
     return localDb.prepare(sql);
   },
 };
@@ -419,7 +297,7 @@ export async function initializeDb() {
     )
   `);
 
-  // User settings table (for preferences like insights card visibility)
+  // User settings table
   await db.exec(`
     CREATE TABLE IF NOT EXISTS user_settings (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -463,6 +341,13 @@ export async function initializeDb() {
     console.log('[DB] Added sector column to assets table');
   }
 
+  // Add monthly_expense column to user_settings if it doesn't exist
+  const hasMonthlyExpense = await db.hasColumn('user_settings', 'monthly_expense');
+  if (!hasMonthlyExpense) {
+    await db.exec('ALTER TABLE user_settings ADD COLUMN monthly_expense INTEGER DEFAULT 50000');
+    console.log('[DB] Added monthly_expense column to user_settings table');
+  }
+
   // Create indexes
   await db.exec(`
     CREATE INDEX IF NOT EXISTS idx_assets_user_id ON assets(user_id);
@@ -490,10 +375,8 @@ export async function initializeDb() {
     CREATE INDEX IF NOT EXISTS idx_transactions_asset_date ON transactions(asset_id, transaction_date)
   `);
 
-  // Run migration for existing equity assets (local only for now)
-  if (!IS_TURSO) {
-    await migrateExistingEquityAssets();
-  }
+  // Run migration for existing equity assets
+  await migrateExistingEquityAssets();
 
   console.log('Database initialized successfully');
 }

@@ -6,13 +6,15 @@ import { assetService, priceService, ASSET_CONFIG } from '../services/assets';
 import { portfolioService } from '../services/portfolio';
 import { goalService, GOAL_CATEGORIES } from '../services/goals';
 import { Card, Button, DashboardSkeleton, AnimatedNumber } from '../components/apple';
-import { spring, staggerContainer, staggerItem } from '../utils/animations';
+import { spring, staggerContainer, staggerItem, tapScale } from '../utils/animations';
+import { getAssetValue as getAssetValuePure, getInvestedValue as getInvestedValuePure } from '../utils/portfolio';
 import { categoryColors } from '../constants/theme';
 import { formatCurrency, formatCompact, formatPercent, formatPrice } from '../utils/formatting';
 import { calculateFixedIncomeValue, getCompoundingFrequency, calculateXIRRFromTransactions, yearsBetweenDates, calculateCAGR, debugXIRR, generateRecurringDepositSchedule } from '../utils/interest';
 import { printPortfolioReport } from '../utils/export';
 import { useAuth } from '../context/AuthContext';
 import { usePrices } from '../context/PriceContext';
+import { metalService, PURITY_FACTORS } from '../services/metals';
 import { CombinedFreshnessBadge } from '../components/PriceFreshness';
 
 export default function Dashboard() {
@@ -31,6 +33,7 @@ export default function Dashboard() {
   const [showXirrDebug, setShowXirrDebug] = useState(false);
   const [goals, setGoals] = useState([]);
   const [pricesLoaded, setPricesLoaded] = useState(false);
+  const [metalPrices, setMetalPrices] = useState({});
 
   // Refs to prevent race conditions
   const fetchRequestId = useRef(0);
@@ -111,9 +114,25 @@ export default function Dashboard() {
       const equityAssets = assetList.filter(a => a.category === 'EQUITY' && a.symbol);
       const fixedIncomeAssets = assetList.filter(a => a.category === 'FIXED_INCOME' && a.interest_rate);
 
-      // Clear cache first if force refresh
-      if (forceRefresh) {
-        await priceService.clearCache();
+      // ===== METAL PRICES: Fetch for gold/silver current value =====
+      const hasGold = assetList.some(a => a.category === 'PHYSICAL' && a.asset_type === 'GOLD');
+      const hasSilver = assetList.some(a => a.category === 'PHYSICAL' && a.asset_type === 'SILVER');
+      if (hasGold || hasSilver) {
+        try {
+          const fetches = [];
+          if (hasGold) fetches.push(metalService.getPrice('gold').then(r => ({ metal: 'gold', data: r.data })));
+          if (hasSilver) fetches.push(metalService.getPrice('silver').then(r => ({ metal: 'silver', data: r.data })));
+          const results = await Promise.all(fetches);
+          if (fetchRequestId.current === currentRequestId && isMounted.current) {
+            const mp = {};
+            for (const { metal, data } of results) {
+              mp[metal] = { pricePerGram24K: data.pricePerGram24K, purityPrices: data.purityPrices };
+            }
+            setMetalPrices(mp);
+          }
+        } catch (e) {
+          console.error('Error fetching metal prices:', e);
+        }
       }
 
       // ===== FIXED INCOME: Fetch and process independently (don't wait for prices) =====
@@ -238,10 +257,7 @@ export default function Dashboard() {
               if (marketPrice) {
                 totalCurrentValue += asset.quantity * marketPrice;
               } else {
-                // Mark that we don't have all prices
                 hasAllPrices = false;
-                // Still add to total using fallback for display purposes
-                totalCurrentValue += asset.quantity * (asset.avg_buy_price || 0);
               }
             }
           });
@@ -297,7 +313,9 @@ export default function Dashboard() {
         const priceKey = asset.asset_type === 'MUTUAL_FUND'
           ? asset.symbol
           : `${asset.symbol}.${asset.exchange === 'BSE' ? 'BO' : 'NS'}`;
-        const price = prices[priceKey]?.price || asset.avg_buy_price || 0;
+        const priceData = prices[priceKey];
+        const price = (priceData && !priceData.unavailable && typeof priceData.price === 'number' && priceData.price > 0)
+          ? priceData.price : 0;
         currentValue = (asset.quantity || 0) * price;
         invested = (asset.quantity || 0) * (asset.avg_buy_price || 0);
       } else if (asset.category === 'FIXED_INCOME') {
@@ -372,49 +390,19 @@ export default function Dashboard() {
     return asset.asset_type === 'MUTUAL_FUND' ? asset.symbol : `${asset.symbol}.${asset.exchange === 'BSE' ? 'BO' : 'NS'}`;
   };
 
-  const getAssetValue = (asset) => {
-    if (asset.category === 'EQUITY' && asset.quantity && asset.symbol) {
+  // Check if price is available for an equity asset (matches Assets.jsx logic)
+  const isPriceAvailable = (asset) => {
+    if (asset.category === 'EQUITY' && asset.symbol) {
       const priceKey = getPriceKey(asset);
       const priceData = priceKey ? prices[priceKey] : null;
-      // Use price if available (check for number, as 0 is falsy but could be valid)
-      if (priceData && typeof priceData.price === 'number' && priceData.price > 0) {
-        return asset.quantity * priceData.price;
-      }
-      // Fallback to avg_buy_price only if price is unavailable
-      if (asset.avg_buy_price) return asset.quantity * asset.avg_buy_price;
+      return priceData && !priceData.unavailable && typeof priceData.price === 'number' && priceData.price > 0;
     }
-    // For Fixed Income, use transaction-based calculation if available
-    if (asset.category === 'FIXED_INCOME') {
-      const calc = fixedIncomeCalcs[asset.id];
-      if (calc) return calc.currentValue;
-      // Fallback to principal if no transactions fetched yet
-      if (asset.principal) return asset.principal;
-    }
-    // For Real Estate, calculate appreciated value dynamically
-    if (asset.category === 'REAL_ESTATE') {
-      const appreciated = getAppreciatedValue(asset);
-      if (appreciated) return appreciated;
-    }
-    if (asset.quantity && asset.avg_buy_price) return asset.quantity * asset.avg_buy_price;
-    if (asset.principal) return asset.principal;
-    if (asset.current_value) return asset.current_value;
-    if (asset.purchase_price) return asset.purchase_price;
-    if (asset.balance) return asset.balance;
-    return 0;
+    return true; // Non-equity assets always have a value
   };
 
-  const getInvestedValue = (asset) => {
-    if (asset.quantity && asset.avg_buy_price) return asset.quantity * asset.avg_buy_price;
-    // For Fixed Income, use calculated principal from transactions
-    if (asset.category === 'FIXED_INCOME') {
-      const calc = fixedIncomeCalcs[asset.id];
-      if (calc) return calc.principal;
-    }
-    if (asset.principal) return asset.principal;
-    if (asset.purchase_price) return asset.purchase_price;
-    if (asset.balance) return asset.balance;
-    return 0;
-  };
+  const valueDeps = { prices, fixedIncomeCalcs, metalPrices, PURITY_FACTORS };
+  const getAssetValue = (asset) => getAssetValuePure(asset, valueDeps);
+  const getInvestedValue = (asset) => getInvestedValuePure(asset, { fixedIncomeCalcs });
 
   const getCurrentPrice = (asset) => {
     const priceKey = getPriceKey(asset);
@@ -434,21 +422,27 @@ export default function Dashboard() {
     return 0;
   };
 
-  // Calculate totals with null safety
-  const totalValue = assets.reduce((sum, asset) => sum + (getAssetValue(asset) ?? 0), 0);
-  const totalInvested = assets.reduce((sum, asset) => sum + (getInvestedValue(asset) ?? 0), 0);
+  // Calculate totals — exclude equity assets without prices (matches Assets.jsx)
+  const assetsWithPrice = assets.filter(isPriceAvailable);
+  const totalValue = assetsWithPrice.reduce((sum, asset) => sum + (getAssetValue(asset) || 0), 0);
+  const totalInvested = assetsWithPrice.reduce((sum, asset) => sum + (getInvestedValue(asset) || 0), 0);
   const totalPnL = totalValue - totalInvested;
   const totalPnLPercent = totalInvested > 0 && isFinite(totalPnL / totalInvested)
     ? (totalPnL / totalInvested) * 100
     : 0;
 
-  // Day's change (estimated from equity assets)
+  // Day's change (from equity assets using previousClose)
   const dayChange = assets
     .filter(a => a.category === 'EQUITY')
     .reduce((sum, asset) => {
-      const value = getAssetValue(asset) ?? 0;
-      const changePercent = getPriceChange(asset) ?? 0;
-      return sum + (value * changePercent / 100);
+      const priceKey = getPriceKey(asset);
+      const priceData = priceKey ? prices[priceKey] : null;
+      if (priceData && typeof priceData.price === 'number' && asset.quantity) {
+        const changePercent = typeof priceData.changePercent === 'number' ? priceData.changePercent : 0;
+        const previousClose = priceData.previousClose || (priceData.price / (1 + changePercent / 100));
+        return sum + asset.quantity * (priceData.price - previousClose);
+      }
+      return sum;
     }, 0);
   const dayChangePercent = totalValue > 0 && isFinite(dayChange / totalValue)
     ? (dayChange / totalValue) * 100
@@ -456,23 +450,30 @@ export default function Dashboard() {
 
   // Holdings sorted by value
   const holdings = [...assets]
-    .map(asset => ({
-      ...asset,
-      currentValue: getAssetValue(asset),
-      investedValue: getInvestedValue(asset),
-      currentPrice: getCurrentPrice(asset),
-      pnl: getAssetValue(asset) - getInvestedValue(asset),
-      pnlPercent: getInvestedValue(asset) > 0
-        ? ((getAssetValue(asset) - getInvestedValue(asset)) / getInvestedValue(asset)) * 100
-        : 0,
-      dayChange: getPriceChange(asset),
-    }))
+    .map(asset => {
+      const currentValue = getAssetValue(asset);
+      const investedValue = getInvestedValue(asset);
+      const hasPrice = currentValue !== null;
+      const effectiveValue = currentValue ?? investedValue; // for display/sorting when price unavailable
+      return {
+        ...asset,
+        currentValue: effectiveValue,
+        investedValue,
+        currentPrice: getCurrentPrice(asset),
+        pnl: hasPrice ? effectiveValue - investedValue : 0,
+        pnlPercent: (hasPrice && investedValue > 0)
+          ? ((effectiveValue - investedValue) / investedValue) * 100
+          : 0,
+        dayChange: getPriceChange(asset),
+        priceUnavailable: !hasPrice && asset.category === 'EQUITY',
+      };
+    })
     .sort((a, b) => b.currentValue - a.currentValue);
 
   // Category breakdown for pie chart (split EQUITY into Stocks and MF visually)
   const categoryBreakdown = Object.entries(
-    assets.reduce((acc, asset) => {
-      const value = getAssetValue(asset);
+    assetsWithPrice.reduce((acc, asset) => {
+      const value = getAssetValue(asset) || 0;
       // For EQUITY, split by asset_type
       let groupKey = asset.category;
       if (asset.category === 'EQUITY') {
@@ -495,8 +496,9 @@ export default function Dashboard() {
   }).sort((a, b) => b.value - a.value);
 
   // Category summary for holdings table (split EQUITY into Stocks and Mutual Funds, FIXED_INCOME by type)
+  // Only include assets with available prices (matches Assets.jsx totals)
   const categorySummary = Object.entries(
-    assets.reduce((acc, asset) => {
+    assetsWithPrice.reduce((acc, asset) => {
       // For EQUITY category, split by asset_type (STOCK vs MUTUAL_FUND)
       let groupKey = asset.category;
       if (asset.category === 'EQUITY') {
@@ -516,15 +518,20 @@ export default function Dashboard() {
           dayChange: 0,
         };
       }
-      const currentValue = getAssetValue(asset);
+      const currentValue = getAssetValue(asset) || 0;
       const investedValue = getInvestedValue(asset);
       acc[groupKey].assets.push(asset);
       acc[groupKey].current += currentValue;
       acc[groupKey].invested += investedValue;
       // Day change for equity assets
       if (asset.category === 'EQUITY') {
-        const changePercent = getPriceChange(asset);
-        acc[groupKey].dayChange += (currentValue * changePercent / 100);
+        const priceKey = getPriceKey(asset);
+        const priceData = priceKey ? prices[priceKey] : null;
+        if (priceData && typeof priceData.price === 'number' && asset.quantity) {
+          const changePercent = typeof priceData.changePercent === 'number' ? priceData.changePercent : 0;
+          const previousClose = priceData.previousClose || (priceData.price / (1 + changePercent / 100));
+          acc[groupKey].dayChange += asset.quantity * (priceData.price - previousClose);
+        }
       }
       return acc;
     }, {})
@@ -625,8 +632,9 @@ export default function Dashboard() {
   const totalMaturityValue = upcomingMaturities.reduce((sum, m) => sum + m.maturityValue, 0);
 
   // Record snapshot when data is loaded with debouncing
+  // Only record after prices are loaded to avoid recording incorrect values
   useEffect(() => {
-    if (!loading && !hasRecordedSnapshot.current) {
+    if (!loading && pricesLoaded && !hasRecordedSnapshot.current) {
       // Clear any existing timeout
       if (snapshotTimeoutRef.current) {
         clearTimeout(snapshotTimeoutRef.current);
@@ -645,7 +653,7 @@ export default function Dashboard() {
         clearTimeout(snapshotTimeoutRef.current);
       }
     };
-  }, [loading, totalValue, totalInvested, dayChange, recordSnapshot]);
+  }, [loading, pricesLoaded, totalValue, totalInvested, dayChange, recordSnapshot]);
 
   // Format chart data for cumulative investment line chart
   // Scale proportionally so the chart ends at totalInvested while maintaining shape
@@ -722,8 +730,8 @@ export default function Dashboard() {
                   </div>
 
                   {/* Hero Value */}
-                  <p className="text-[34px] font-bold text-[var(--label-primary)] tracking-tight leading-none">
-                    {formatCompact(totalValue)}
+                  <p className="text-[48px] font-bold text-[var(--label-primary)] tracking-tight leading-none" style={{ fontFamily: 'var(--font-display)' }}>
+                    <AnimatedNumber value={totalValue} format="compact" />
                   </p>
 
                   {/* Returns Percentage & Freshness Badge */}
@@ -748,14 +756,14 @@ export default function Dashboard() {
                     <div>
                       <p className="text-[11px] text-[var(--label-tertiary)] uppercase tracking-wide mb-0.5">Invested</p>
                       <p className="text-[18px] font-bold text-[var(--label-primary)] tracking-tight">
-                        {formatCompact(totalInvested)}
+                        <AnimatedNumber value={totalInvested} format="compact" />
                       </p>
                     </div>
                     <div className="h-8 w-px bg-[var(--separator-opaque)]/50" />
                     <div className="text-right">
                       <p className="text-[11px] text-[var(--label-tertiary)] uppercase tracking-wide mb-0.5">Returns</p>
                       <p className={`text-[18px] font-bold tracking-tight ${totalPnL >= 0 ? 'text-[#059669]' : 'text-[#DC2626]'}`}>
-                        {totalPnL >= 0 ? '+' : ''}{formatCompact(totalPnL)}
+                        {totalPnL >= 0 ? '+' : ''}<AnimatedNumber value={Math.abs(totalPnL)} format="compact" />
                       </p>
                     </div>
                   </div>
@@ -1243,21 +1251,30 @@ export default function Dashboard() {
                     </div>
                   </div>
 
-                  {/* Period Selector */}
+                  {/* Period Selector - Sliding Pill */}
                   {assets.length > 0 && (
                     <div className="flex gap-1 p-1 bg-[var(--fill-tertiary)]/50 rounded-lg w-fit">
                       {periods.map((period) => (
-                        <button
+                        <motion.button
                           key={period}
+                          whileTap={tapScale}
                           onClick={() => handlePeriodChange(period)}
-                          className={`px-3 py-1.5 rounded-md text-[12px] font-medium transition-all ${
+                          className={`px-3 py-1.5 rounded-md text-[12px] font-medium transition-colors relative z-10 ${
                             selectedPeriod === period
-                              ? 'bg-[var(--bg-primary)] text-[var(--label-primary)] shadow-sm'
+                              ? 'text-[var(--label-primary)]'
                               : 'text-[var(--label-tertiary)] hover:text-[var(--label-secondary)]'
                           }`}
                         >
+                          {selectedPeriod === period && (
+                            <motion.div
+                              layoutId="periodIndicator"
+                              className="absolute inset-0 bg-[var(--bg-primary)] rounded-md shadow-sm"
+                              transition={{ type: "spring", stiffness: 400, damping: 30 }}
+                              style={{ zIndex: -1 }}
+                            />
+                          )}
                           {period}
-                        </button>
+                        </motion.button>
                       ))}
                     </div>
                   )}

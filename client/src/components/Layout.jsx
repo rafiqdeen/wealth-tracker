@@ -114,6 +114,17 @@ export default function Layout() {
   const today = new Date();
   const dateStr = today.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
 
+  const getPageTitle = (pathname) => {
+    if (pathname === '/') return `Hi, ${user?.name?.split(' ')[0] || 'there'}!`;
+    if (pathname === '/assets') return 'Assets';
+    if (pathname.startsWith('/assets/add')) return 'Add Asset';
+    if (pathname.startsWith('/assets/')) return 'Manage Asset';
+    if (pathname === '/insights') return 'Insights';
+    if (pathname === '/goals') return 'Goals';
+    if (pathname === '/reports') return 'Reports';
+    return `Hi, ${user?.name?.split(' ')[0] || 'there'}!`;
+  };
+
   return (
     <div className="h-screen bg-[var(--bg-page)] flex overflow-hidden">
       {/* Skip to main content - Accessibility */}
@@ -134,12 +145,12 @@ export default function Layout() {
         </Link>
 
         {/* Main Nav - VERTICALLY CENTERED in the middle */}
-        <nav className="flex-1 flex flex-col items-center justify-center gap-2">
+        <nav className="flex-1 flex flex-col items-center justify-center gap-3">
           {navItems.map((item) => (
             <Link
               key={item.path}
               to={item.path}
-              className="group relative"
+              className="flex flex-col items-center gap-1"
             >
               <motion.div
                 whileTap={tapScale}
@@ -152,10 +163,11 @@ export default function Layout() {
               >
                 {item.icon}
               </motion.div>
-              {/* Tooltip */}
-              <div className="absolute left-full ml-3 px-3 py-1.5 bg-[var(--sidebar-active)] text-white text-xs font-medium rounded-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-50 shadow-lg">
+              <span className={`text-[10px] font-medium leading-none ${
+                isActive(item.path) ? 'text-[var(--label-primary)]' : 'text-[var(--label-tertiary)]'
+              }`}>
                 {item.label}
-              </div>
+              </span>
             </Link>
           ))}
         </nav>
@@ -233,13 +245,15 @@ export default function Layout() {
         <div className="bg-[var(--bg-primary)] rounded-2xl md:rounded-[24px] h-full flex flex-col shadow-sm">
           {/* Top Header */}
           <header className="h-[72px] px-4 md:px-12 flex items-center justify-between border-b border-[var(--separator-opaque)] shrink-0 relative">
-            {/* Left: Greeting + Market Status */}
+            {/* Left: Title + Market Status */}
             <div className="z-10">
-              <h1 className="text-[17px] font-semibold text-[var(--label-primary)]">
-                Hi, {user?.name?.split(' ')[0] || 'there'}!
+              <h1 className="text-[17px] font-semibold text-[var(--label-primary)]" style={{ fontFamily: 'var(--font-display)' }}>
+                {getPageTitle(location.pathname)}
               </h1>
               <div className="flex items-center gap-2">
-                <p className="text-[13px] text-[var(--label-tertiary)]">{dateStr}</p>
+                {location.pathname === '/' && (
+                  <p className="text-[13px] text-[var(--label-tertiary)]">{dateStr}</p>
+                )}
                 {/* Market Status Badge - Compact pill with tooltip */}
                 {marketStatus && !marketStatus.isOpen && (
                   <span
@@ -297,7 +311,7 @@ export default function Layout() {
           </header>
 
           {/* Main Content */}
-          <main id="main-content" tabIndex={-1} className="flex-1 overflow-auto pb-20 md:pb-0">
+          <main id="main-content" tabIndex={-1} className="flex-1 overflow-auto pb-20 md:pb-0 flex flex-col">
             <Outlet />
           </main>
         </div>
@@ -317,7 +331,7 @@ export default function Layout() {
                 transition={spring.snappy}
                 className={`w-11 h-11 rounded-[14px] flex items-center justify-center transition-all ${
                   isActive(item.path)
-                    ? 'bg-[var(--sidebar-active)] text-white'
+                    ? 'bg-[var(--sidebar-active)] text-white shadow-md shadow-[var(--sidebar-active)]/25'
                     : 'text-[var(--sidebar-icon)]'
                 }`}
               >

@@ -16,7 +16,7 @@ import StockAutocomplete from '../components/StockAutocomplete';
 // Category card configuration
 const CATEGORY_CARDS = {
   EQUITY: { label: 'Equity', description: 'Stocks & Mutual Funds', gradient: 'from-blue-500/15 to-blue-600/5', iconBg: 'bg-[#4F7DF3]' },
-  FIXED_INCOME: { label: 'Fixed Income', description: 'FD, PPF, Bonds', gradient: 'from-emerald-500/15 to-emerald-600/5', iconBg: 'bg-[#22C55E]' },
+  FIXED_INCOME: { label: 'Fixed Income', description: 'FD, PPF, Bonds', gradient: 'from-emerald-500/15 to-emerald-600/5', iconBg: 'bg-[#059669]' },
   REAL_ESTATE: { label: 'Real Estate', description: 'Property & Land', gradient: 'from-amber-500/15 to-amber-600/5', iconBg: 'bg-[#F59E0B]' },
   PHYSICAL: { label: 'Physical Assets', description: 'Gold, Silver, Art', gradient: 'from-orange-500/15 to-orange-600/5', iconBg: 'bg-[#F97316]' },
   SAVINGS: { label: 'Savings', description: 'Bank Accounts', gradient: 'from-teal-500/15 to-teal-600/5', iconBg: 'bg-[#14B8A6]' },
@@ -387,7 +387,7 @@ export default function ManageAsset() {
     }
     const colors = {
       'EQUITY': '#4F7DF3',
-      'FIXED_INCOME': '#22C55E',
+      'FIXED_INCOME': '#059669',
       'REAL_ESTATE': '#F59E0B',
       'GOLD': '#F97316',
       'SAVINGS': '#14B8A6',
@@ -913,7 +913,7 @@ export default function ManageAsset() {
                   </div>
 
                   {/* Asset Name & Type */}
-                  <h1 className="text-[22px] font-bold text-[var(--label-primary)] leading-tight mb-1">{asset.name}</h1>
+                  <h1 className="text-[22px] font-bold text-[var(--label-primary)] leading-tight mb-1" style={{ fontFamily: 'var(--font-display)' }}>{asset.name}</h1>
                   <p className="text-[13px] text-[var(--label-secondary)]">
                     {selectedType?.label || formData.asset_type?.replace(/_/g, ' ')} • {categoryConfig?.label || formData.category}
                   </p>
@@ -954,12 +954,12 @@ export default function ManageAsset() {
 
                       {/* Performance Highlight Card with Gradient */}
                       <div
-                        className={`p-3 rounded-xl border border-[var(--separator-opaque)] overflow-hidden ${statsData.isPositive ? 'bg-gradient-to-r from-[#34C759]/12 via-[#34C759]/6 to-transparent' : 'bg-gradient-to-r from-[#FF3B30]/12 via-[#FF3B30]/6 to-transparent'}`}
+                        className={`p-3 rounded-xl border border-[var(--separator-opaque)] overflow-hidden ${statsData.isPositive ? 'bg-gradient-to-r from-[#059669]/12 via-[#059669]/6 to-transparent' : 'bg-gradient-to-r from-[#DC2626]/12 via-[#DC2626]/6 to-transparent'}`}
                       >
                         <div className="space-y-2.5">
                           <div className="flex items-center justify-between">
                             <span className="text-[11px] text-[var(--label-tertiary)] uppercase tracking-wide">P&L</span>
-                            <span className={`text-[17px] font-bold tabular-nums ${statsData.isPositive ? 'text-[#34C759]' : 'text-[#FF3B30]'}`}>
+                            <span className={`text-[17px] font-bold tabular-nums ${statsData.isPositive ? 'text-[#059669]' : 'text-[#DC2626]'}`}>
                               {statsData.isPositive ? '+' : ''}{formatCompact(statsData.gainLoss)}
                             </span>
                           </div>
@@ -967,14 +967,14 @@ export default function ManageAsset() {
                           {/* Progress Bar */}
                           <div className="h-1.5 bg-[var(--bg-primary)]/60 rounded-full overflow-hidden">
                             <div
-                              className={`h-full rounded-full transition-all ${statsData.isPositive ? 'bg-[#34C759]' : 'bg-[#FF3B30]'}`}
+                              className={`h-full rounded-full transition-all ${statsData.isPositive ? 'bg-[#059669]' : 'bg-[#DC2626]'}`}
                               style={{ width: `${Math.min(Math.abs(statsData.returnPct), 100)}%` }}
                             />
                           </div>
 
                           <div className="flex items-center justify-between">
                             <span className="text-[11px] text-[var(--label-tertiary)] uppercase tracking-wide">Return</span>
-                            <span className={`text-[15px] font-bold tabular-nums ${statsData.isPositive ? 'text-[#34C759]' : 'text-[#FF3B30]'}`}>
+                            <span className={`text-[15px] font-bold tabular-nums ${statsData.isPositive ? 'text-[#059669]' : 'text-[#DC2626]'}`}>
                               {statsData.isPositive ? '+' : ''}{statsData.returnPct.toFixed(2)}%
                             </span>
                           </div>
@@ -983,7 +983,7 @@ export default function ManageAsset() {
                             <span className="text-[11px] text-[var(--label-tertiary)] uppercase tracking-wide">
                               XIRR {statsData.holdingDays < 30 && <span className="text-[9px]">(30d+)</span>}
                             </span>
-                            <span className={`text-[15px] font-bold tabular-nums ${statsData.xirrIsPositive ? 'text-[#34C759]' : 'text-[#FF3B30]'}`}>
+                            <span className={`text-[15px] font-bold tabular-nums ${statsData.xirrIsPositive ? 'text-[#059669]' : 'text-[#DC2626]'}`}>
                               {statsData.xirr ? `${statsData.xirrIsPositive ? '+' : ''}${statsData.xirr.toFixed(2)}%${statsData.xirrCapped ? '+' : ''}` : '—'}
                             </span>
                           </div>
@@ -1030,18 +1030,18 @@ export default function ManageAsset() {
                       </div>
 
                       {/* Performance Highlight Card with Gradient */}
-                      <div className="p-3 rounded-xl border border-[var(--separator-opaque)] overflow-hidden bg-gradient-to-r from-[#34C759]/12 via-[#34C759]/6 to-transparent">
+                      <div className="p-3 rounded-xl border border-[var(--separator-opaque)] overflow-hidden bg-gradient-to-r from-[#059669]/12 via-[#059669]/6 to-transparent">
                         <div className="space-y-2.5">
                           <div className="flex items-center justify-between">
                             <span className="text-[11px] text-[var(--label-tertiary)] uppercase tracking-wide">Interest</span>
-                            <span className="text-[17px] font-bold text-[#34C759] tabular-nums">{statsData.needsTxns ? '—' : `+${formatCompact(statsData.fiInterest)}`}</span>
+                            <span className="text-[17px] font-bold text-[#059669] tabular-nums">{statsData.needsTxns ? '—' : `+${formatCompact(statsData.fiInterest)}`}</span>
                           </div>
 
                           {/* Progress Bar */}
                           {!statsData.needsTxns && (
                             <div className="h-1.5 bg-[var(--bg-primary)]/60 rounded-full overflow-hidden">
                               <div
-                                className="h-full rounded-full bg-[#34C759] transition-all"
+                                className="h-full rounded-full bg-[#059669] transition-all"
                                 style={{ width: `${Math.min(statsData.fiInterestPercent, 100)}%` }}
                               />
                             </div>
@@ -1049,7 +1049,7 @@ export default function ManageAsset() {
 
                           <div className="flex items-center justify-between">
                             <span className="text-[11px] text-[var(--label-tertiary)] uppercase tracking-wide">Return</span>
-                            <span className="text-[15px] font-bold text-[#34C759] tabular-nums">{statsData.needsTxns ? '—' : `+${statsData.fiInterestPercent.toFixed(1)}%`}</span>
+                            <span className="text-[15px] font-bold text-[#059669] tabular-nums">{statsData.needsTxns ? '—' : `+${statsData.fiInterestPercent.toFixed(1)}%`}</span>
                           </div>
                         </div>
                       </div>

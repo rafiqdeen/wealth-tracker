@@ -131,7 +131,7 @@ export const GOAL_CATEGORIES = {
   CAR: {
     label: 'Vehicle',
     icon: 'car',
-    color: '#34C759',
+    color: '#059669',
     description: 'Car or bike purchase',
   },
   WEDDING: {

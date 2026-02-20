@@ -8,12 +8,31 @@ export const PURITY_FACTORS = {
   '14K': 0.585,
 };
 
-export const metalService = {
-  // Get current metal price (gold/silver)
-  getPrice: (metal = 'gold') => api.get(`/metals/price/${metal}`),
+// Module-level cache for metal prices (persists across page navigations in SPA)
+const metalCache = {};
+const METAL_CACHE_TTL = 30 * 60 * 1000; // 30 minutes
 
-  // Force refresh metal price
-  refreshPrice: (metal = 'gold') => api.post(`/metals/price/${metal}/refresh`),
+export const metalService = {
+  // Get current metal price (gold/silver) — cached for 30 min
+  getPrice: async (metal = 'gold') => {
+    const cached = metalCache[metal];
+    if (cached && Date.now() - cached.fetchedAt < METAL_CACHE_TTL) {
+      return { data: cached.data };
+    }
+    const response = await api.get(`/metals/price/${metal}`);
+    metalCache[metal] = { data: response.data, fetchedAt: Date.now() };
+    return response;
+  },
+
+  // Force refresh metal price (bypasses cache)
+  refreshPrice: async (metal = 'gold') => {
+    const response = await api.post(`/metals/price/${metal}/refresh`);
+    // Update cache with fresh data
+    if (response.data) {
+      metalCache[metal] = { data: response.data, fetchedAt: Date.now() };
+    }
+    return response;
+  },
 
   // Calculate value based on weight and purity
   calculate: (metal = 'gold', weight, purity = '24K') =>

@@ -36,7 +36,7 @@ const DEFAULT_TAGS = [
 // Predefined goals with SVG icons
 const DEFAULT_GOALS = [
   { id: 'retirement', label: 'Retirement', color: 'bg-[#F59E0B]' },
-  { id: 'house', label: 'Buy House', color: 'bg-[#22C55E]' },
+  { id: 'house', label: 'Buy House', color: 'bg-[#059669]' },
   { id: 'education', label: 'Education', color: 'bg-[#6366F1]' },
   { id: 'emergency', label: 'Emergency', color: 'bg-[#EF4444]' },
   { id: 'vacation', label: 'Vacation', color: 'bg-[#06B6D4]' },
@@ -145,7 +145,7 @@ const MIN_INVESTMENTS = {
 // Category card configuration with icons and colors
 const CATEGORY_CARDS = [
   { key: 'EQUITY', label: 'Equity', description: 'Stocks & Mutual Funds', gradient: 'from-blue-500/15 to-blue-600/5', iconBg: 'bg-[#4F7DF3]' },
-  { key: 'FIXED_INCOME', label: 'Fixed Income', description: 'FD, PPF, Bonds', gradient: 'from-emerald-500/15 to-emerald-600/5', iconBg: 'bg-[#22C55E]' },
+  { key: 'FIXED_INCOME', label: 'Fixed Income', description: 'FD, PPF, Bonds', gradient: 'from-emerald-500/15 to-emerald-600/5', iconBg: 'bg-[#059669]' },
   { key: 'REAL_ESTATE', label: 'Real Estate', description: 'Property & Land', gradient: 'from-amber-500/15 to-amber-600/5', iconBg: 'bg-[#F59E0B]' },
   { key: 'PHYSICAL', label: 'Physical Assets', description: 'Gold, Silver, Art', gradient: 'from-orange-500/15 to-orange-600/5', iconBg: 'bg-[#F97316]' },
   { key: 'SAVINGS', label: 'Savings', description: 'Bank Accounts', gradient: 'from-teal-500/15 to-teal-600/5', iconBg: 'bg-[#14B8A6]' },

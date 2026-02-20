@@ -35,7 +35,11 @@ function PrivateRoute({ children }) {
   const { user, loading } = useAuth();
 
   if (loading) {
-    return <PageSpinner message="Loading..." />;
+    return (
+      <div className="h-screen flex flex-col">
+        <PageSpinner message="Loading..." />
+      </div>
+    );
   }
 
   return user ? children : <Navigate to="/login" />;
@@ -45,7 +49,11 @@ function PublicRoute({ children }) {
   const { user, loading } = useAuth();
 
   if (loading) {
-    return <PageSpinner message="Loading..." />;
+    return (
+      <div className="h-screen flex flex-col">
+        <PageSpinner message="Loading..." />
+      </div>
+    );
   }
 
   return user ? <Navigate to="/" /> : children;

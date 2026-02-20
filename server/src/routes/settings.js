@@ -7,17 +7,13 @@ const router = express.Router();
 // Apply auth middleware to all routes
 router.use(authenticateToken);
 
-// Default card preferences (all enabled)
+// Default card preferences (6 cards)
 const DEFAULT_CARD_PREFS = {
-  portfolio_performance: true,
   asset_allocation: true,
   risk_diversification: true,
   benchmark_comparison: true,
   liquidity_analysis: true,
-  holding_period: true,
   gainers_losers: true,
-  asset_type_breakdown: true,
-  income_summary: true,
   tax_implications: true,
 };
 
@@ -54,18 +50,20 @@ router.put('/insights-cards', async (req, res) => {
       return res.status(400).json({ error: 'Invalid preferences format' });
     }
 
-    // Validate that all keys are valid card IDs
+    // Filter to only valid keys — skip unknown keys (handles migration from old 12-card prefs)
     const validKeys = Object.keys(DEFAULT_CARD_PREFS);
+    const filteredPrefs = {};
     for (const key of Object.keys(prefs)) {
       if (!validKeys.includes(key)) {
-        return res.status(400).json({ error: `Invalid card ID: ${key}` });
+        continue; // Skip unknown keys instead of returning 400
       }
       if (typeof prefs[key] !== 'boolean') {
         return res.status(400).json({ error: `Preference for ${key} must be boolean` });
       }
+      filteredPrefs[key] = prefs[key];
     }
 
-    const prefsJson = JSON.stringify(prefs);
+    const prefsJson = JSON.stringify(filteredPrefs);
     const now = new Date().toISOString();
 
     // Upsert: insert if not exists, update if exists
@@ -86,10 +84,64 @@ router.put('/insights-cards', async (req, res) => {
       );
     }
 
-    res.json({ success: true, prefs });
+    res.json({ success: true, prefs: filteredPrefs });
   } catch (error) {
     console.error('[Settings] Error updating insights card prefs:', error);
     res.status(500).json({ error: 'Failed to update preferences' });
+  }
+});
+
+// GET /api/settings/monthly-expense - Get user's monthly expense setting
+router.get('/monthly-expense', async (req, res) => {
+  try {
+    const userId = req.user.id;
+
+    const settings = await db.get(
+      'SELECT monthly_expense FROM user_settings WHERE user_id = ?',
+      [userId]
+    );
+
+    const monthlyExpense = settings?.monthly_expense ?? 50000;
+    res.json({ monthlyExpense });
+  } catch (error) {
+    console.error('[Settings] Error fetching monthly expense:', error);
+    res.status(500).json({ error: 'Failed to fetch monthly expense' });
+  }
+});
+
+// PUT /api/settings/monthly-expense - Update user's monthly expense setting
+router.put('/monthly-expense', async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { monthlyExpense } = req.body;
+
+    if (typeof monthlyExpense !== 'number' || monthlyExpense < 0) {
+      return res.status(400).json({ error: 'monthlyExpense must be a non-negative number' });
+    }
+
+    const now = new Date().toISOString();
+
+    const existing = await db.get(
+      'SELECT id FROM user_settings WHERE user_id = ?',
+      [userId]
+    );
+
+    if (existing) {
+      await db.run(
+        'UPDATE user_settings SET monthly_expense = ?, updated_at = ? WHERE user_id = ?',
+        [Math.round(monthlyExpense), now, userId]
+      );
+    } else {
+      await db.run(
+        'INSERT INTO user_settings (user_id, monthly_expense, created_at, updated_at) VALUES (?, ?, ?, ?)',
+        [userId, Math.round(monthlyExpense), now, now]
+      );
+    }
+
+    res.json({ success: true, monthlyExpense: Math.round(monthlyExpense) });
+  } catch (error) {
+    console.error('[Settings] Error updating monthly expense:', error);
+    res.status(500).json({ error: 'Failed to update monthly expense' });
   }
 });
 

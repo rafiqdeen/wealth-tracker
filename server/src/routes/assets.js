@@ -87,6 +87,11 @@ router.post('/', async (req, res) => {
     }
 
     const upperCategory = category.toUpperCase();
+
+    // EQUITY assets must have a symbol for price fetching
+    if (upperCategory === 'EQUITY' && !symbol) {
+      return res.status(400).json({ error: 'Symbol is required for equity assets' });
+    }
     const upperAssetType = asset_type.toUpperCase();
     const transactionDate = purchase_date || new Date().toISOString().split('T')[0];
 

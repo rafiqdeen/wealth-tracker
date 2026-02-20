@@ -49,12 +49,11 @@ export const priceService = {
   // Trigger server-side price sync (refreshes cache from Yahoo Finance)
   triggerSync: () => api.post('/prices/sync/trigger', {}, { timeout: 120000 }),
 
-  // Get historical price data for charts
-  getHistorical: (symbol, range = '1mo', type = 'stock') =>
-    api.get(`/prices/historical/${encodeURIComponent(symbol)}?range=${range}&type=${type}`),
-
   // Get company info (sector, industry)
   getCompanyInfo: (symbol) => api.get(`/prices/company-info/${encodeURIComponent(symbol)}`),
+
+  // Get Nifty 50 benchmark data (1Y return)
+  getBenchmark: () => api.get('/prices/benchmark'),
 };
 
 
