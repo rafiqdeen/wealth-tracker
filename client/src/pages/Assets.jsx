@@ -837,88 +837,77 @@ export default function Assets() {
   };
 
   return (
-    <div className="p-4 md:px-12 md:py-6 h-full overflow-auto">
-      {/* Page Header */}
+    <div className="p-4 md:px-10 md:py-6 h-full overflow-auto">
+      {/* Compact Toolbar */}
         <motion.div
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
           transition={spring.gentle}
-          className="mb-5"
+          className="mb-4 flex items-center justify-end gap-2 flex-wrap"
         >
-          <div className="flex items-start justify-between">
-            <div>
-              <h1 className="text-[22px] font-bold text-[var(--label-primary)] mb-1">Assets</h1>
-              <p className="text-[14px] text-[var(--label-secondary)]">
-                Manage and track your investment portfolio
-              </p>
-            </div>
-            {/* Market Status & Refresh */}
-            <div className="flex items-center gap-2">
-              {/* Market Status Badge */}
-              {marketStatus && (
-                <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium ${
-                  marketStatus.isOpen
-                    ? 'bg-[#059669]/10 text-[#059669]'
-                    : 'bg-[var(--fill-tertiary)] text-[var(--label-secondary)]'
-                }`}>
-                  <span className={`w-1.5 h-1.5 rounded-full ${marketStatus.isOpen ? 'bg-[#059669] animate-pulse' : 'bg-[var(--label-tertiary)]'}`} />
-                  {marketStatus.isOpen ? 'Market Open' : marketStatus.reason || 'Closed'}
-                </div>
-              )}
-              {/* Auto-Refresh Toggle */}
-              <button
-                onClick={toggleAutoRefresh}
-                className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-medium transition-all ${
-                  autoRefreshEnabled
-                    ? marketStatus?.isOpen
-                      ? 'bg-[#059669]/15 text-[#059669] hover:bg-[#059669]/20'
-                      : 'bg-[var(--fill-tertiary)] text-[var(--label-tertiary)]'
-                    : 'bg-[var(--fill-tertiary)] text-[var(--label-secondary)] hover:bg-[var(--fill-secondary)]'
-                }`}
-                title={autoRefreshEnabled ? (marketStatus?.isOpen ? `Auto-refresh in ${formatCountdown(autoRefreshCountdown)}` : 'Paused (market closed)') : 'Enable auto-refresh'}
-              >
-                {autoRefreshEnabled && marketStatus?.isOpen && (
-                  <span className="w-1.5 h-1.5 rounded-full bg-[#059669] animate-pulse" />
-                )}
-                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-                {autoRefreshEnabled ? (
-                  marketStatus?.isOpen ? formatCountdown(autoRefreshCountdown) : 'Paused'
-                ) : (
-                  'Auto'
-                )}
-              </button>
-              {/* Refresh Button */}
-              <button
-                onClick={handleRefreshPrices}
-                disabled={isRefreshing || pricesLoading}
-                className={`p-2 rounded-lg transition-all ${
-                  isRefreshing || pricesLoading
-                    ? 'bg-[var(--fill-tertiary)] text-[var(--label-tertiary)]'
-                    : 'bg-[var(--fill-tertiary)] text-[var(--label-secondary)] hover:bg-[var(--fill-secondary)] hover:text-[var(--label-primary)]'
-                }`}
-                title={lastUpdated ? `Last updated: ${lastUpdated.toLocaleTimeString()}` : 'Refresh prices'}
-              >
-                <svg
-                  className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`}
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                  strokeWidth={2}
-                >
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                </svg>
-              </button>
-            </div>
-          </div>
           {/* Last Updated Time */}
           {lastUpdated && (
-            <p className="text-[11px] text-[var(--label-tertiary)] mt-2">
-              Prices updated {lastUpdated.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
+            <p className="text-[12px] text-[var(--label-tertiary)] mr-auto">
+              Updated {lastUpdated.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
               {marketStatus?.istTime && ` · IST ${marketStatus.istTime}`}
             </p>
           )}
+          {/* Market Status Badge */}
+          {marketStatus && (
+            <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[12px] font-medium ${
+              marketStatus.isOpen
+                ? 'bg-[var(--system-green)]/10 text-[var(--system-green)]'
+                : 'bg-[var(--fill-tertiary)] text-[var(--label-secondary)]'
+            }`}>
+              <span className={`w-1.5 h-1.5 rounded-full ${marketStatus.isOpen ? 'bg-[var(--system-green)] animate-pulse' : 'bg-[var(--label-tertiary)]'}`} />
+              {marketStatus.isOpen ? 'Market Open' : marketStatus.reason || 'Closed'}
+            </div>
+          )}
+          {/* Auto-Refresh Toggle */}
+          <button
+            onClick={toggleAutoRefresh}
+            className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[12px] font-medium transition-all ${
+              autoRefreshEnabled
+                ? marketStatus?.isOpen
+                  ? 'bg-[var(--system-green)]/15 text-[var(--system-green)] hover:bg-[var(--system-green)]/20'
+                  : 'bg-[var(--fill-tertiary)] text-[var(--label-tertiary)]'
+                : 'bg-[var(--fill-tertiary)] text-[var(--label-secondary)] hover:bg-[var(--fill-secondary)]'
+            }`}
+            title={autoRefreshEnabled ? (marketStatus?.isOpen ? `Auto-refresh in ${formatCountdown(autoRefreshCountdown)}` : 'Paused (market closed)') : 'Enable auto-refresh'}
+          >
+            {autoRefreshEnabled && marketStatus?.isOpen && (
+              <span className="w-1.5 h-1.5 rounded-full bg-[var(--system-green)] animate-pulse" />
+            )}
+            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            {autoRefreshEnabled ? (
+              marketStatus?.isOpen ? formatCountdown(autoRefreshCountdown) : 'Paused'
+            ) : (
+              'Auto'
+            )}
+          </button>
+          {/* Refresh Button */}
+          <button
+            onClick={handleRefreshPrices}
+            disabled={isRefreshing || pricesLoading}
+            className={`p-2 rounded-lg transition-all ${
+              isRefreshing || pricesLoading
+                ? 'bg-[var(--fill-tertiary)] text-[var(--label-tertiary)]'
+                : 'bg-[var(--fill-tertiary)] text-[var(--label-secondary)] hover:bg-[var(--fill-secondary)] hover:text-[var(--label-primary)]'
+            }`}
+            title={lastUpdated ? `Last updated: ${lastUpdated.toLocaleTimeString()}` : 'Refresh prices'}
+          >
+            <svg
+              className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`}
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              strokeWidth={2}
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+            </svg>
+          </button>
         </motion.div>
 
       {/* Portfolio Summary Cards */}
@@ -929,16 +918,16 @@ export default function Assets() {
         className="mb-4 grid grid-cols-2 lg:grid-cols-4 gap-3"
       >
         {/* Card 1: Portfolio Value */}
-        <Card padding="p-0" className="overflow-hidden">
-          <div className="px-4 py-3 bg-gradient-to-r from-[var(--chart-primary)]/8 via-[var(--chart-primary)]/4 to-transparent">
-            <p className="text-[11px] text-[var(--label-secondary)] uppercase tracking-wide font-medium">Portfolio Value</p>
-            <p className="text-[22px] font-bold text-[var(--label-primary)] tracking-tight tabular-nums mt-1">
+        <Card padding="p-0" className="overflow-hidden hero-card">
+          <div className="px-4 py-3">
+            <p className="text-[12px] text-white/60 uppercase tracking-wide font-medium">Portfolio Value</p>
+            <p className="text-[22px] font-bold text-white tracking-tight tabular-nums mt-1">
               {formatCurrency(totalCurrentValue)}
             </p>
-            <p className="text-[12px] font-medium text-[var(--label-tertiary)] mt-0.5">
+            <p className="text-[13px] font-medium text-white/60 mt-0.5">
               {filteredAssets.length} assets
               {unavailableCount > 0 && (
-                <span className="text-[#F59E0B] ml-1">({unavailableCount} excluded)</span>
+                <span className="text-[var(--system-amber)] ml-1">({unavailableCount} excluded)</span>
               )}
             </p>
           </div>
@@ -947,18 +936,18 @@ export default function Assets() {
         {/* Card 2: Invested */}
         <Card padding="p-0" className="overflow-hidden">
           <div className="px-4 py-3 bg-gradient-to-r from-[var(--system-gray)]/8 via-[var(--system-gray)]/4 to-transparent">
-            <p className="text-[11px] text-[var(--label-secondary)] uppercase tracking-wide font-medium">Invested</p>
+            <p className="text-[12px] text-[var(--label-secondary)] uppercase tracking-wide font-medium">Invested</p>
             <p className="text-[22px] font-bold text-[var(--label-primary)] tracking-tight tabular-nums mt-1">
               {formatCurrency(totalInvestedValue)}
             </p>
-            <p className="text-[12px] font-medium text-[var(--label-tertiary)] mt-0.5">Cost basis</p>
+            <p className="text-[13px] font-medium text-[var(--label-tertiary)] mt-0.5">Cost basis</p>
           </div>
         </Card>
 
         {/* Card 3: Total Returns */}
         <Card padding="p-0" className="overflow-hidden">
-          <div className={`px-4 py-3 bg-gradient-to-r ${hasEquityAssets && pricesLoading ? 'from-[var(--system-gray)]/8 via-[var(--system-gray)]/4' : totalGainLoss >= 0 ? 'from-[#059669]/10 via-[#059669]/5' : 'from-[#DC2626]/10 via-[#DC2626]/5'} to-transparent`}>
-            <p className="text-[11px] text-[var(--label-secondary)] uppercase tracking-wide font-medium">Total Returns</p>
+          <div className={`px-4 py-3 bg-gradient-to-r ${hasEquityAssets && pricesLoading ? 'from-[var(--system-gray)]/8 via-[var(--system-gray)]/4' : totalGainLoss >= 0 ? 'from-[var(--system-green)]/10 via-[var(--system-green)]/5' : 'from-[var(--system-red)]/10 via-[var(--system-red)]/5'} to-transparent`}>
+            <p className="text-[12px] text-[var(--label-secondary)] uppercase tracking-wide font-medium">Total Returns</p>
             {hasEquityAssets && pricesLoading ? (
               <>
                 <div className="flex items-center gap-2 mt-2">
@@ -966,16 +955,16 @@ export default function Assets() {
                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" />
                     <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
                   </svg>
-                  <span className="text-[14px] text-[var(--label-tertiary)]">Fetching prices...</span>
+                  <span className="text-[15px] text-[var(--label-tertiary)]">Fetching prices...</span>
                 </div>
-                <p className="text-[12px] text-[var(--label-quaternary)] mt-1">Equity P&L loading</p>
+                <p className="text-[13px] text-[var(--label-quaternary)] mt-1">Equity P&L loading</p>
               </>
             ) : (
               <>
-                <p className={`text-[22px] font-bold tabular-nums mt-1 ${totalGainLoss >= 0 ? 'text-[#059669]' : 'text-[#DC2626]'}`}>
+                <p className={`text-[22px] font-bold tabular-nums mt-1 ${totalGainLoss >= 0 ? 'text-[var(--system-green)]' : 'text-[var(--system-red)]'}`}>
                   {totalGainLoss >= 0 ? '+' : ''}{formatCurrency(Math.abs(totalGainLoss))}
                 </p>
-                <p className={`text-[12px] font-semibold mt-0.5 ${totalGainPercent >= 0 ? 'text-[#059669]' : 'text-[#DC2626]'}`}>
+                <p className={`text-[13px] font-semibold mt-0.5 ${totalGainPercent >= 0 ? 'text-[var(--system-green)]' : 'text-[var(--system-red)]'}`}>
                   {totalGainPercent >= 0 ? '+' : ''}{totalGainPercent.toFixed(2)}% all time
                 </p>
               </>
@@ -985,15 +974,15 @@ export default function Assets() {
 
         {/* Card 4: Today's Change */}
         <Card padding="p-0" className="overflow-visible">
-          <div className={`px-4 py-3 rounded-xl bg-gradient-to-r ${hasEquityAssets && pricesLoading ? 'from-[var(--system-gray)]/8 via-[var(--system-gray)]/4' : totalDayChange !== 0 ? (totalDayChange >= 0 ? 'from-[#059669]/10 via-[#059669]/5' : 'from-[#DC2626]/10 via-[#DC2626]/5') : 'from-[var(--system-gray)]/8 via-[var(--system-gray)]/4'} to-transparent`}>
+          <div className={`px-4 py-3 rounded-xl bg-gradient-to-r ${hasEquityAssets && pricesLoading ? 'from-[var(--system-gray)]/8 via-[var(--system-gray)]/4' : totalDayChange !== 0 ? (totalDayChange >= 0 ? 'from-[var(--system-green)]/10 via-[var(--system-green)]/5' : 'from-[var(--system-red)]/10 via-[var(--system-red)]/5') : 'from-[var(--system-gray)]/8 via-[var(--system-gray)]/4'} to-transparent`}>
             {/* Header with dropdown */}
             <div className="flex items-center gap-1.5">
-              <p className="text-[11px] text-[var(--label-secondary)] uppercase tracking-wide font-medium">Today</p>
-              <span className="text-[10px] text-[var(--label-quaternary)]">·</span>
+              <p className="text-[12px] text-[var(--label-secondary)] uppercase tracking-wide font-medium">Today</p>
+              <span className="text-[11px] text-[var(--label-quaternary)]">·</span>
               <div className="relative" ref={todayDropdownRef}>
                 <button
                   onClick={() => setShowTodayDropdown(!showTodayDropdown)}
-                  className="flex items-center gap-0.5 text-[11px] font-medium text-[var(--label-secondary)] hover:text-[var(--label-primary)] transition-colors uppercase tracking-wide"
+                  className="flex items-center gap-0.5 text-[12px] font-medium text-[var(--label-secondary)] hover:text-[var(--label-primary)] transition-colors uppercase tracking-wide"
                 >
                   {todayFilter === 'stocks' ? 'Stocks' : todayFilter === 'mf' ? 'MF' : 'All'}
                   <svg className={`w-3 h-3 transition-transform ${showTodayDropdown ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -1009,7 +998,7 @@ export default function Assets() {
                           setTodayFilter(option);
                           setShowTodayDropdown(false);
                         }}
-                        className={`w-full px-3 py-1.5 text-left text-[12px] transition-colors ${
+                        className={`w-full px-3 py-1.5 text-left text-[13px] transition-colors ${
                           todayFilter === option
                             ? 'text-[var(--chart-primary)] font-semibold bg-[var(--chart-primary)]/10'
                             : 'text-[var(--label-primary)] hover:bg-[var(--fill-tertiary)]'
@@ -1030,24 +1019,24 @@ export default function Assets() {
                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" />
                     <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
                   </svg>
-                  <span className="text-[14px] text-[var(--label-tertiary)]">Fetching...</span>
+                  <span className="text-[15px] text-[var(--label-tertiary)]">Fetching...</span>
                 </div>
-                <p className="text-[12px] text-[var(--label-quaternary)] mt-1">Day change loading</p>
+                <p className="text-[13px] text-[var(--label-quaternary)] mt-1">Day change loading</p>
               </>
             ) : (
               <>
                 <p className={`text-[22px] font-bold tabular-nums mt-1 ${
                   totalDayChange === 0 ? 'text-[var(--label-quaternary)]' :
-                  totalDayChange >= 0 ? 'text-[#059669]' : 'text-[#DC2626]'
+                  totalDayChange >= 0 ? 'text-[var(--system-green)]' : 'text-[var(--system-red)]'
                 }`}>
                   {totalDayChange === 0
                     ? '—'
                     : `${totalDayChange >= 0 ? '+' : '-'}${formatCurrency(Math.abs(totalDayChange))}`
                   }
                 </p>
-                <p className={`text-[12px] font-semibold mt-0.5 ${
+                <p className={`text-[13px] font-semibold mt-0.5 ${
                   totalDayChange === 0 ? 'text-[var(--label-tertiary)]' :
-                  totalDayChangePercent >= 0 ? 'text-[#059669]' : 'text-[#DC2626]'
+                  totalDayChangePercent >= 0 ? 'text-[var(--system-green)]' : 'text-[var(--system-red)]'
                 }`}>
                   {totalDayChange === 0
                     ? 'No change'
@@ -1065,7 +1054,7 @@ export default function Assets() {
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         transition={{ delay: 0.1 }}
-        className="mb-4 sticky top-0 z-20"
+        className="sticky top-0 z-20 bg-[var(--bg-primary)] pb-3 mb-4"
       >
         <Card padding="p-0">
           <div className="flex flex-col lg:flex-row lg:items-center gap-3 p-3.5">
@@ -1081,7 +1070,7 @@ export default function Assets() {
                     <button
                       key={option.value}
                       onClick={() => setSelectedFilter(option.value)}
-                      className={`px-4 py-2 rounded-lg text-[14px] font-semibold whitespace-nowrap transition-colors ${
+                      className={`px-4 py-2 rounded-lg text-[15px] font-semibold whitespace-nowrap transition-colors ${
                         isSelected
                           ? 'bg-[var(--label-primary)] text-white'
                           : 'text-[var(--label-primary)] hover:bg-[var(--fill-tertiary)]'
@@ -1089,7 +1078,7 @@ export default function Assets() {
                     >
                       {option.label}
                       {option.value !== 'ALL' && (
-                        <span className={`ml-1.5 text-[12px] ${isSelected ? 'text-white/80' : 'text-[var(--label-tertiary)]'}`}>
+                        <span className={`ml-1.5 text-[13px] ${isSelected ? 'text-white/80' : 'text-[var(--label-tertiary)]'}`}>
                           {count}
                         </span>
                       )}
@@ -1111,7 +1100,7 @@ export default function Assets() {
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   placeholder="Search..."
-                  className="w-[180px] pl-10 pr-3 py-2.5 bg-[var(--bg-tertiary)] border-none rounded-lg text-[14px] text-[var(--label-primary)] placeholder:text-[var(--label-tertiary)] focus:outline-none focus:ring-2 focus:ring-[var(--chart-primary)]/30"
+                  className="w-[180px] pl-10 pr-3 py-2.5 bg-[var(--bg-tertiary)] border-none rounded-lg text-[15px] text-[var(--label-primary)] placeholder:text-[var(--label-tertiary)] focus:outline-none focus:ring-2 focus:ring-[var(--chart-primary)]/30"
                 />
               </div>
 
@@ -1126,7 +1115,7 @@ export default function Assets() {
                     key={opt.value}
                     whileTap={tapScale}
                     onClick={() => setSortBy(opt.value)}
-                    className={`px-3 py-1.5 rounded-lg text-[12px] font-medium transition-all ${
+                    className={`px-3 py-1.5 rounded-lg text-[13px] font-medium transition-all ${
                       sortBy === opt.value
                         ? 'bg-[var(--system-blue)] text-white'
                         : 'bg-[var(--fill-tertiary)] text-[var(--label-secondary)]'
@@ -1202,8 +1191,8 @@ export default function Assets() {
                       </svg>
                     </div>
                     <div className="text-left">
-                      <p className="text-[15px] font-semibold text-[var(--label-primary)]">{groupLabel}</p>
-                      <p className="text-[12px] text-[var(--label-secondary)]">{categoryAssets.length} {categoryAssets.length === 1 ? 'asset' : 'assets'}</p>
+                      <p className="text-[16px] font-semibold text-[var(--label-primary)]">{groupLabel}</p>
+                      <p className="text-[13px] text-[var(--label-secondary)]">{categoryAssets.length} {categoryAssets.length === 1 ? 'asset' : 'assets'}</p>
                     </div>
                   </div>
 
@@ -1218,14 +1207,14 @@ export default function Assets() {
                         style={{ backgroundColor: groupColor }}
                       />
                     </div>
-                    <span className="text-[12px] font-semibold text-[var(--label-primary)] w-12 text-right tabular-nums">
+                    <span className="text-[13px] font-semibold text-[var(--label-primary)] w-12 text-right tabular-nums">
                       {categoryWeight.toFixed(1)}%
                     </span>
                   </div>
 
                   {/* Value + Returns + Day Change - All in one line */}
                   <div className="flex items-center gap-3 ml-auto">
-                    <p className="text-[17px] font-bold text-[var(--label-primary)] tabular-nums">{formatCompact(categoryTotal)}</p>
+                    <p className="text-[18px] font-bold text-[var(--label-primary)] tabular-nums">{formatCompact(categoryTotal)}</p>
                     {(category === 'EQUITY_STOCKS' || category === 'EQUITY_MF') && pricesLoading ? (
                       <div className="flex items-center gap-1.5">
                         <svg className="w-3.5 h-3.5 animate-spin text-[var(--label-tertiary)]" viewBox="0 0 24 24" fill="none">
@@ -1234,15 +1223,15 @@ export default function Assets() {
                         </svg>
                       </div>
                     ) : (
-                      <span className={`text-[14px] font-semibold tabular-nums ${categoryGain >= 0 ? 'text-[#059669]' : 'text-[#DC2626]'}`}>
+                      <span className={`text-[15px] font-semibold tabular-nums ${categoryGain >= 0 ? 'text-[var(--system-green)]' : 'text-[var(--system-red)]'}`}>
                         {categoryGain >= 0 ? '+' : ''}{categoryGainPercent.toFixed(1)}%
                       </span>
                     )}
                     {categoryDayChange !== 0 && (category === 'EQUITY_STOCKS' || category === 'EQUITY_MF') && (
-                      <span className={`text-[13px] px-2.5 py-1 rounded-lg font-semibold tabular-nums ${
+                      <span className={`text-[14px] px-2.5 py-1 rounded-lg font-semibold tabular-nums ${
                         categoryDayChange >= 0
-                          ? 'bg-[#059669]/12 text-[#059669]'
-                          : 'bg-[#DC2626]/12 text-[#DC2626]'
+                          ? 'bg-[var(--system-green)]/12 text-[var(--system-green)]'
+                          : 'bg-[var(--system-red)]/12 text-[var(--system-red)]'
                       }`}>
                         {categoryDayChange >= 0 ? '↑' : '↓'}{formatCompact(Math.abs(categoryDayChange))} ({Math.abs(categoryDayChange / categoryTotal * 100).toFixed(2)}%)
                       </span>
@@ -1250,7 +1239,7 @@ export default function Assets() {
                   </div>
                 </button>
 
-                {/* Asset List - Table Style */}
+                {/* Asset List - Card Grid */}
                 <AnimatePresence initial={false}>
                   {isExpanded && (
                     <motion.div
@@ -1260,17 +1249,8 @@ export default function Assets() {
                       transition={spring.gentle}
                       style={{ overflow: 'visible' }}
                     >
-                      {/* Table Header */}
-                      <div className="hidden md:grid grid-cols-12 gap-3 px-4 py-2 bg-[var(--fill-tertiary)]/40 border-y border-[var(--separator-opaque)] text-[10px] font-semibold text-[var(--label-tertiary)] uppercase tracking-wider shadow-[0_1px_2px_rgba(0,0,0,0.02)]">
-                        <div className="col-span-4">Asset</div>
-                        <div className="col-span-2 text-right">Invested</div>
-                        <div className="col-span-2 text-right">Current</div>
-                        <div className="col-span-2 text-right">P&L</div>
-                        <div className="col-span-2 text-right">Today</div>
-                      </div>
-
-                      {/* Asset Rows */}
-                      <div className="divide-y divide-[var(--separator-opaque)]">
+                      {/* Card Grid */}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 p-4">
                         {categoryAssets.map((asset) => {
                           const currentValue = getAssetValue(asset);
                           const investedValue = getInvestedValue(asset);
@@ -1289,34 +1269,24 @@ export default function Assets() {
                             <div
                               key={asset.id}
                               ref={el => assetRefs.current[asset.id] = el}
-                              className={`transition-all duration-300 ${
-                                isRowExpanded ? 'bg-[var(--fill-tertiary)]/30' : ''
-                              } ${isHighlighted ? 'bg-[var(--chart-primary)]/10 ring-2 ring-[var(--chart-primary)] ring-inset animate-pulse' : ''}`}
+                              className={`rounded-xl border transition-all duration-200 ${
+                                isRowExpanded
+                                  ? 'border-[var(--separator-opaque)] bg-[var(--fill-tertiary)]/30 shadow-sm'
+                                  : 'border-[var(--separator-opaque)]/60 bg-[var(--bg-primary)] hover:border-[var(--separator-opaque)] hover:shadow-sm'
+                              } ${isHighlighted ? 'ring-2 ring-[var(--chart-primary)] animate-pulse' : ''}`}
                             >
-                              {/* Main Row - Click to Expand */}
+                              {/* Card Face - Click to Expand */}
                               <div
                                 onClick={(e) => toggleAsset(asset.id, e)}
-                                className="group grid grid-cols-12 gap-3 px-4 py-3 cursor-pointer hover:bg-[var(--fill-tertiary)]/50 transition-all items-center border-l-2 border-transparent hover:border-l-2"
-                                style={{ '--hover-border-color': groupColor }}
-                                onMouseEnter={(e) => e.currentTarget.style.borderLeftColor = groupColor}
-                                onMouseLeave={(e) => e.currentTarget.style.borderLeftColor = 'transparent'}
+                                className="p-4 cursor-pointer"
                               >
-                                {/* Asset Name + Symbol */}
-                                <div className="col-span-12 md:col-span-4 flex items-center gap-2.5">
-                                  <motion.div
-                                    animate={{ rotate: isRowExpanded ? 90 : 0 }}
-                                    transition={spring.snappy}
-                                    className="hidden md:flex w-5 h-5 rounded items-center justify-center text-[var(--label-tertiary)] group-hover:text-[var(--label-secondary)] group-hover:bg-[var(--fill-tertiary)] transition-all"
-                                  >
-                                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                                      <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-                                    </svg>
-                                  </motion.div>
+                                {/* Top: Name + Exchange Badge */}
+                                <div className="flex items-start justify-between gap-2 mb-3">
                                   <div className="min-w-0 flex-1">
                                     <div className="flex items-center gap-2">
-                                      <p className="text-[15px] font-semibold text-[var(--label-primary)] truncate">{asset.name}</p>
+                                      <p className="text-[16px] font-semibold text-[var(--label-primary)] truncate">{asset.name}</p>
                                       {exchangeBadge && (
-                                        <span className={`text-[10px] px-1.5 py-0.5 rounded font-semibold ${
+                                        <span className={`text-[11px] px-1.5 py-0.5 rounded font-semibold shrink-0 ${
                                           exchangeBadge === 'MF'
                                             ? 'bg-[var(--system-purple)]/15 text-[var(--system-purple)]'
                                             : 'bg-[var(--chart-primary)]/15 text-[var(--chart-primary)]'
@@ -1325,87 +1295,63 @@ export default function Assets() {
                                         </span>
                                       )}
                                     </div>
-                                    <p className="text-[13px] text-[var(--label-secondary)] mt-0.5">
+                                    <p className="text-[13px] text-[var(--label-tertiary)] mt-0.5">
                                       {asset.symbol || asset.asset_type?.replace(/_/g, ' ')}
-                                      {holdingPeriod && <span className="ml-1.5 text-[var(--label-tertiary)]">• {holdingPeriod}</span>}
+                                      {holdingPeriod && <span className="ml-1"> · {holdingPeriod}</span>}
                                     </p>
                                   </div>
-                                </div>
-
-                                {/* Invested Value */}
-                                <div className="hidden md:block col-span-2 text-right">
-                                  <p className="text-[15px] font-semibold text-[var(--label-primary)] tabular-nums">
-                                    {formatCompact(investedValue)}
-                                  </p>
-                                  <p className="text-[13px] text-[var(--label-secondary)] tabular-nums mt-0.5">
-                                    {isFixedIncome
-                                      ? `@ ${asset.interest_rate}% p.a.`
-                                      : asset.quantity
-                                        ? `${formatQty(asset)} units`
-                                        : ''
-                                    }
-                                  </p>
-                                </div>
-
-                                {/* Current Value + LTP */}
-                                <div className="col-span-6 md:col-span-2 text-right">
-                                  {currentValue === null ? (
-                                    <>
-                                      <p className="text-[14px] font-medium text-[#F59E0B]">Price Unavailable</p>
-                                      <p className="text-[12px] text-[var(--label-tertiary)] mt-0.5">Excluded from totals</p>
-                                    </>
-                                  ) : (
-                                    <>
-                                      <p className="text-[15px] font-bold text-[var(--label-primary)] tabular-nums">{formatCompact(currentValue)}</p>
-                                      <p className="text-[13px] text-[var(--label-secondary)] tabular-nums mt-0.5">
-                                        {!isFixedIncome && currentPrice ? `LTP ₹${currentPrice.toLocaleString('en-IN', { maximumFractionDigits: 2 })}` : `${portfolioWeight.toFixed(1)}% wt`}
-                                      </p>
-                                    </>
+                                  {/* Today's change badge */}
+                                  {dayChange.hasData && (
+                                    <span className={`text-[13px] font-semibold tabular-nums px-2 py-0.5 rounded-md shrink-0 ${
+                                      dayChange.percent >= 0
+                                        ? 'bg-[var(--system-green)]/10 text-[var(--system-green)]'
+                                        : 'bg-[var(--system-red)]/10 text-[var(--system-red)]'
+                                    }`}>
+                                      {dayChange.percent >= 0 ? '↑' : '↓'}{Math.abs(dayChange.percent).toFixed(2)}%
+                                    </span>
                                   )}
                                 </div>
 
-                                {/* P&L */}
-                                <div className="col-span-3 md:col-span-2 text-right">
+                                {/* Current Value (hero number) */}
+                                <div>
                                   {currentValue === null ? (
-                                    <p className="text-[14px] text-[var(--label-tertiary)]">—</p>
-                                  ) : asset.category === 'EQUITY' && pricesLoading ? (
-                                    <div className="flex items-center justify-end gap-2">
-                                      <svg className="w-4 h-4 animate-spin text-[var(--label-tertiary)]" viewBox="0 0 24 24" fill="none">
-                                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" />
-                                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                                      </svg>
-                                      <span className="text-[12px] text-[var(--label-tertiary)]">Loading</span>
-                                    </div>
+                                    <p className="text-[15px] font-medium text-[var(--system-amber)]">Price Unavailable</p>
                                   ) : (
-                                    <>
-                                      <p className={`text-[15px] font-semibold tabular-nums ${gainLoss >= 0 ? 'text-[#059669]' : 'text-[#DC2626]'}`}>
+                                    <p className="text-[26px] font-bold text-[var(--label-primary)] tabular-nums tracking-tight leading-none" style={{ fontFamily: 'var(--font-display)' }}>
+                                      {formatCompact(currentValue)}
+                                    </p>
+                                  )}
+                                  {asset.category === 'EQUITY' && pricesLoading && (
+                                    <svg className="w-4 h-4 animate-spin text-[var(--label-tertiary)] mt-1" viewBox="0 0 24 24" fill="none">
+                                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" />
+                                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                                    </svg>
+                                  )}
+                                </div>
+
+                                {/* Invested + P&L row */}
+                                <div className="mt-3 flex items-baseline justify-between text-[14px] tabular-nums">
+                                  <p className="text-[var(--label-secondary)]">
+                                    Invested <span className="font-semibold text-[var(--label-primary)]">{formatCompact(investedValue)}</span>
+                                    {isFixedIncome && asset.interest_rate && (
+                                      <span className="ml-1.5 text-[var(--system-green)] font-medium">@ {asset.interest_rate}%</span>
+                                    )}
+                                  </p>
+                                  {currentValue !== null && !(asset.category === 'EQUITY' && pricesLoading) && (
+                                    <p className="text-[var(--label-secondary)]">
+                                      P&L{' '}
+                                      <span className={`font-bold ${gainLoss >= 0 ? 'text-[var(--system-green)]' : 'text-[var(--system-red)]'}`}>
                                         {gainLoss >= 0 ? '+' : ''}{formatCompact(gainLoss)}
-                                      </p>
-                                      <p className={`text-[13px] font-medium tabular-nums mt-0.5 ${gainPercent >= 0 ? 'text-[#059669]' : 'text-[#DC2626]'}`}>
-                                        {gainPercent >= 0 ? '+' : ''}{gainPercent.toFixed(2)}%
-                                      </p>
-                                    </>
-                                  )}
-                                </div>
-
-                                {/* Day's Change */}
-                                <div className="col-span-3 md:col-span-2 text-right">
-                                  {dayChange.hasData ? (
-                                    <>
-                                      <p className={`text-[14px] font-semibold tabular-nums ${dayChange.percent >= 0 ? 'text-[#059669]' : 'text-[#DC2626]'}`}>
-                                        {dayChange.percent >= 0 ? '+' : ''}{dayChange.percent.toFixed(2)}%
-                                      </p>
-                                      <p className={`text-[12px] tabular-nums mt-0.5 ${dayChange.amount >= 0 ? 'text-[#059669]' : 'text-[#DC2626]'}`}>
-                                        {dayChange.amount >= 0 ? '+' : ''}{formatCompact(dayChange.amount)}
-                                      </p>
-                                    </>
-                                  ) : (
-                                    <p className="text-[14px] text-[var(--label-tertiary)]">—</p>
+                                      </span>
+                                      <span className={`ml-1 font-bold ${gainPercent >= 0 ? 'text-[var(--system-green)]' : 'text-[var(--system-red)]'}`}>
+                                        ({gainPercent >= 0 ? '+' : ''}{gainPercent.toFixed(1)}%)
+                                      </span>
+                                    </p>
                                   )}
                                 </div>
                               </div>
 
-                              {/* Expanded Details - Clean Modern Design */}
+                              {/* Expanded: Details + Actions */}
                               <AnimatePresence>
                                 {isRowExpanded && (
                                   <motion.div
@@ -1415,168 +1361,69 @@ export default function Assets() {
                                     transition={spring.gentle}
                                     className="overflow-hidden"
                                   >
-                                    <div className="pb-4 pt-2 border-t border-dashed border-[var(--separator)]">
-                                      {/* Main Content Row - Aligned with asset title */}
-                                      <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4 py-3 px-4 md:pl-[52px] md:pr-6">
-
-                                        {/* Left: Holdings & Returns Info - Single Row */}
-                                        <div className="flex flex-wrap items-center gap-5">
-                                          {/* Holdings Info - Qty, Avg, LTP */}
-                                          {!isFixedIncome && asset.quantity && (
-                                            <div className="flex items-center gap-4 px-4 py-2.5 bg-[var(--fill-tertiary)]/50 rounded-xl">
-                                              <div className="flex items-center gap-2">
-                                                <span className="text-[12px] text-[var(--label-tertiary)] font-medium">Qty</span>
-                                                <span className="text-[15px] font-bold text-[var(--label-primary)] tabular-nums">{formatQty(asset)}</span>
-                                              </div>
-                                              <span className="text-[var(--label-quaternary)] text-[15px]">×</span>
-                                              <div className="flex items-center gap-2">
-                                                <span className="text-[12px] text-[var(--label-tertiary)] font-medium">Avg</span>
-                                                <span className="text-[15px] font-semibold text-[var(--label-primary)] tabular-nums">₹{asset.avg_buy_price?.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</span>
-                                              </div>
-                                              {currentPrice > 0 && (() => {
-                                                const priceSource = getPriceSource(asset);
-                                                return (
-                                                  <>
-                                                    <span className="text-[var(--label-quaternary)] text-[15px]">→</span>
-                                                    <div className="flex items-center gap-2">
-                                                      <span className="text-[12px] text-[var(--label-tertiary)] font-medium">LTP</span>
-                                                      <span className="text-[15px] font-semibold text-[var(--label-primary)] tabular-nums">₹{currentPrice.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</span>
-                                                      {priceSource && (
-                                                        <span className={`text-[10px] px-1.5 py-0.5 rounded ${priceSource.fromBackup ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400' : 'bg-[var(--fill-tertiary)] text-[var(--label-tertiary)]'}`} title={priceSource.cacheAge ? `Cached ${priceSource.cacheAge}m ago` : ''}>
-                                                          {priceSource.fromBackup ? 'Backup' : priceSource.name}
-                                                        </span>
-                                                      )}
-                                                    </div>
-                                                  </>
-                                                );
-                                              })()}
-                                            </div>
-                                          )}
-
-                                          {/* Fixed Income Rate Info */}
-                                          {isFixedIncome && (
-                                            <div className="flex items-center gap-4 px-4 py-2.5 bg-[var(--fill-tertiary)]/50 rounded-xl">
-                                              <div className="flex items-center gap-2">
-                                                <span className="text-[12px] text-[var(--label-tertiary)] font-medium">Principal</span>
-                                                <span className="text-[15px] font-bold text-[var(--label-primary)] tabular-nums">{formatCurrency(asset.principal)}</span>
-                                              </div>
-                                              <span className="text-[var(--label-quaternary)] text-[15px]">@</span>
-                                              <div className="flex items-center gap-2">
-                                                <span className="text-[12px] text-[var(--label-tertiary)] font-medium">Rate</span>
-                                                <span className="text-[15px] font-semibold text-[var(--system-green)] tabular-nums">{asset.interest_rate}% p.a.</span>
-                                              </div>
-                                            </div>
-                                          )}
-
-                                          {/* Separator */}
-                                          <div className="hidden sm:block h-10 w-px bg-[var(--separator)]"></div>
-
-                                          {/* Returns */}
-                                          <div className="flex items-center gap-2">
-                                            <span className="text-[12px] text-[var(--label-tertiary)] font-semibold uppercase">Returns</span>
-                                            <span className={`text-[16px] font-bold tabular-nums ${gainLoss >= 0 ? 'text-[#059669]' : 'text-[#DC2626]'}`}>
-                                              {gainLoss >= 0 ? '+' : ''}{formatCurrency(Math.abs(gainLoss))}
-                                              <span className="text-[13px] font-semibold ml-1.5 opacity-80">({gainPercent >= 0 ? '+' : ''}{gainPercent.toFixed(2)}%)</span>
-                                            </span>
-                                          </div>
-
-                                          {/* XIRR for Mutual Funds - uses pre-calculated memoized value */}
-                                          {asset.asset_type === 'MUTUAL_FUND' && xirrValues[asset.id] && (
-                                            <div className="flex items-center gap-2 pl-4 border-l border-[var(--separator)]">
-                                              <span className="text-[12px] text-[var(--label-tertiary)] font-semibold uppercase">XIRR</span>
-                                              <span className={`text-[16px] font-bold tabular-nums ${xirrValues[asset.id].xirr >= 0 ? 'text-[#059669]' : 'text-[#DC2626]'}`}>
-                                                {xirrValues[asset.id].xirr >= 0 ? '+' : ''}{xirrValues[asset.id].xirr.toFixed(2)}%{xirrValues[asset.id].capped ? '+' : ''}
-                                              </span>
-                                            </div>
-                                          )}
-
-                                          {/* Portfolio Weight */}
-                                          <div className="flex items-center gap-2 pl-4 border-l border-[var(--separator)]">
-                                            <span className="text-[12px] text-[var(--label-tertiary)] font-semibold uppercase">Weight</span>
-                                            <span className="text-[16px] font-bold text-[var(--label-primary)] tabular-nums">
-                                              {portfolioWeight.toFixed(2)}%
-                                            </span>
-                                          </div>
-                                        </div>
-
-                                        {/* Right: Action Buttons - Primary + Secondary Group */}
-                                        <div className="flex items-center gap-3">
-                                          {/* Primary: Add Transaction */}
-                                          <button
-                                            onClick={(e) => openAddTransaction(asset, e)}
-                                            className="h-10 px-4 flex items-center gap-2 text-[13px] font-semibold text-white bg-[var(--chart-primary)] hover:bg-[var(--chart-primary)]/90 rounded-xl transition-all shadow-sm hover:shadow-md active:scale-[0.98]"
-                                            title="Add Transaction"
-                                          >
-                                            <svg className="w-[18px] h-[18px]" viewBox="0 0 20 20" fill="currentColor">
-                                              <path d="M10.75 4.75a.75.75 0 00-1.5 0v4.5h-4.5a.75.75 0 000 1.5h4.5v4.5a.75.75 0 001.5 0v-4.5h4.5a.75.75 0 000-1.5h-4.5v-4.5z" />
-                                            </svg>
-                                            Add
-                                          </button>
-
-                                          {/* Secondary: Manage + Delete Pill */}
-                                          <div className="flex items-center h-10 bg-[var(--fill-tertiary)] rounded-xl overflow-hidden">
-                                            {/* Manage */}
-                                            <Link
-                                              to={`/assets/${asset.id}`}
-                                              onClick={(e) => e.stopPropagation()}
-                                              className="h-full px-4 flex items-center gap-2 text-[13px] font-medium text-[var(--label-secondary)] hover:bg-[var(--fill-secondary)] hover:text-[var(--label-primary)] transition-colors"
-                                            >
-                                              <svg className="w-[18px] h-[18px]" viewBox="0 0 20 20" fill="currentColor">
-                                                <path fillRule="evenodd" d="M7.84 1.804A1 1 0 018.82 1h2.36a1 1 0 01.98.804l.331 1.652a6.993 6.993 0 011.929 1.115l1.598-.54a1 1 0 011.186.447l1.18 2.044a1 1 0 01-.205 1.251l-1.267 1.113a7.047 7.047 0 010 2.228l1.267 1.113a1 1 0 01.206 1.25l-1.18 2.045a1 1 0 01-1.187.447l-1.598-.54a6.993 6.993 0 01-1.929 1.115l-.33 1.652a1 1 0 01-.98.804H8.82a1 1 0 01-.98-.804l-.331-1.652a6.993 6.993 0 01-1.929-1.115l-1.598.54a1 1 0 01-1.186-.447l-1.18-2.044a1 1 0 01.205-1.251l1.267-1.114a7.05 7.05 0 010-2.227L1.821 7.773a1 1 0 01-.206-1.25l1.18-2.045a1 1 0 011.187-.447l1.598.54A6.992 6.992 0 017.51 3.456l.33-1.652zM10 13a3 3 0 100-6 3 3 0 000 6z" clipRule="evenodd" />
-                                              </svg>
-                                              Manage
-                                            </Link>
-
-                                            {/* Separator */}
-                                            <div className="w-px h-5 bg-[var(--separator)]"></div>
-
-                                            {/* Delete */}
-                                            <button
-                                              onClick={(e) => handleDelete(asset, e)}
-                                              className="h-full px-4 flex items-center gap-2 text-[13px] font-medium text-[var(--label-secondary)] hover:bg-[var(--system-red)]/10 hover:text-[var(--system-red)] transition-colors"
-                                            >
-                                              <svg className="w-[18px] h-[18px]" viewBox="0 0 20 20" fill="currentColor">
-                                                <path fillRule="evenodd" d="M8.75 1A2.75 2.75 0 006 3.75v.443c-.795.077-1.584.176-2.365.298a.75.75 0 10.23 1.482l.149-.022.841 10.518A2.75 2.75 0 007.596 19h4.807a2.75 2.75 0 002.742-2.53l.841-10.519.149.023a.75.75 0 00.23-1.482A41.03 41.03 0 0014 4.193V3.75A2.75 2.75 0 0011.25 1h-2.5zM10 4c.84 0 1.673.025 2.5.075V3.75c0-.69-.56-1.25-1.25-1.25h-2.5c-.69 0-1.25.56-1.25 1.25v.325C8.327 4.025 9.16 4 10 4zM8.58 7.72a.75.75 0 00-1.5.06l.3 7.5a.75.75 0 101.5-.06l-.3-7.5zm4.34.06a.75.75 0 10-1.5-.06l-.3 7.5a.75.75 0 101.5.06l.3-7.5z" clipRule="evenodd" />
-                                              </svg>
-                                              Delete
-                                            </button>
-                                          </div>
-                                        </div>
-                                      </div>
-
-                                      {/* Footer: Metadata - Aligned with content */}
-                                      <div className="flex items-center gap-2 text-[12px] text-[var(--label-tertiary)] pt-2 mx-4 md:ml-[52px] md:mr-6 border-t border-[var(--separator)]/20">
+                                    <div className="px-4 pb-4 pt-4 border-t border-[var(--separator-opaque)]">
+                                      {/* Details */}
+                                      <div className="flex flex-wrap gap-x-8 gap-y-2 text-[14px] mb-4">
+                                        {!isFixedIncome && currentPrice > 0 && (
+                                          <span className="text-[var(--label-tertiary)]">LTP <span className="font-semibold text-[var(--label-primary)] tabular-nums">₹{currentPrice.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</span></span>
+                                        )}
+                                        {!isFixedIncome && asset.quantity && (
+                                          <span className="text-[var(--label-tertiary)] mx-auto">Qty × Avg → <span className="font-semibold text-[var(--label-primary)] tabular-nums">{formatQty(asset)} × ₹{asset.avg_buy_price?.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</span></span>
+                                        )}
+                                        <span className="text-[var(--label-tertiary)] ml-auto">Weight <span className="font-semibold text-[var(--label-primary)] tabular-nums">{portfolioWeight.toFixed(1)}%</span></span>
+                                        {asset.asset_type === 'MUTUAL_FUND' && xirrValues[asset.id] && (
+                                          <span className="text-[var(--label-tertiary)]">XIRR <span className={`font-semibold tabular-nums ${xirrValues[asset.id].xirr >= 0 ? 'text-[var(--system-green)]' : 'text-[var(--system-red)]'}`}>{xirrValues[asset.id].xirr >= 0 ? '+' : ''}{xirrValues[asset.id].xirr.toFixed(2)}%</span></span>
+                                        )}
                                         {isFixedIncome && asset.maturity_date && (
-                                          <>
-                                            <span className="flex items-center gap-1">
-                                              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                                                <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 11.25v7.5" />
-                                              </svg>
-                                              Matures {new Date(asset.maturity_date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
-                                            </span>
-                                            <span className="text-[var(--separator)]">•</span>
-                                          </>
-                                        )}
-                                        {transactionDates[asset.id] ? (
-                                          <>
-                                            <span className="flex items-center gap-1">
-                                              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                                                <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 21L3 16.5m0 0L7.5 12M3 16.5h13.5m0-13.5L21 7.5m0 0L16.5 12M21 7.5H7.5" />
-                                              </svg>
-                                              {transactionDates[asset.id].count} transaction{transactionDates[asset.id].count !== 1 ? 's' : ''}
-                                            </span>
-                                            {transactionDates[asset.id].firstDate && (
-                                              <>
-                                                <span className="text-[var(--separator)]">•</span>
-                                                <span>Since {new Date(transactionDates[asset.id].firstDate).toLocaleDateString('en-IN', { month: 'short', year: 'numeric' })}</span>
-                                              </>
-                                            )}
-                                          </>
-                                        ) : (
-                                          <span className="text-[var(--label-quaternary)]">No transactions recorded</span>
+                                          <span className="text-[var(--label-tertiary)]">Matures <span className="font-medium text-[var(--label-secondary)] tabular-nums">{new Date(asset.maturity_date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: '2-digit' })}</span></span>
                                         )}
                                       </div>
 
+                                      {/* Metadata */}
+                                      <div className="flex items-center gap-2 text-[13px] text-[var(--label-tertiary)] mb-3">
+                                        {transactionDates[asset.id] ? (
+                                          <span>
+                                            {transactionDates[asset.id].count} txn{transactionDates[asset.id].count !== 1 ? 's' : ''}
+                                            {transactionDates[asset.id].firstDate && ` · Since ${new Date(transactionDates[asset.id].firstDate).toLocaleDateString('en-IN', { month: 'short', year: 'numeric' })}`}
+                                          </span>
+                                        ) : (
+                                          <span className="text-[var(--label-quaternary)]">No transactions</span>
+                                        )}
+                                      </div>
+
+                                      {/* Action Buttons */}
+                                      <div className="grid grid-cols-3 gap-2">
+                                        <button
+                                          onClick={(e) => openAddTransaction(asset, e)}
+                                          className="h-9 flex items-center justify-center gap-1.5 text-[14px] font-semibold text-white bg-[var(--chart-primary)] hover:bg-[var(--chart-primary)]/90 rounded-lg transition-all active:scale-[0.98]"
+                                          title="Add Transaction"
+                                        >
+                                          <svg className="w-3.5 h-3.5" viewBox="0 0 20 20" fill="currentColor">
+                                            <path d="M10.75 4.75a.75.75 0 00-1.5 0v4.5h-4.5a.75.75 0 000 1.5h4.5v4.5a.75.75 0 001.5 0v-4.5h4.5a.75.75 0 000-1.5h-4.5v-4.5z" />
+                                          </svg>
+                                          Add
+                                        </button>
+                                        <Link
+                                          to={`/assets/${asset.id}`}
+                                          onClick={(e) => e.stopPropagation()}
+                                          className="h-9 flex items-center justify-center gap-1.5 text-[14px] font-medium text-[var(--label-secondary)] bg-[var(--fill-tertiary)] hover:bg-[var(--fill-secondary)] rounded-lg transition-colors"
+                                        >
+                                          <svg className="w-3.5 h-3.5" viewBox="0 0 20 20" fill="currentColor">
+                                            <path fillRule="evenodd" d="M7.84 1.804A1 1 0 018.82 1h2.36a1 1 0 01.98.804l.331 1.652a6.993 6.993 0 011.929 1.115l1.598-.54a1 1 0 011.186.447l1.18 2.044a1 1 0 01-.205 1.251l-1.267 1.113a7.047 7.047 0 010 2.228l1.267 1.113a1 1 0 01.206 1.25l-1.18 2.045a1 1 0 01-1.187.447l-1.598-.54a6.993 6.993 0 01-1.929 1.115l-.33 1.652a1 1 0 01-.98.804H8.82a1 1 0 01-.98-.804l-.331-1.652a6.993 6.993 0 01-1.929-1.115l-1.598.54a1 1 0 01-1.186-.447l-1.18-2.044a1 1 0 01.205-1.251l1.267-1.114a7.05 7.05 0 010-2.227L1.821 7.773a1 1 0 01-.206-1.25l1.18-2.045a1 1 0 011.187-.447l1.598.54A6.992 6.992 0 017.51 3.456l.33-1.652zM10 13a3 3 0 100-6 3 3 0 000 6z" clipRule="evenodd" />
+                                          </svg>
+                                          Manage
+                                        </Link>
+                                        <button
+                                          onClick={(e) => handleDelete(asset, e)}
+                                          className="h-9 flex items-center justify-center gap-1.5 text-[14px] font-medium text-[var(--system-red)] bg-[var(--system-red)]/8 hover:bg-[var(--system-red)]/15 rounded-lg transition-colors"
+                                          title="Delete"
+                                        >
+                                          <svg className="w-3.5 h-3.5" viewBox="0 0 20 20" fill="currentColor">
+                                            <path fillRule="evenodd" d="M8.75 1A2.75 2.75 0 006 3.75v.443c-.795.077-1.584.176-2.365.298a.75.75 0 10.23 1.482l.149-.022.841 10.518A2.75 2.75 0 007.596 19h4.807a2.75 2.75 0 002.742-2.53l.841-10.519.149.023a.75.75 0 00.23-1.482A41.03 41.03 0 0014 4.193V3.75A2.75 2.75 0 0011.25 1h-2.5zM10 4c.84 0 1.673.025 2.5.075V3.75c0-.69-.56-1.25-1.25-1.25h-2.5c-.69 0-1.25.56-1.25 1.25v.325C8.327 4.025 9.16 4 10 4zM8.58 7.72a.75.75 0 00-1.5.06l.3 7.5a.75.75 0 101.5-.06l-.3-7.5zm4.34.06a.75.75 0 10-1.5-.06l-.3 7.5a.75.75 0 101.5.06l.3-7.5z" clipRule="evenodd" />
+                                          </svg>
+                                          Delete
+                                        </button>
+                                      </div>
                                     </div>
                                   </motion.div>
                                 )}
@@ -1605,7 +1452,7 @@ export default function Assets() {
               <h3 className="text-[16px] font-semibold text-[var(--label-primary)] mb-1">
                 {searchTerm || selectedFilter !== 'ALL' ? 'No matching assets' : 'No assets yet'}
               </h3>
-              <p className="text-[13px] text-[var(--label-secondary)] mb-4">
+              <p className="text-[14px] text-[var(--label-secondary)] mb-4">
                 {searchTerm ? 'Try a different search term' : selectedFilter !== 'ALL' ? 'No assets in this category' : 'Start by adding your first asset'}
               </p>
               {(searchTerm || selectedFilter !== 'ALL') ? (
@@ -1614,13 +1461,13 @@ export default function Assets() {
                     setSearchTerm('');
                     setSelectedFilter('ALL');
                   }}
-                  className="px-4 py-2 text-[13px] font-medium text-[var(--chart-primary)] hover:bg-[var(--chart-primary)]/10 rounded-lg transition-colors"
+                  className="px-4 py-2 text-[14px] font-medium text-[var(--chart-primary)] hover:bg-[var(--chart-primary)]/10 rounded-lg transition-colors"
                 >
                   Clear filters
                 </button>
               ) : (
                 <Link to="/assets/add">
-                  <button className="px-4 py-2 bg-[var(--chart-primary)] text-white text-[13px] font-medium rounded-lg hover:opacity-90 transition-opacity">
+                  <button className="px-4 py-2 bg-[var(--chart-primary)] text-white text-[14px] font-medium rounded-lg hover:opacity-90 transition-opacity">
                     Add Asset
                   </button>
                 </Link>
@@ -1669,10 +1516,10 @@ export default function Assets() {
                   <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
                 </svg>
               </div>
-              <h3 className="text-[17px] font-semibold text-[var(--label-primary)] mb-2">
+              <h3 className="text-[18px] font-semibold text-[var(--label-primary)] mb-2">
                 Delete "{assetToDelete.name}"?
               </h3>
-              <p className="text-[14px] text-[var(--label-secondary)] leading-relaxed">
+              <p className="text-[15px] text-[var(--label-secondary)] leading-relaxed">
                 This will permanently delete this asset and all its transaction history. This action cannot be undone.
               </p>
             </div>
@@ -1681,9 +1528,9 @@ export default function Assets() {
             <div className="bg-[var(--fill-tertiary)] rounded-xl p-4 mb-6">
               <div className="flex items-center gap-3">
                 <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${
-                  assetToDelete.category === 'EQUITY' ? 'bg-[#4F7DF3]' :
-                  assetToDelete.category === 'FIXED_INCOME' ? 'bg-[#059669]' :
-                  assetToDelete.category === 'REAL_ESTATE' ? 'bg-[#F59E0B]' :
+                  assetToDelete.category === 'EQUITY' ? 'bg-[var(--chart-primary)]' :
+                  assetToDelete.category === 'FIXED_INCOME' ? 'bg-[var(--system-green)]' :
+                  assetToDelete.category === 'REAL_ESTATE' ? 'bg-[var(--system-amber)]' :
                   assetToDelete.category === 'GOLD' ? 'bg-[#EAB308]' :
                   assetToDelete.category === 'CASH' ? 'bg-[#6366F1]' :
                   'bg-[var(--system-gray)]'
@@ -1703,15 +1550,15 @@ export default function Assets() {
                   </svg>
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-[15px] font-semibold text-[var(--label-primary)] truncate">
+                  <p className="text-[16px] font-semibold text-[var(--label-primary)] truncate">
                     {assetToDelete.name}
                   </p>
-                  <p className="text-[13px] text-[var(--label-secondary)]">
+                  <p className="text-[14px] text-[var(--label-secondary)]">
                     {assetToDelete.category?.replace('_', ' ')} • {assetToDelete.asset_type?.replace('_', ' ') || 'Asset'}
                   </p>
                 </div>
                 <div className="text-right">
-                  <p className="text-[15px] font-semibold text-[var(--label-primary)] tabular-nums">
+                  <p className="text-[16px] font-semibold text-[var(--label-primary)] tabular-nums">
                     {formatCurrency(getAssetValue(assetToDelete))}
                   </p>
                 </div>
@@ -1723,14 +1570,14 @@ export default function Assets() {
               <button
                 onClick={cancelDelete}
                 disabled={isDeleting}
-                className="flex-1 h-12 px-4 text-[15px] font-semibold text-[var(--label-primary)] bg-[var(--fill-tertiary)] hover:bg-[var(--fill-secondary)] rounded-xl transition-colors disabled:opacity-50"
+                className="flex-1 h-12 px-4 text-[16px] font-semibold text-[var(--label-primary)] bg-[var(--fill-tertiary)] hover:bg-[var(--fill-secondary)] rounded-xl transition-colors disabled:opacity-50"
               >
                 Cancel
               </button>
               <button
                 onClick={confirmDelete}
                 disabled={isDeleting}
-                className="flex-1 h-12 px-4 text-[15px] font-semibold text-white bg-[var(--system-red)] hover:bg-[#B91C1C] rounded-xl transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                className="flex-1 h-12 px-4 text-[16px] font-semibold text-white bg-[var(--system-red)] hover:brightness-90 rounded-xl transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
               >
                 {isDeleting ? (
                   <>

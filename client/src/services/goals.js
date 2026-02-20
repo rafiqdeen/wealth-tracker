@@ -107,7 +107,7 @@ export const GOAL_CATEGORIES = {
   FIRE: {
     label: 'FIRE',
     icon: 'fire',
-    color: '#EF4444',
+    color: '#C03744',
     description: 'Financial independence goal',
   },
   HOME: {
@@ -131,7 +131,7 @@ export const GOAL_CATEGORIES = {
   CAR: {
     label: 'Vehicle',
     icon: 'car',
-    color: '#059669',
+    color: '#1A7A5C',
     description: 'Car or bike purchase',
   },
   WEDDING: {
@@ -172,7 +172,7 @@ export const LINK_TYPES = {
   FUNDING: {
     label: 'Funding',
     description: 'Asset contributes to goal progress',
-    color: '#10B981',
+    color: '#1A7A5C',
   },
   TARGET: {
     label: 'Target',

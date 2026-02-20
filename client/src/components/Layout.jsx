@@ -135,65 +135,61 @@ export default function Layout() {
         Skip to main content
       </a>
 
-      {/* Sidebar - OUTSIDE the white container, in the page background */}
-      <aside className="hidden md:flex flex-col items-center w-[82px] py-6 shrink-0">
+      {/* Sidebar - Icon-only rail */}
+      <aside className="hidden md:flex flex-col items-center w-[72px] py-6 shrink-0">
         {/* Logo - Top */}
-        <Link to="/" className="w-11 h-11 bg-[var(--sidebar-active)] rounded-xl flex items-center justify-center">
-          <svg className="w-[22px] h-[22px] text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 18.75a60.07 60.07 0 0115.797 2.101c.727.198 1.453-.342 1.453-1.096V18.75M3.75 4.5v.75A.75.75 0 013 6h-.75m0 0v-.375c0-.621.504-1.125 1.125-1.125H20.25M2.25 6v9m18-10.5v.75c0 .414.336.75.75.75h.75m-1.5-1.5h.375c.621 0 1.125.504 1.125 1.125v9.75c0 .621-.504 1.125-1.125 1.125h-.375m1.5-1.5H21a.75.75 0 00-.75.75v.75m0 0H3.75m0 0h-.375a1.125 1.125 0 01-1.125-1.125V15m1.5 1.5v-.75A.75.75 0 003 15h-.75M15 10.5a3 3 0 11-6 0 3 3 0 016 0zm3 0h.008v.008H18V10.5zm-12 0h.008v.008H6V10.5z" />
-          </svg>
+        <Link to="/" className="mb-8">
+          <div className="w-[44px] h-[44px] bg-[var(--sidebar-active)] rounded-xl flex items-center justify-center">
+            <svg className="w-[22px] h-[22px] text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 18.75a60.07 60.07 0 0115.797 2.101c.727.198 1.453-.342 1.453-1.096V18.75M3.75 4.5v.75A.75.75 0 013 6h-.75m0 0v-.375c0-.621.504-1.125 1.125-1.125H20.25M2.25 6v9m18-10.5v.75c0 .414.336.75.75.75h.75m-1.5-1.5h.375c.621 0 1.125.504 1.125 1.125v9.75c0 .621-.504 1.125-1.125 1.125h-.375m1.5-1.5H21a.75.75 0 00-.75.75v.75m0 0H3.75m0 0h-.375a1.125 1.125 0 01-1.125-1.125V15m1.5 1.5v-.75A.75.75 0 003 15h-.75M15 10.5a3 3 0 11-6 0 3 3 0 016 0zm3 0h.008v.008H18V10.5zm-12 0h.008v.008H6V10.5z" />
+            </svg>
+          </div>
         </Link>
 
-        {/* Main Nav - VERTICALLY CENTERED in the middle */}
-        <nav className="flex-1 flex flex-col items-center justify-center gap-3">
+        {/* Main Nav - Centered */}
+        <nav className="flex-1 flex flex-col items-center justify-center gap-2">
           {navItems.map((item) => (
             <Link
               key={item.path}
               to={item.path}
-              className="flex flex-col items-center gap-1"
+              title={item.label}
             >
               <motion.div
                 whileTap={tapScale}
                 transition={spring.snappy}
-                className={`w-11 h-11 rounded-xl flex items-center justify-center transition-all ${
+                className={`w-11 h-11 rounded-[14px] flex items-center justify-center transition-all ${
                   isActive(item.path)
-                    ? 'bg-[var(--sidebar-active)] text-white'
-                    : 'bg-[#DCDEE3] text-[#454954] hover:bg-[#d0d2d8] hover:text-[var(--label-primary)]'
+                    ? 'bg-[var(--sidebar-active)] text-white shadow-md shadow-[var(--sidebar-active)]/15'
+                    : 'bg-[var(--fill-tertiary)] text-[var(--sidebar-icon)] hover:bg-[var(--fill-secondary)] hover:text-[var(--label-primary)]'
                 }`}
               >
                 {item.icon}
               </motion.div>
-              <span className={`text-[10px] font-medium leading-none ${
-                isActive(item.path) ? 'text-[var(--label-primary)]' : 'text-[var(--label-tertiary)]'
-              }`}>
-                {item.label}
-              </span>
             </Link>
           ))}
         </nav>
 
-        {/* Bottom Section - Settings and User */}
-        <div className="flex flex-col items-center gap-2">
-          {/* Backup & Export */}
+        {/* Bottom Section */}
+        <div className="flex flex-col items-center gap-3 mt-auto">
+          {/* Backup */}
           <motion.button
             whileTap={tapScale}
             transition={spring.snappy}
             onClick={() => setShowBackup(true)}
-            className="group relative w-11 h-11 rounded-xl flex items-center justify-center bg-[#DCDEE3] text-[#454954] hover:bg-[#d0d2d8] hover:text-[var(--label-primary)] transition-all"
+            className="w-11 h-11 rounded-[14px] flex items-center justify-center bg-[var(--fill-tertiary)] text-[var(--sidebar-icon)] hover:bg-[var(--fill-secondary)] hover:text-[var(--label-primary)] transition-all"
+            title="Backup"
           >
             <svg className="w-[22px] h-[22px]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
             </svg>
-            <div className="absolute left-full ml-3 px-3 py-1.5 bg-[var(--sidebar-active)] text-white text-xs font-medium rounded-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-50 shadow-lg">
-              Backup & Export
-            </div>
           </motion.button>
 
-          {/* User Avatar */}
-          <div className="relative mt-1" ref={profilePopoverRef}>
+          {/* User Profile */}
+          <div className="relative" ref={profilePopoverRef}>
             <button
               onClick={() => setShowProfilePopover(!showProfilePopover)}
-              className="w-11 h-11 rounded-full bg-gradient-to-br from-blue-400 to-blue-600 flex items-center justify-center text-white font-semibold text-sm hover:opacity-90 transition-opacity overflow-hidden ring-2 ring-white/30"
+              className="w-10 h-10 rounded-full bg-gradient-to-br from-[var(--chart-primary)] to-[var(--system-indigo)] flex items-center justify-center text-white font-semibold text-xs hover:opacity-90 transition-opacity"
+              title={user?.name || 'Profile'}
             >
               {user?.name?.charAt(0).toUpperCase()}
             </button>
@@ -202,22 +198,22 @@ export default function Layout() {
             <AnimatePresence>
               {showProfilePopover && (
                 <motion.div
-                  initial={{ opacity: 0, x: -10, scale: 0.95 }}
-                  animate={{ opacity: 1, x: 0, scale: 1 }}
-                  exit={{ opacity: 0, x: -10, scale: 0.95 }}
+                  initial={{ opacity: 0, y: 8, scale: 0.95 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: 8, scale: 0.95 }}
                   transition={{ duration: 0.15 }}
-                  className="absolute left-full ml-3 bottom-0 bg-[var(--bg-primary)] rounded-xl shadow-lg border border-[var(--separator-opaque)] p-3 z-50 min-w-[160px]"
+                  className="absolute left-full bottom-0 ml-3 bg-[var(--bg-primary)] rounded-xl shadow-[var(--shadow-floating)] border border-[var(--separator-opaque)] p-3 z-50 min-w-[200px]"
                 >
                   {/* User Info */}
                   <div className="flex items-center gap-3 mb-3 pb-3 border-b border-[var(--separator-opaque)]">
-                    <div className="w-9 h-9 rounded-full bg-gradient-to-br from-blue-400 to-blue-600 flex items-center justify-center text-white font-semibold text-xs">
+                    <div className="w-9 h-9 rounded-full bg-gradient-to-br from-[var(--chart-primary)] to-[var(--system-indigo)] flex items-center justify-center text-white font-semibold text-xs">
                       {user?.name?.charAt(0).toUpperCase()}
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="text-[13px] font-medium text-[var(--label-primary)] truncate">
+                      <p className="text-[14px] font-medium text-[var(--label-primary)] truncate">
                         {user?.name || 'User'}
                       </p>
-                      <p className="text-[11px] text-[var(--label-tertiary)] truncate">
+                      <p className="text-[12px] text-[var(--label-tertiary)] truncate">
                         {user?.email || ''}
                       </p>
                     </div>
@@ -229,7 +225,7 @@ export default function Layout() {
                       setShowProfilePopover(false);
                       logout();
                     }}
-                    className="w-full py-2 px-3 rounded-lg bg-[var(--system-red)]/10 text-[var(--system-red)] hover:bg-[var(--system-red)]/20 transition-colors text-[13px] font-medium"
+                    className="w-full py-2 px-3 rounded-lg bg-[var(--system-red)]/10 text-[var(--system-red)] hover:bg-[var(--system-red)]/20 transition-colors text-[14px] font-medium"
                   >
                     Sign Out
                   </button>
@@ -240,27 +236,27 @@ export default function Layout() {
         </div>
       </aside>
 
-      {/* Main Content Container - White card, SEPARATE from sidebar */}
+      {/* Main Content Container */}
       <div className="flex-1 p-4 md:py-5 md:pr-5 md:pl-0 overflow-hidden">
-        <div className="bg-[var(--bg-primary)] rounded-2xl md:rounded-[24px] h-full flex flex-col shadow-sm">
+        <div className="bg-[var(--bg-primary)] rounded-2xl md:rounded-[24px] h-full flex flex-col shadow-[var(--shadow-raised)]">
           {/* Top Header */}
-          <header className="h-[72px] px-4 md:px-12 flex items-center justify-between border-b border-[var(--separator-opaque)] shrink-0 relative">
+          <header className="h-[72px] px-4 md:px-10 flex items-center justify-between border-b border-[var(--separator-opaque)] shrink-0 relative">
             {/* Left: Title + Market Status */}
             <div className="z-10">
-              <h1 className="text-[17px] font-semibold text-[var(--label-primary)]" style={{ fontFamily: 'var(--font-display)' }}>
+              <h1 className="text-[18px] font-semibold text-[var(--label-primary)]" style={{ fontFamily: 'var(--font-display)' }}>
                 {getPageTitle(location.pathname)}
               </h1>
               <div className="flex items-center gap-2">
                 {location.pathname === '/' && (
-                  <p className="text-[13px] text-[var(--label-tertiary)]">{dateStr}</p>
+                  <p className="text-[14px] text-[var(--label-tertiary)]">{dateStr}</p>
                 )}
-                {/* Market Status Badge - Compact pill with tooltip */}
+                {/* Market Status Badge */}
                 {marketStatus && !marketStatus.isOpen && (
                   <span
-                    className="group relative inline-flex items-center gap-1.5 px-2 py-0.5 bg-amber-500/10 text-amber-600 text-[11px] font-medium rounded-full cursor-help"
+                    className="group relative inline-flex items-center gap-1.5 px-2 py-0.5 bg-[var(--system-amber)]/10 text-[var(--system-amber)] text-[12px] font-medium rounded-full cursor-help"
                     title="Stock & mutual fund prices may be outdated"
                   >
-                    <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse"></span>
+                    <span className="w-1.5 h-1.5 rounded-full bg-[var(--system-amber)] animate-pulse"></span>
                     {marketStatus.reason === 'Market Holiday' ? 'Market Holiday' :
                      marketStatus.reason === 'Weekend' ? 'Weekend' :
                      marketStatus.reason === 'Pre-market' ? 'Pre-market' :
@@ -271,16 +267,16 @@ export default function Layout() {
               </div>
             </div>
 
-            {/* Center: Search - Absolutely positioned for true center */}
+            {/* Center: Search */}
             <button
               onClick={() => setShowSearch(true)}
-              className="hidden lg:flex items-center gap-2.5 px-4 py-2.5 bg-[var(--bg-tertiary)] rounded-xl text-[var(--label-tertiary)] w-[360px] cursor-pointer hover:bg-[var(--fill-secondary)] transition-colors absolute left-1/2 -translate-x-1/2"
+              className="hidden lg:flex items-center gap-2.5 px-4 py-2.5 bg-[var(--bg-tertiary)] rounded-xl text-[var(--label-tertiary)] w-[360px] cursor-pointer hover:bg-[var(--fill-secondary)] transition-colors absolute left-1/2 -translate-x-1/2 border border-[var(--separator-opaque)]/50"
             >
               <svg className="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
               </svg>
-              <span className="text-[14px]">Search assets, pages...</span>
-              <span className="ml-auto text-[11px] text-[var(--label-quaternary)] bg-[var(--bg-primary)] px-1.5 py-0.5 rounded border border-[var(--separator-opaque)]">⌘K</span>
+              <span className="text-[15px]">Search assets, pages...</span>
+              <span className="ml-auto text-[12px] text-[var(--label-quaternary)] bg-[var(--bg-primary)] px-1.5 py-0.5 rounded border border-[var(--separator-opaque)]">⌘K</span>
             </button>
 
             {/* Right: Actions */}
@@ -302,7 +298,7 @@ export default function Layout() {
                 <motion.button
                   whileTap={tapScale}
                   transition={spring.snappy}
-                  className="hidden md:flex items-center gap-2 px-5 py-2.5 bg-[var(--sidebar-active)] text-white rounded-xl font-medium text-[14px] hover:opacity-90 transition-opacity ml-1"
+                  className="hidden md:flex items-center gap-2 px-5 py-2.5 bg-[var(--sidebar-active)] text-white rounded-xl font-medium text-[15px] hover:opacity-90 transition-opacity ml-1"
                 >
                   Add Asset
                 </motion.button>
@@ -318,7 +314,7 @@ export default function Layout() {
       </div>
 
       {/* Mobile Bottom Navigation */}
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-[var(--bg-primary)] border-t border-[var(--separator-opaque)] z-40">
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-[var(--bg-primary)]/90 backdrop-blur-lg border-t border-[var(--separator-opaque)] z-40">
         <div className="flex justify-around py-2 px-2">
           {navItems.map((item) => (
             <Link
@@ -337,7 +333,7 @@ export default function Layout() {
               >
                 {item.icon}
               </motion.div>
-              <span className={`text-[10px] font-medium ${
+              <span className={`text-[11px] font-medium ${
                 isActive(item.path) ? 'text-[var(--label-primary)]' : 'text-[var(--label-tertiary)]'
               }`}>
                 {item.label}

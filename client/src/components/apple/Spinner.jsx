@@ -62,7 +62,7 @@ export function PageSpinner({ message }) {
     >
       <Spinner size="lg" label={message || "Loading"} />
       {message && (
-        <p className="text-[15px] text-[var(--label-secondary)]" aria-hidden="true">{message}</p>
+        <p className="text-[16px] text-[var(--label-secondary)]" aria-hidden="true">{message}</p>
       )}
     </div>
   );

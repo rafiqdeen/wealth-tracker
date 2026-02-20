@@ -141,14 +141,14 @@ export default function QuickAddTransaction({ asset, onSuccess, onCancel }) {
   };
 
   const isBuy = formData.type === 'BUY';
-  const accentColor = isBuy ? '#059669' : '#DC2626';
+  const accentColor = isBuy ? 'var(--system-green)' : 'var(--system-red)';
 
   // Input classes with error state
   const getInputClass = (field) => {
     const hasError = touched[field] && validation.errors[field];
-    return `w-full px-4 py-3 bg-[var(--fill-tertiary)] rounded-xl text-[17px] font-medium text-[var(--label-primary)] placeholder-[var(--label-quaternary)] border-2 focus:outline-none transition-all tabular-nums ${
+    return `w-full px-4 py-3 bg-[var(--fill-tertiary)] rounded-xl text-[18px] font-medium text-[var(--label-primary)] placeholder-[var(--label-quaternary)] border-2 focus:outline-none transition-all tabular-nums ${
       hasError
-        ? 'border-[#DC2626]/50 focus:border-[#DC2626] focus:ring-2 focus:ring-[#DC2626]/20'
+        ? 'border-[var(--system-red)]/50 focus:border-[var(--system-red)] focus:ring-2 focus:ring-[var(--system-red)]/20'
         : 'border-transparent focus:border-[var(--chart-primary)]/30 focus:ring-2 focus:ring-[var(--chart-primary)]/20'
     }`;
   };
@@ -162,10 +162,10 @@ export default function QuickAddTransaction({ asset, onSuccess, onCancel }) {
       {/* Asset Badge - Shows name + symbol/code */}
       <div className="flex justify-center mb-5">
         <div className="inline-flex flex-col items-center gap-0.5 px-4 py-2 bg-[var(--fill-tertiary)] rounded-xl">
-          <span className="text-[14px] font-semibold text-[var(--label-primary)] text-center leading-tight">
+          <span className="text-[15px] font-semibold text-[var(--label-primary)] text-center leading-tight">
             {asset.name}
           </span>
-          <span className="text-[11px] text-[var(--label-tertiary)]">
+          <span className="text-[12px] text-[var(--label-tertiary)]">
             {asset.symbol}{asset.exchange && ` · ${asset.exchange}`}
           </span>
         </div>
@@ -185,7 +185,7 @@ export default function QuickAddTransaction({ asset, onSuccess, onCancel }) {
           <button
             type="button"
             onClick={() => setFormData(prev => ({ ...prev, type: 'BUY' }))}
-            className={`relative flex-1 py-2.5 text-[14px] font-semibold rounded-lg z-10 transition-colors duration-150 ${
+            className={`relative flex-1 py-2.5 text-[15px] font-semibold rounded-lg z-10 transition-colors duration-150 ${
               isBuy ? 'text-white' : 'text-[var(--label-secondary)]'
             }`}
           >
@@ -194,7 +194,7 @@ export default function QuickAddTransaction({ asset, onSuccess, onCancel }) {
           <button
             type="button"
             onClick={() => setFormData(prev => ({ ...prev, type: 'SELL' }))}
-            className={`relative flex-1 py-2.5 text-[14px] font-semibold rounded-lg z-10 transition-colors duration-150 ${
+            className={`relative flex-1 py-2.5 text-[15px] font-semibold rounded-lg z-10 transition-colors duration-150 ${
               !isBuy ? 'text-white' : 'text-[var(--label-secondary)]'
             }`}
           >
@@ -214,11 +214,11 @@ export default function QuickAddTransaction({ asset, onSuccess, onCancel }) {
             className="mb-4 overflow-hidden"
           >
             <div className="flex items-center justify-between px-3 py-2 bg-[var(--fill-tertiary)] rounded-lg">
-              <span className="text-[12px] text-[var(--label-tertiary)]">Available to sell</span>
+              <span className="text-[13px] text-[var(--label-tertiary)]">Available to sell</span>
               <button
                 type="button"
                 onClick={() => setFormData(prev => ({ ...prev, quantity: String(validation.ownedQuantity) }))}
-                className="text-[12px] font-semibold text-[var(--chart-primary)] hover:underline"
+                className="text-[13px] font-semibold text-[var(--chart-primary)] hover:underline"
               >
                 {validation.ownedQuantity} units · Sell All
               </button>
@@ -231,7 +231,7 @@ export default function QuickAddTransaction({ asset, onSuccess, onCancel }) {
       {isFixedIncome ? (
         <div className="mb-4">
           <div className="flex items-center justify-between mb-1.5">
-            <label className="text-[11px] font-medium text-[var(--label-tertiary)] uppercase tracking-wider">
+            <label className="text-[12px] font-medium text-[var(--label-tertiary)] uppercase tracking-wider">
               Amount
             </label>
             <AnimatePresence>
@@ -240,7 +240,7 @@ export default function QuickAddTransaction({ asset, onSuccess, onCancel }) {
                   initial={{ opacity: 0, x: 10 }}
                   animate={{ opacity: 1, x: 0 }}
                   exit={{ opacity: 0, x: 10 }}
-                  className="text-[10px] font-medium text-[#DC2626]"
+                  className="text-[11px] font-medium text-[var(--system-red)]"
                 >
                   {validation.errors.amount}
                 </motion.span>
@@ -265,7 +265,7 @@ export default function QuickAddTransaction({ asset, onSuccess, onCancel }) {
         <div className="grid grid-cols-2 gap-3 mb-4">
           <div>
             <div className="flex items-center justify-between mb-1.5">
-              <label className="text-[11px] font-medium text-[var(--label-tertiary)] uppercase tracking-wider">
+              <label className="text-[12px] font-medium text-[var(--label-tertiary)] uppercase tracking-wider">
                 Quantity
               </label>
               <AnimatePresence>
@@ -274,7 +274,7 @@ export default function QuickAddTransaction({ asset, onSuccess, onCancel }) {
                     initial={{ opacity: 0, x: 10 }}
                     animate={{ opacity: 1, x: 0 }}
                     exit={{ opacity: 0, x: 10 }}
-                    className="text-[10px] font-medium text-[#DC2626]"
+                    className="text-[11px] font-medium text-[var(--system-red)]"
                   >
                     {validation.errors.quantity}
                   </motion.span>
@@ -296,7 +296,7 @@ export default function QuickAddTransaction({ asset, onSuccess, onCancel }) {
           </div>
           <div>
             <div className="flex items-center justify-between mb-1.5">
-              <label className="text-[11px] font-medium text-[var(--label-tertiary)] uppercase tracking-wider">
+              <label className="text-[12px] font-medium text-[var(--label-tertiary)] uppercase tracking-wider">
                 {asset.asset_type === 'MUTUAL_FUND' ? 'NAV Per Unit' : 'Price / Unit'}
               </label>
               <AnimatePresence>
@@ -305,7 +305,7 @@ export default function QuickAddTransaction({ asset, onSuccess, onCancel }) {
                     initial={{ opacity: 0, x: 10 }}
                     animate={{ opacity: 1, x: 0 }}
                     exit={{ opacity: 0, x: 10 }}
-                    className="text-[10px] font-medium text-[#DC2626]"
+                    className="text-[11px] font-medium text-[var(--system-red)]"
                   >
                     {validation.errors.price}
                   </motion.span>
@@ -329,7 +329,7 @@ export default function QuickAddTransaction({ asset, onSuccess, onCancel }) {
 
       {/* Date Input */}
       <div className="mb-5">
-        <label className="block text-[11px] font-medium text-[var(--label-tertiary)] uppercase tracking-wider mb-1.5">
+        <label className="block text-[12px] font-medium text-[var(--label-tertiary)] uppercase tracking-wider mb-1.5">
           Transaction Date
         </label>
         <input
@@ -337,7 +337,7 @@ export default function QuickAddTransaction({ asset, onSuccess, onCancel }) {
           name="date"
           value={formData.date}
           onChange={handleChange}
-          className="w-full px-4 py-3 bg-[var(--fill-tertiary)] rounded-xl text-[15px] text-[var(--label-primary)] border-2 border-transparent focus:outline-none focus:border-[var(--chart-primary)]/30 focus:ring-2 focus:ring-[var(--chart-primary)]/20 transition-all"
+          className="w-full px-4 py-3 bg-[var(--fill-tertiary)] rounded-xl text-[16px] text-[var(--label-primary)] border-2 border-transparent focus:outline-none focus:border-[var(--chart-primary)]/30 focus:ring-2 focus:ring-[var(--chart-primary)]/20 transition-all"
           max={new Date().toISOString().split('T')[0]}
         />
       </div>
@@ -357,7 +357,7 @@ export default function QuickAddTransaction({ asset, onSuccess, onCancel }) {
         >
           {isBuy ? '+' : '−'}{formatCurrency(totalAmount)}
         </motion.p>
-        <p className="text-[12px] text-[var(--label-tertiary)] mt-1 uppercase tracking-wide font-medium">
+        <p className="text-[13px] text-[var(--label-tertiary)] mt-1 uppercase tracking-wide font-medium">
           Total Amount
         </p>
       </motion.div>
@@ -368,7 +368,7 @@ export default function QuickAddTransaction({ asset, onSuccess, onCancel }) {
           type="button"
           whileTap={tapScale}
           onClick={onCancel}
-          className="flex-1 py-3 px-4 rounded-xl font-semibold text-[15px] bg-[var(--fill-tertiary)] text-[var(--label-primary)] hover:bg-[var(--fill-secondary)] transition-colors"
+          className="flex-1 py-3 px-4 rounded-xl font-semibold text-[16px] bg-[var(--fill-tertiary)] text-[var(--label-primary)] hover:bg-[var(--fill-secondary)] transition-colors"
         >
           Cancel
         </motion.button>
@@ -376,7 +376,7 @@ export default function QuickAddTransaction({ asset, onSuccess, onCancel }) {
           type="submit"
           whileTap={!loading && validation.isValid ? tapScale : undefined}
           disabled={loading || !validation.isValid}
-          className="flex-1 py-3 px-4 rounded-xl font-semibold text-[15px] text-white transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+          className="flex-1 py-3 px-4 rounded-xl font-semibold text-[16px] text-white transition-all disabled:opacity-50 disabled:cursor-not-allowed"
           style={{ backgroundColor: accentColor }}
         >
           {loading ? (

@@ -134,10 +134,10 @@ export default function SearchModal({ isOpen, onClose }) {
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 placeholder="Search assets, pages..."
-                className="flex-1 bg-transparent text-[15px] text-[var(--label-primary)] placeholder:text-[var(--label-tertiary)] border-none [&:focus]:outline-none [&:focus-visible]:outline-none"
+                className="flex-1 bg-transparent text-[16px] text-[var(--label-primary)] placeholder:text-[var(--label-tertiary)] border-none [&:focus]:outline-none [&:focus-visible]:outline-none"
                 style={{ outline: 'none', boxShadow: 'none' }}
               />
-              <kbd className="text-[11px] text-[var(--label-quaternary)] bg-[var(--bg-tertiary)] px-1.5 py-0.5 rounded border border-[var(--separator-opaque)]">
+              <kbd className="text-[12px] text-[var(--label-quaternary)] bg-[var(--bg-tertiary)] px-1.5 py-0.5 rounded border border-[var(--separator-opaque)]">
                 ESC
               </kbd>
             </div>
@@ -147,7 +147,7 @@ export default function SearchModal({ isOpen, onClose }) {
               {/* Quick Links */}
               {!query && (
                 <div className="p-2">
-                  <p className="px-3 py-2 text-[11px] font-medium text-[var(--label-tertiary)] uppercase tracking-wider">
+                  <p className="px-3 py-2 text-[12px] font-medium text-[var(--label-tertiary)] uppercase tracking-wider">
                     Quick Links
                   </p>
                   {quickLinks.map((link, index) => (
@@ -164,7 +164,7 @@ export default function SearchModal({ isOpen, onClose }) {
                           <path strokeLinecap="round" strokeLinejoin="round" d={link.icon} />
                         </svg>
                       </div>
-                      <span className="text-[14px] text-[var(--label-primary)]">{link.label}</span>
+                      <span className="text-[15px] text-[var(--label-primary)]">{link.label}</span>
                     </button>
                   ))}
                 </div>
@@ -173,12 +173,12 @@ export default function SearchModal({ isOpen, onClose }) {
               {/* Assets */}
               {(query || assets.length > 0) && (
                 <div className="p-2">
-                  <p className="px-3 py-2 text-[11px] font-medium text-[var(--label-tertiary)] uppercase tracking-wider">
+                  <p className="px-3 py-2 text-[12px] font-medium text-[var(--label-tertiary)] uppercase tracking-wider">
                     {query ? 'Results' : 'Recent Assets'}
                   </p>
                   {loading ? (
                     <div className="px-3 py-8 text-center">
-                      <p className="text-[13px] text-[var(--label-tertiary)]">Loading...</p>
+                      <p className="text-[14px] text-[var(--label-tertiary)]">Loading...</p>
                     </div>
                   ) : filteredAssets.length > 0 ? (
                     filteredAssets.map((asset, index) => (
@@ -192,26 +192,26 @@ export default function SearchModal({ isOpen, onClose }) {
                         }`}
                       >
                         <div className="w-8 h-8 rounded-lg bg-[var(--fill-tertiary)] flex items-center justify-center">
-                          <span className="text-[12px] font-semibold text-[var(--label-secondary)]">
+                          <span className="text-[13px] font-semibold text-[var(--label-secondary)]">
                             {asset.symbol?.slice(0, 2) || asset.name?.slice(0, 2) || '??'}
                           </span>
                         </div>
                         <div className="flex-1 min-w-0">
-                          <p className="text-[14px] font-medium text-[var(--label-primary)] truncate">
+                          <p className="text-[15px] font-medium text-[var(--label-primary)] truncate">
                             {asset.name}
                           </p>
-                          <p className="text-[12px] text-[var(--label-tertiary)]">
+                          <p className="text-[13px] text-[var(--label-tertiary)]">
                             {asset.symbol || asset.asset_type?.replace('_', ' ')}
                           </p>
                         </div>
-                        <span className="text-[11px] text-[var(--label-quaternary)] bg-[var(--fill-tertiary)] px-2 py-0.5 rounded">
+                        <span className="text-[12px] text-[var(--label-quaternary)] bg-[var(--fill-tertiary)] px-2 py-0.5 rounded">
                           {asset.category}
                         </span>
                       </button>
                     ))
                   ) : (
                     <div className="px-3 py-8 text-center">
-                      <p className="text-[13px] text-[var(--label-tertiary)]">
+                      <p className="text-[14px] text-[var(--label-tertiary)]">
                         {query ? 'No assets found' : 'No assets yet'}
                       </p>
                     </div>
@@ -222,7 +222,7 @@ export default function SearchModal({ isOpen, onClose }) {
 
             {/* Footer */}
             <div className="flex items-center justify-between px-4 py-3 bg-[var(--fill-tertiary)]/50 border-t border-[var(--separator-opaque)]">
-              <div className="flex items-center gap-4 text-[11px] text-[var(--label-tertiary)]">
+              <div className="flex items-center gap-4 text-[12px] text-[var(--label-tertiary)]">
                 <span className="flex items-center gap-1">
                   <kbd className="bg-[var(--bg-primary)] px-1.5 py-0.5 rounded border border-[var(--separator-opaque)]">↑↓</kbd>
                   Navigate

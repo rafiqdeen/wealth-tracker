@@ -556,7 +556,7 @@ export default function Goals() {
   if (loading) {
     return (
       <div className="h-full overflow-auto">
-        <div className="p-4 md:px-12 md:py-6">
+        <div className="p-4 md:px-10 md:py-6">
           {/* Header skeleton */}
           <div className="flex items-center justify-between mb-6">
             <div>
@@ -612,7 +612,7 @@ export default function Goals() {
     const categoryConfig = GOAL_CATEGORIES[goal.category] || GOAL_CATEGORIES.CUSTOM;
     const isCompleted = progress >= 100;
     const isNearCompletion = progress >= 90 && !isCompleted;
-    const cardColor = isCompleted ? '#059669' : categoryConfig.color;
+    const cardColor = isCompleted ? 'var(--system-green)' : categoryConfig.color;
     const projection = getGoalProjection(goal);
 
     return (
@@ -623,7 +623,7 @@ export default function Goals() {
         transition={spring.gentle}
         className="h-full"
       >
-        <div className="group h-full rounded-2xl overflow-hidden bg-[var(--bg-primary)] border border-[var(--separator-opaque)] shadow-sm hover:shadow-md transition-all flex flex-col">
+        <div className="group h-full rounded-2xl overflow-hidden bg-[var(--bg-primary)] border border-[var(--separator-opaque)]/40 shadow-sm hover:shadow-md transition-all flex flex-col">
           {/* Header */}
           <div
             className="px-4 py-3 relative overflow-hidden"
@@ -646,8 +646,8 @@ export default function Goals() {
                   )}
                 </div>
                 <div className="min-w-0">
-                  <h3 className="text-[15px] font-semibold text-[var(--label-primary)] truncate">{goal.name}</h3>
-                  <p className="text-[11px] text-[var(--label-tertiary)]">{categoryConfig.label}</p>
+                  <h3 className="text-[18px] font-semibold text-[var(--label-primary)] truncate">{goal.name}</h3>
+                  <p className="text-[12px] text-[var(--label-tertiary)]">{categoryConfig.label}</p>
                 </div>
               </div>
               <div className="flex items-center shrink-0 ml-2 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -679,17 +679,17 @@ export default function Goals() {
             <div className="mb-3">
               <div className="flex items-center justify-between">
                 <div>
-                  <span className="text-[22px] font-bold text-[var(--label-primary)]">
+                  <span className="text-[22px] font-bold text-[var(--label-primary)]" style={{ fontFamily: 'var(--font-display)' }}>
                     {formatCompact(goal.current_value || 0)}
                   </span>
-                  <span className="text-[13px] text-[var(--label-tertiary)] ml-1">
-                    / {formatCompact(goal.target_amount)}
+                  <span className="text-[14px] text-[var(--label-tertiary)] ml-1">
+                    / <span style={{ fontFamily: 'var(--font-display)' }}>{formatCompact(goal.target_amount)}</span>
                   </span>
                 </div>
                 <div className="relative shrink-0">
-                  <CircularProgress value={progress} max={100} size={48} strokeWidth={4} color={cardColor} />
+                  <CircularProgress value={progress} max={100} size={56} strokeWidth={5} color={cardColor} />
                   <div className="absolute inset-0 flex items-center justify-center">
-                    <span className="text-[12px] font-bold tabular-nums" style={{ color: cardColor }}>
+                    <span className="text-[14px] font-bold tabular-nums" style={{ color: cardColor, fontFamily: 'var(--font-display)' }}>
                       {progress.toFixed(0)}%
                     </span>
                   </div>
@@ -698,7 +698,7 @@ export default function Goals() {
             </div>
 
             {/* Info Row */}
-            <div className="mb-3 flex items-start gap-1.5 text-[11px] text-[var(--label-secondary)]">
+            <div className="mb-3 flex items-start gap-1.5 text-[12px] text-[var(--label-secondary)]">
               {goal.progress_mode !== 'MANUAL' && goal.linked_assets_count > 0 ? (
                 <>
                   <svg className="w-3.5 h-3.5 text-[var(--label-tertiary)] shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -723,7 +723,7 @@ export default function Goals() {
             {/* Notes */}
             {goal.notes && (
               <div className="mb-3 pl-2.5 py-1 border-l-2" style={{ borderColor: cardColor }}>
-                <p className="text-[11px] text-[var(--label-secondary)] line-clamp-2">{goal.notes}</p>
+                <p className="text-[12px] text-[var(--label-secondary)] line-clamp-2">{goal.notes}</p>
               </div>
             )}
 
@@ -735,18 +735,18 @@ export default function Goals() {
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-1.5">
                       <div className="w-1.5 h-1.5 rounded-full bg-[var(--system-red)]" />
-                      <span className="text-[11px] font-medium text-[var(--system-red)]">Past deadline</span>
+                      <span className="text-[12px] font-medium text-[var(--system-red)]">Past deadline</span>
                     </div>
-                    <span className="text-[11px] font-semibold text-[var(--label-secondary)] tabular-nums">
+                    <span className="text-[12px] font-semibold text-[var(--label-secondary)] tabular-nums">
                       {formatCompact(projection.remaining)} remaining
                     </span>
                   </div>
                 ) : !projection.hasPaceData ? (
                   /* No transaction data yet */
                   <div className="flex items-center justify-between">
-                    <span className="text-[11px] text-[var(--label-tertiary)]">No investment history yet</span>
+                    <span className="text-[12px] text-[var(--label-tertiary)]">No investment history yet</span>
                     {projection.monthlyRequired != null && (
-                      <span className="text-[11px] font-semibold text-[var(--label-secondary)] tabular-nums">
+                      <span className="text-[12px] font-semibold text-[var(--label-secondary)] tabular-nums">
                         Need {formatCompact(projection.monthlyRequired)}/mo
                       </span>
                     )}
@@ -760,14 +760,14 @@ export default function Goals() {
                         <svg className="w-3 h-3 text-[var(--label-tertiary)]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                           <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 18L9 11.25l4.306 4.307a11.95 11.95 0 015.814-5.519l2.74-1.22m0 0l-5.94-2.28m5.94 2.28l-2.28 5.941" />
                         </svg>
-                        <span className="text-[11px] text-[var(--label-tertiary)]">Avg. pace</span>
+                        <span className="text-[12px] text-[var(--label-tertiary)]">Avg. pace</span>
                       </div>
                       <div className="flex items-center gap-2">
-                        <span className="text-[12px] font-bold text-[var(--label-primary)] tabular-nums">
+                        <span className="text-[13px] font-bold text-[var(--label-primary)] tabular-nums">
                           {formatCompact(projection.avgMonthlyRate)}/mo
                         </span>
                         {projection.annualReturn > 0 && (
-                          <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-[var(--fill-tertiary)] text-[var(--label-tertiary)] tabular-nums">
+                          <span className="text-[11px] font-medium px-1.5 py-0.5 rounded bg-[var(--fill-tertiary)] text-[var(--label-tertiary)] tabular-nums">
                             {projection.annualReturn.toFixed(1)}% p.a.
                           </span>
                         )}
@@ -778,15 +778,15 @@ export default function Goals() {
                     {projection.monthlyRequired != null && projection.monthlyRequired > 0 && (
                       <div>
                         <div className="flex items-center justify-between mb-1">
-                          <span className="text-[10px] text-[var(--label-quaternary)]">
+                          <span className="text-[11px] text-[var(--label-quaternary)]">
                             {formatCompact(projection.monthlyRequired)}/mo required
                           </span>
                           {(() => {
                             const paceRatio = projection.avgMonthlyRate / projection.monthlyRequired;
                             return (
-                              <span className={`text-[10px] font-semibold tabular-nums ${
-                                paceRatio >= 1 ? 'text-[#059669]' :
-                                paceRatio >= 0.7 ? 'text-amber-600' : 'text-[var(--system-red)]'
+                              <span className={`text-[11px] font-semibold tabular-nums ${
+                                paceRatio >= 1 ? 'text-[var(--system-green)]' :
+                                paceRatio >= 0.7 ? 'text-[var(--system-amber)]' : 'text-[var(--system-red)]'
                               }`}>
                                 {(paceRatio * 100).toFixed(0)}%
                               </span>
@@ -803,8 +803,8 @@ export default function Goals() {
                                 transition={{ duration: 0.6, ease: "easeOut" }}
                                 className="h-full rounded-full"
                                 style={{
-                                  backgroundColor: paceRatio >= 1 ? '#059669' :
-                                    paceRatio >= 0.7 ? '#F59E0B' : 'var(--system-red)'
+                                  backgroundColor: paceRatio >= 1 ? 'var(--system-green)' :
+                                    paceRatio >= 0.7 ? 'var(--system-amber)' : 'var(--system-red)'
                                 }}
                               />
                             );
@@ -815,14 +815,14 @@ export default function Goals() {
 
                     {/* Estimated completion */}
                     <div className="flex items-center justify-between">
-                      <span className="text-[11px] text-[var(--label-tertiary)]">Est. completion</span>
+                      <span className="text-[12px] text-[var(--label-tertiary)]">Est. completion</span>
                       <div className="flex items-center gap-1.5">
                         {projection.isOnTrack !== null && (
                           <div className={`w-1.5 h-1.5 rounded-full ${
-                            projection.isOnTrack ? 'bg-[#059669]' : 'bg-amber-500'
+                            projection.isOnTrack ? 'bg-[var(--system-green)]' : 'bg-[var(--system-amber)]'
                           }`} />
                         )}
-                        <span className="text-[12px] font-medium text-[var(--label-secondary)] tabular-nums">
+                        <span className="text-[13px] font-medium text-[var(--label-secondary)] tabular-nums">
                           {formatProjectionTime(projection.estimatedMonthsToGo)}
                         </span>
                       </div>
@@ -835,26 +835,26 @@ export default function Goals() {
             {/* Footer */}
             <div className="mt-auto pt-3 border-t border-[var(--separator-opaque)] flex items-center justify-between">
               {isCompleted ? (
-                <div className="flex items-center gap-1.5 text-[#059669]">
+                <div className="flex items-center gap-1.5 text-[var(--system-green)]">
                   <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                   </svg>
-                  <span className="text-[12px] font-semibold">Goal achieved!</span>
+                  <span className="text-[13px] font-semibold">Goal achieved!</span>
                 </div>
               ) : isNearCompletion ? (
                 <div className="flex items-center gap-1.5 text-[var(--system-amber)]">
                   <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
                     <path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z" />
                   </svg>
-                  <span className="text-[12px] font-semibold">Almost there!</span>
+                  <span className="text-[13px] font-semibold">Almost there!</span>
                 </div>
               ) : (
-                <span className="text-[12px] text-[var(--label-secondary)]">
+                <span className="text-[13px] text-[var(--label-secondary)]">
                   {formatCompact(goal.target_amount - (goal.current_value || 0))} to go
                 </span>
               )}
               {timeRemaining && (
-                <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full ${
+                <span className={`text-[11px] font-medium px-2 py-0.5 rounded-full ${
                   timeRemaining.isOverdue
                     ? 'bg-[var(--system-red)]/10 text-[var(--system-red)]'
                     : 'bg-[var(--fill-tertiary)] text-[var(--label-tertiary)]'
@@ -871,13 +871,13 @@ export default function Goals() {
 
   return (
     <div className="h-full overflow-auto">
-      <div className="p-4 md:px-12 md:py-6">
+      <div className="p-4 md:px-10 md:py-6">
         <div className="space-y-5">
           {/* Header */}
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div>
               <h1 className="text-[28px] font-bold text-[var(--label-primary)] tracking-tight" style={{ fontFamily: 'var(--font-display)' }}>Goals</h1>
-              <p className="text-[14px] text-[var(--label-tertiary)] mt-1">
+              <p className="text-[15px] text-[var(--label-tertiary)] mt-1">
                 {goals.length > 0
                   ? `${goals.length} goal${goals.length > 1 ? 's' : ''} · ${completedGoals} completed`
                   : 'Track progress towards your financial milestones'}
@@ -891,7 +891,7 @@ export default function Goals() {
                   resetForm();
                   setShowAddGoal(true);
                 }}
-                className="hidden md:flex items-center gap-2 px-5 py-2.5 bg-[var(--sidebar-active)] text-white rounded-xl font-medium text-[14px] hover:opacity-90 transition-opacity"
+                className="hidden md:flex items-center gap-2 px-5 py-2.5 bg-[var(--sidebar-active)] text-white rounded-xl font-medium text-[15px] hover:opacity-90 transition-opacity"
               >
                 <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
@@ -910,12 +910,12 @@ export default function Goals() {
                   <CircularProgress
                     value={overallProgress}
                     max={100}
-                    size={100}
-                    strokeWidth={8}
-                    color={overallProgress >= 75 ? '#059669' : 'var(--system-blue)'}
+                    size={120}
+                    strokeWidth={10}
+                    color={overallProgress >= 75 ? 'var(--system-green)' : 'var(--system-blue)'}
                   />
                   <div className="absolute inset-0 flex items-center justify-center">
-                    <span className="text-[24px] font-bold text-[var(--label-primary)] tabular-nums">
+                    <span className="text-[28px] font-bold text-[var(--label-primary)] tabular-nums" style={{ fontFamily: 'var(--font-display)' }}>
                       {overallProgress.toFixed(0)}%
                     </span>
                   </div>
@@ -927,33 +927,33 @@ export default function Goals() {
                     <span className="text-[32px] font-bold text-[var(--label-primary)]" style={{ fontFamily: 'var(--font-display)' }}>
                       {formatCompact(totalCurrentValue)}
                     </span>
-                    <span className="text-[15px] text-[var(--label-tertiary)]">
+                    <span className="text-[16px] text-[var(--label-tertiary)]">
                       / {formatCompact(totalGoalValue)}
                     </span>
                   </div>
-                  <p className="text-[13px] text-[var(--label-tertiary)]">
-                    <span className="text-[var(--system-orange)] font-medium">{formatCompact(totalRemaining)}</span> remaining across {goals.length} goal{goals.length !== 1 ? 's' : ''}
+                  <p className="text-[15px] text-[var(--label-tertiary)]">
+                    <span className="text-[var(--system-orange)] font-semibold" style={{ fontFamily: 'var(--font-display)' }}>{formatCompact(totalRemaining)}</span> remaining across {goals.length} goal{goals.length !== 1 ? 's' : ''}
                   </p>
                 </div>
 
                 {/* Status pills */}
                 <div className="flex sm:flex-col gap-2 shrink-0">
                   {completedGoals > 0 && (
-                    <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-[#059669]/10">
-                      <div className="w-2 h-2 rounded-full bg-[#059669]" />
-                      <span className="text-[12px] font-semibold text-[#059669] tabular-nums">{completedGoals} Done</span>
+                    <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-[var(--system-green)]/10">
+                      <div className="w-2 h-2 rounded-full bg-[var(--system-green)]" />
+                      <span className="text-[13px] font-semibold text-[var(--system-green)]"><span className="tabular-nums" style={{ fontFamily: 'var(--font-display)' }}>{completedGoals}</span> Done</span>
                     </div>
                   )}
                   {inProgressGoals > 0 && (
                     <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-[var(--system-blue)]/10">
                       <div className="w-2 h-2 rounded-full bg-[var(--system-blue)]" />
-                      <span className="text-[12px] font-semibold text-[var(--system-blue)] tabular-nums">{inProgressGoals} Active</span>
+                      <span className="text-[13px] font-semibold text-[var(--system-blue)]"><span className="tabular-nums" style={{ fontFamily: 'var(--font-display)' }}>{inProgressGoals}</span> Active</span>
                     </div>
                   )}
                   {notStartedGoals > 0 && (
                     <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-[var(--fill-tertiary)]">
                       <div className="w-2 h-2 rounded-full bg-[var(--label-quaternary)]" />
-                      <span className="text-[12px] font-semibold text-[var(--label-tertiary)] tabular-nums">{notStartedGoals} Pending</span>
+                      <span className="text-[13px] font-semibold text-[var(--label-tertiary)]"><span className="tabular-nums" style={{ fontFamily: 'var(--font-display)' }}>{notStartedGoals}</span> Pending</span>
                     </div>
                   )}
                 </div>
@@ -973,32 +973,34 @@ export default function Goals() {
 
                   <div className="relative flex flex-col items-center text-center max-w-lg mx-auto">
                     {/* Icon */}
-                    <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-[var(--system-blue)] to-[var(--system-purple)] flex items-center justify-center shadow-lg mb-6">
-                      <svg className="w-10 h-10 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                    <div className="w-24 h-24 rounded-3xl bg-gradient-to-br from-[var(--system-blue)] to-[var(--system-purple)] flex items-center justify-center shadow-lg mb-8">
+                      <svg className="w-12 h-12 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                         <path strokeLinecap="round" strokeLinejoin="round" d="M3 3v1.5M3 21v-6m0 0l2.77-.693a9 9 0 016.208.682l.108.054a9 9 0 006.086.71l3.114-.732a48.524 48.524 0 01-.005-10.499l-3.11.732a9 9 0 01-6.085-.711l-.108-.054a9 9 0 00-6.208-.682L3 4.5M3 15V4.5" />
                       </svg>
                     </div>
 
                     {/* Content */}
-                    <h2 className="text-[26px] font-bold text-[var(--label-primary)] mb-2 tracking-tight">
+                    <h2 className="text-[28px] font-bold text-[var(--label-primary)] mb-3 tracking-tight" style={{ fontFamily: 'var(--font-display)' }}>
                       Turn Dreams Into Milestones
                     </h2>
-                    <p className="text-[15px] text-[var(--label-secondary)] mb-6 leading-relaxed">
+                    <p className="text-[16px] text-[var(--label-secondary)] mb-8 leading-relaxed max-w-md">
                       Set financial goals, link your assets, and watch your wealth grow automatically.
                     </p>
 
-                    <Button
-                      variant="filled"
-                      onClick={() => setShowAddGoal(true)}
-                      className="px-8"
-                      icon={
-                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
-                        </svg>
-                      }
-                    >
-                      Create Your First Goal
-                    </Button>
+                    <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}>
+                      <Button
+                        variant="filled"
+                        onClick={() => setShowAddGoal(true)}
+                        className="px-10 py-3 text-[16px]"
+                        icon={
+                          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+                          </svg>
+                        }
+                      >
+                        Create Your First Goal
+                      </Button>
+                    </motion.div>
 
                     {/* Features Row */}
                     <div className="flex items-center justify-center gap-6 mt-8 pt-6 border-t border-[var(--separator-opaque)]/50 w-full">
@@ -1006,19 +1008,19 @@ export default function Goals() {
                         <svg className="w-4 h-4 text-[var(--system-blue)]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                           <path strokeLinecap="round" strokeLinejoin="round" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
                         </svg>
-                        <span className="text-[12px] font-medium">Link Assets</span>
+                        <span className="text-[13px] font-medium">Link Assets</span>
                       </div>
                       <div className="flex items-center gap-2 text-[var(--label-tertiary)]">
                         <svg className="w-4 h-4 text-[var(--system-purple)]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                           <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 6h9.75M10.5 6a1.5 1.5 0 11-3 0m3 0a1.5 1.5 0 10-3 0M3.75 6H7.5m3 12h9.75m-9.75 0a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m-3.75 0H7.5m9-6h3.75m-3.75 0a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m-9.75 0h9.75" />
                         </svg>
-                        <span className="text-[12px] font-medium">Partial Allocation</span>
+                        <span className="text-[13px] font-medium">Partial Allocation</span>
                       </div>
                       <div className="flex items-center gap-2 text-[var(--label-tertiary)]">
-                        <svg className="w-4 h-4 text-[#10B981]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <svg className="w-4 h-4 text-[var(--system-green)]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                           <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 3v11.25A2.25 2.25 0 006 16.5h2.25M3.75 3h-1.5m1.5 0h16.5m0 0h1.5m-1.5 0v11.25A2.25 2.25 0 0118 16.5h-2.25m-7.5 0h7.5m-7.5 0l-1 3m8.5-3l1 3m0 0l.5 1.5m-.5-1.5h-9.5m0 0l-.5 1.5" />
                         </svg>
-                        <span className="text-[12px] font-medium">Auto Progress</span>
+                        <span className="text-[13px] font-medium">Auto Progress</span>
                       </div>
                     </div>
                   </div>
@@ -1032,9 +1034,9 @@ export default function Goals() {
                 <div>
                   <div className="flex items-center gap-3 mb-3">
                     <div className="flex items-center gap-2">
-                      <div className="w-1.5 h-4 rounded-full bg-amber-500" />
-                      <h3 className="text-[14px] font-semibold text-[var(--label-secondary)]">Almost There</h3>
-                      <span className="text-[12px] font-medium px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-600 tabular-nums">
+                      <div className="w-1.5 h-4 rounded-full bg-[var(--system-amber)]" />
+                      <h3 className="text-[15px] font-semibold text-[var(--label-secondary)]">Almost There</h3>
+                      <span className="text-[13px] font-medium px-2 py-0.5 rounded-full bg-[var(--system-amber)]/10 text-[var(--system-amber)] tabular-nums">
                         {goalsByStatus.almostThere.length}
                       </span>
                     </div>
@@ -1052,8 +1054,8 @@ export default function Goals() {
                   <div className="flex items-center gap-3 mb-3">
                     <div className="flex items-center gap-2">
                       <div className="w-1.5 h-4 rounded-full bg-[var(--system-blue)]" />
-                      <h3 className="text-[14px] font-semibold text-[var(--label-secondary)]">In Progress</h3>
-                      <span className="text-[12px] font-medium px-2 py-0.5 rounded-full bg-[var(--system-blue)]/10 text-[var(--system-blue)] tabular-nums">
+                      <h3 className="text-[15px] font-semibold text-[var(--label-secondary)]">In Progress</h3>
+                      <span className="text-[13px] font-medium px-2 py-0.5 rounded-full bg-[var(--system-blue)]/10 text-[var(--system-blue)] tabular-nums">
                         {goalsByStatus.inProgress.length}
                       </span>
                     </div>
@@ -1071,8 +1073,8 @@ export default function Goals() {
                   <div className="flex items-center gap-3 mb-3">
                     <div className="flex items-center gap-2">
                       <div className="w-1.5 h-4 rounded-full bg-[var(--label-quaternary)]" />
-                      <h3 className="text-[14px] font-semibold text-[var(--label-secondary)]">Not Started</h3>
-                      <span className="text-[12px] font-medium px-2 py-0.5 rounded-full bg-[var(--fill-tertiary)] text-[var(--label-tertiary)] tabular-nums">
+                      <h3 className="text-[15px] font-semibold text-[var(--label-secondary)]">Not Started</h3>
+                      <span className="text-[13px] font-medium px-2 py-0.5 rounded-full bg-[var(--fill-tertiary)] text-[var(--label-tertiary)] tabular-nums">
                         {goalsByStatus.notStarted.length}
                       </span>
                     </div>
@@ -1092,9 +1094,9 @@ export default function Goals() {
                     className="flex items-center gap-3 w-full mb-3"
                   >
                     <div className="flex items-center gap-2">
-                      <div className="w-1.5 h-4 rounded-full bg-[#059669]" />
-                      <h3 className="text-[14px] font-semibold text-[var(--label-secondary)]">Completed</h3>
-                      <span className="text-[12px] font-medium px-2 py-0.5 rounded-full bg-[#059669]/10 text-[#059669] tabular-nums">
+                      <div className="w-1.5 h-4 rounded-full bg-[var(--system-green)]" />
+                      <h3 className="text-[15px] font-semibold text-[var(--label-secondary)]">Completed</h3>
+                      <span className="text-[13px] font-medium px-2 py-0.5 rounded-full bg-[var(--system-green)]/10 text-[var(--system-green)] tabular-nums">
                         {goalsByStatus.completed.length}
                       </span>
                     </div>
@@ -1107,7 +1109,7 @@ export default function Goals() {
                     </svg>
                   </button>
                   {showCompleted && (
-                    <div className="space-y-2">
+                    <div className="space-y-2 p-3 rounded-2xl bg-[var(--system-green)]/5">
                       {goalsByStatus.completed.map((goal) => {
                         const categoryConfig = GOAL_CATEGORIES[goal.category] || GOAL_CATEGORIES.CUSTOM;
                         return (
@@ -1116,18 +1118,18 @@ export default function Goals() {
                             initial={{ opacity: 0, y: 8 }}
                             animate={{ opacity: 1, y: 0 }}
                             transition={spring.gentle}
-                            className="group flex items-center gap-3 p-3 rounded-xl bg-[var(--fill-tertiary)]/50 hover:bg-[var(--fill-tertiary)] transition-colors"
+                            className="group flex items-center gap-3 p-3 rounded-xl bg-[var(--bg-primary)]/80 hover:bg-[var(--bg-primary)] border border-[var(--system-green)]/10 transition-colors"
                           >
-                            <div className="w-7 h-7 rounded-lg bg-[#059669] flex items-center justify-center shrink-0">
+                            <div className="w-7 h-7 rounded-lg bg-[var(--system-green)] flex items-center justify-center shrink-0">
                               <svg className="w-3.5 h-3.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
                                 <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
                               </svg>
                             </div>
                             <div className="flex-1 min-w-0">
-                              <span className="text-[14px] font-medium text-[var(--label-primary)]">{goal.name}</span>
-                              <span className="text-[12px] text-[var(--label-tertiary)] ml-2">{categoryConfig.label}</span>
+                              <span className="text-[15px] font-medium text-[var(--label-primary)]">{goal.name}</span>
+                              <span className="text-[13px] text-[var(--label-tertiary)] ml-2">{categoryConfig.label}</span>
                             </div>
-                            <span className="text-[14px] font-semibold text-[var(--label-primary)] tabular-nums shrink-0">
+                            <span className="text-[15px] font-semibold text-[var(--label-primary)] tabular-nums shrink-0" style={{ fontFamily: 'var(--font-display)' }}>
                               {formatCompact(goal.target_amount)}
                             </span>
                             <div className="flex items-center shrink-0 ml-1 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -1179,7 +1181,7 @@ export default function Goals() {
             <div className="flex-1 lg:border-r lg:border-[var(--separator-opaque)]">
               {/* Category Selection - 3 per row Pills */}
               <div className="px-5 py-4 border-b border-[var(--separator-opaque)]">
-                <label className="block text-[13px] font-medium text-[var(--label-secondary)] mb-3">What type of goal?</label>
+                <label className="block text-[14px] font-medium text-[var(--label-secondary)] mb-3">What type of goal?</label>
                 <div className="grid grid-cols-3 gap-2">
                   {Object.entries(GOAL_CATEGORIES).map(([key, config]) => {
                     const isSelected = formData.category === key;
@@ -1214,7 +1216,7 @@ export default function Goals() {
 
                         {/* Label */}
                         <span
-                          className="text-[13px] font-medium transition-colors truncate"
+                          className="text-[14px] font-medium transition-colors truncate"
                           style={{ color: isSelected ? config.color : 'var(--label-primary)' }}
                         >
                           {config.label}
@@ -1229,28 +1231,28 @@ export default function Goals() {
               <div className="p-5 space-y-5">
                 {/* Goal Name */}
                 <div>
-                  <label className="block text-[13px] font-medium text-[var(--label-secondary)] mb-2">Goal Name *</label>
+                  <label className="block text-[14px] font-medium text-[var(--label-secondary)] mb-2">Goal Name *</label>
                   <input
                     type="text"
                     value={formData.name}
                     onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
                     placeholder="e.g., Emergency Fund, Dream Home"
-                    className="w-full px-4 py-3 bg-[var(--fill-tertiary)] border-0 rounded-xl focus:outline-none focus:ring-2 focus:ring-[var(--system-blue)] transition-all text-[var(--label-primary)] placeholder-[var(--label-tertiary)] text-[15px]"
+                    className="w-full px-4 py-3 bg-[var(--fill-tertiary)] border-0 rounded-xl focus:outline-none focus:ring-2 focus:ring-[var(--system-blue)] transition-all text-[var(--label-primary)] placeholder-[var(--label-tertiary)] text-[16px]"
                     required
                   />
                 </div>
 
                 {/* Target Amount */}
                 <div>
-                  <label className="block text-[13px] font-medium text-[var(--label-secondary)] mb-2">Target Amount *</label>
+                  <label className="block text-[14px] font-medium text-[var(--label-secondary)] mb-2">Target Amount *</label>
                   <div className="relative mb-2">
-                    <div className="absolute left-4 top-1/2 -translate-y-1/2 text-[var(--label-secondary)] text-[15px] font-medium">₹</div>
+                    <div className="absolute left-4 top-1/2 -translate-y-1/2 text-[var(--label-secondary)] text-[16px] font-medium">₹</div>
                     <input
                       type="number"
                       value={formData.target_amount}
                       onChange={(e) => setFormData(prev => ({ ...prev, target_amount: e.target.value }))}
                       placeholder="500000"
-                      className="w-full px-4 py-3 pl-8 bg-[var(--fill-tertiary)] border-0 rounded-xl focus:outline-none focus:ring-2 focus:ring-[var(--system-blue)] transition-all text-[var(--label-primary)] placeholder-[var(--label-tertiary)] text-[15px] font-semibold"
+                      className="w-full px-4 py-3 pl-8 bg-[var(--fill-tertiary)] border-0 rounded-xl focus:outline-none focus:ring-2 focus:ring-[var(--system-blue)] transition-all text-[var(--label-primary)] placeholder-[var(--label-tertiary)] text-[16px] font-semibold"
                       required
                     />
                   </div>
@@ -1268,7 +1270,7 @@ export default function Goals() {
                         key={preset.value}
                         type="button"
                         onClick={() => setFormData(prev => ({ ...prev, target_amount: preset.value.toString() }))}
-                        className={`px-3 py-1.5 text-[13px] font-medium rounded-lg transition-all ${
+                        className={`px-3 py-1.5 text-[14px] font-medium rounded-lg transition-all ${
                           formData.target_amount === preset.value.toString()
                             ? 'text-white shadow-sm'
                             : 'bg-[var(--fill-tertiary)] text-[var(--label-secondary)] hover:bg-[var(--fill-secondary)]'
@@ -1287,14 +1289,14 @@ export default function Goals() {
 
                 {/* Progress Mode Selection */}
                 <div>
-                  <label className="block text-[13px] font-medium text-[var(--label-secondary)] mb-2">Progress Tracking</label>
+                  <label className="block text-[14px] font-medium text-[var(--label-secondary)] mb-2">Progress Tracking</label>
                   <div className="flex gap-2">
                     {Object.entries(PROGRESS_MODES).map(([key, mode]) => (
                       <button
                         key={key}
                         type="button"
                         onClick={() => setFormData(prev => ({ ...prev, progress_mode: key }))}
-                        className={`flex-1 px-3 py-2.5 rounded-xl text-[13px] font-medium transition-all ${
+                        className={`flex-1 px-3 py-2.5 rounded-xl text-[14px] font-medium transition-all ${
                           formData.progress_mode === key
                             ? 'bg-[var(--system-blue)] text-white'
                             : 'bg-[var(--fill-tertiary)] text-[var(--label-secondary)] hover:bg-[var(--fill-secondary)]'
@@ -1304,7 +1306,7 @@ export default function Goals() {
                       </button>
                     ))}
                   </div>
-                  <p className="text-[11px] text-[var(--label-tertiary)] mt-1.5">
+                  <p className="text-[12px] text-[var(--label-tertiary)] mt-1.5">
                     {PROGRESS_MODES[formData.progress_mode].description}
                   </p>
                 </div>
@@ -1312,17 +1314,17 @@ export default function Goals() {
                 {/* Manual Amount - only show for MANUAL or HYBRID mode */}
                 {(formData.progress_mode === 'MANUAL' || formData.progress_mode === 'HYBRID') && (
                   <div>
-                    <label className="block text-[13px] font-medium text-[var(--label-secondary)] mb-2">
+                    <label className="block text-[14px] font-medium text-[var(--label-secondary)] mb-2">
                       {formData.progress_mode === 'MANUAL' ? 'Current Progress' : 'Additional Manual Amount'}
                     </label>
                     <div className="relative mb-2">
-                      <div className="absolute left-4 top-1/2 -translate-y-1/2 text-[var(--label-secondary)] text-[15px] font-medium">₹</div>
+                      <div className="absolute left-4 top-1/2 -translate-y-1/2 text-[var(--label-secondary)] text-[16px] font-medium">₹</div>
                       <input
                         type="number"
                         value={formData.manual_current_amount}
                         onChange={(e) => setFormData(prev => ({ ...prev, manual_current_amount: e.target.value }))}
                         placeholder="0"
-                        className="w-full px-4 py-3 pl-8 bg-[var(--fill-tertiary)] border-0 rounded-xl focus:outline-none focus:ring-2 focus:ring-[var(--system-blue)] transition-all text-[var(--label-primary)] placeholder-[var(--label-tertiary)] text-[15px] font-semibold"
+                        className="w-full px-4 py-3 pl-8 bg-[var(--fill-tertiary)] border-0 rounded-xl focus:outline-none focus:ring-2 focus:ring-[var(--system-blue)] transition-all text-[var(--label-primary)] placeholder-[var(--label-tertiary)] text-[16px] font-semibold"
                       />
                     </div>
                   </div>
@@ -1330,13 +1332,13 @@ export default function Goals() {
 
                 {/* Target Date */}
                 <div>
-                  <label className="block text-[13px] font-medium text-[var(--label-secondary)] mb-2">Target Date</label>
+                  <label className="block text-[14px] font-medium text-[var(--label-secondary)] mb-2">Target Date</label>
                   <div className="flex gap-2 items-center">
                     <input
                       type="date"
                       value={formData.target_date}
                       onChange={(e) => setFormData(prev => ({ ...prev, target_date: e.target.value }))}
-                      className="flex-1 px-4 py-3 bg-[var(--fill-tertiary)] border-0 rounded-xl focus:outline-none focus:ring-2 focus:ring-[var(--system-blue)] transition-all text-[var(--label-primary)] text-[15px]"
+                      className="flex-1 px-4 py-3 bg-[var(--fill-tertiary)] border-0 rounded-xl focus:outline-none focus:ring-2 focus:ring-[var(--system-blue)] transition-all text-[var(--label-primary)] text-[16px]"
                       min={new Date().toISOString().split('T')[0]}
                     />
                     {/* Date Presets */}
@@ -1355,7 +1357,7 @@ export default function Goals() {
                             date.setFullYear(date.getFullYear() + preset.years);
                             setFormData(prev => ({ ...prev, target_date: date.toISOString().split('T')[0] }));
                           }}
-                          className="px-2.5 py-2.5 text-[13px] font-medium rounded-lg bg-[var(--fill-tertiary)] text-[var(--label-secondary)] hover:bg-[var(--fill-secondary)] transition-all"
+                          className="px-2.5 py-2.5 text-[14px] font-medium rounded-lg bg-[var(--fill-tertiary)] text-[var(--label-secondary)] hover:bg-[var(--fill-secondary)] transition-all"
                         >
                           {preset.label}
                         </button>
@@ -1367,10 +1369,10 @@ export default function Goals() {
                 {/* Link Existing Assets - Enhanced with sliders */}
                 {assets.length > 0 && formData.progress_mode !== 'MANUAL' && (
                   <div>
-                    <label className="block text-[13px] font-medium text-[var(--label-secondary)] mb-2">
+                    <label className="block text-[14px] font-medium text-[var(--label-secondary)] mb-2">
                       Link Assets
                     </label>
-                    <p className="text-[12px] text-[var(--label-tertiary)] mb-3">
+                    <p className="text-[13px] text-[var(--label-tertiary)] mb-3">
                       Select assets and set allocation percentage for each
                     </p>
                     <div className="max-h-[280px] overflow-y-auto space-y-2 rounded-xl bg-[var(--fill-tertiary)] p-3">
@@ -1421,10 +1423,10 @@ export default function Goals() {
                               </div>
                               {/* Asset Info */}
                               <div className="flex-1 text-left min-w-0">
-                                <p className="text-[13px] font-medium text-[var(--label-primary)] truncate">
+                                <p className="text-[14px] font-medium text-[var(--label-primary)] truncate">
                                   {asset.name}
                                 </p>
-                                <p className="text-[11px] text-[var(--label-tertiary)]">
+                                <p className="text-[12px] text-[var(--label-tertiary)]">
                                   {asset.asset_type} · {formatCompact(assetValue)}
                                   {effectiveAllocated > 0 && (
                                     <span className="text-[var(--system-orange)]"> · {effectiveAllocated.toFixed(0)}% allocated elsewhere</span>
@@ -1432,7 +1434,7 @@ export default function Goals() {
                                 </p>
                               </div>
                               {/* Value */}
-                              <span className="text-[13px] font-semibold text-[var(--label-secondary)] shrink-0">
+                              <span className="text-[14px] font-semibold text-[var(--label-secondary)] shrink-0">
                                 {formatCompact(assetValue)}
                               </span>
                             </button>
@@ -1452,16 +1454,16 @@ export default function Goals() {
                                       background: `linear-gradient(to right, var(--system-blue) 0%, var(--system-blue) ${linkedAsset.allocation_percent}%, var(--fill-secondary) ${linkedAsset.allocation_percent}%, var(--fill-secondary) 100%)`,
                                     }}
                                   />
-                                  <span className="text-[13px] font-bold text-[var(--system-blue)] w-12 text-right">
+                                  <span className="text-[14px] font-bold text-[var(--system-blue)] w-12 text-right">
                                     {linkedAsset.allocation_percent}%
                                   </span>
                                 </div>
                                 <div className="flex items-center justify-between mt-1.5">
-                                  <span className="text-[11px] text-[var(--label-tertiary)]">
+                                  <span className="text-[12px] text-[var(--label-tertiary)]">
                                     Allocated: {formatCompact(allocatedValue)}
                                   </span>
                                   {effectiveAvailable < 100 && (
-                                    <span className="text-[10px] text-[var(--system-orange)]">
+                                    <span className="text-[11px] text-[var(--system-orange)]">
                                       Max: {Math.min(100, effectiveAvailable).toFixed(0)}%
                                     </span>
                                   )}
@@ -1477,10 +1479,10 @@ export default function Goals() {
                     {formData.linked_assets.length > 0 && (
                       <div className="mt-3 p-3 rounded-xl bg-[var(--system-blue)]/10 border border-[var(--system-blue)]/20">
                         <div className="flex items-center justify-between">
-                          <span className="text-[12px] font-medium text-[var(--system-blue)]">
+                          <span className="text-[13px] font-medium text-[var(--system-blue)]">
                             {formData.linked_assets.length} asset{formData.linked_assets.length > 1 ? 's' : ''} linked
                           </span>
-                          <span className="text-[13px] font-bold text-[var(--system-blue)]">
+                          <span className="text-[14px] font-bold text-[var(--system-blue)]">
                             {formatCompact(previewData.linkedValue)} allocated
                           </span>
                         </div>
@@ -1491,13 +1493,13 @@ export default function Goals() {
 
                 {/* Notes */}
                 <div>
-                  <label className="block text-[13px] font-medium text-[var(--label-secondary)] mb-2">Notes (Optional)</label>
+                  <label className="block text-[14px] font-medium text-[var(--label-secondary)] mb-2">Notes (Optional)</label>
                   <textarea
                     value={formData.notes}
                     onChange={(e) => setFormData(prev => ({ ...prev, notes: e.target.value }))}
                     placeholder="Add any notes about this goal..."
                     rows={2}
-                    className="w-full px-4 py-3 bg-[var(--fill-tertiary)] border-0 rounded-xl focus:outline-none focus:ring-2 focus:ring-[var(--system-blue)] transition-all text-[var(--label-primary)] placeholder-[var(--label-tertiary)] text-[15px] resize-none"
+                    className="w-full px-4 py-3 bg-[var(--fill-tertiary)] border-0 rounded-xl focus:outline-none focus:ring-2 focus:ring-[var(--system-blue)] transition-all text-[var(--label-primary)] placeholder-[var(--label-tertiary)] text-[16px] resize-none"
                   />
                 </div>
               </div>
@@ -1506,8 +1508,8 @@ export default function Goals() {
             {/* Live Preview Panel */}
             <div className="hidden lg:flex lg:flex-col w-[260px] p-5 bg-[var(--bg-tertiary)]/30">
               <div className="flex items-center gap-2 mb-4">
-                <div className="w-2 h-2 rounded-full bg-[#10B981] animate-pulse" />
-                <p className="text-[13px] font-semibold text-[var(--label-secondary)]">
+                <div className="w-2 h-2 rounded-full bg-[var(--system-green)] animate-pulse" />
+                <p className="text-[14px] font-semibold text-[var(--label-secondary)]">
                   Live Preview
                 </p>
               </div>
@@ -1532,10 +1534,10 @@ export default function Goals() {
                       <GoalIcon category={formData.category} className="w-5 h-5" />
                     </div>
                     <div className="min-w-0 flex-1">
-                      <h3 className="text-[15px] font-semibold text-[var(--label-primary)] truncate">
+                      <h3 className="text-[16px] font-semibold text-[var(--label-primary)] truncate">
                         {formData.name || 'Goal Name'}
                       </h3>
-                      <p className="text-[12px] text-[var(--label-tertiary)]">
+                      <p className="text-[13px] text-[var(--label-tertiary)]">
                         {GOAL_CATEGORIES[formData.category]?.label || 'Category'}
                       </p>
                     </div>
@@ -1549,12 +1551,12 @@ export default function Goals() {
                       <span className="text-[20px] font-bold text-[var(--label-primary)]">
                         {formatCompact(previewData.currentValue)}
                       </span>
-                      <span className="text-[13px] text-[var(--label-tertiary)] ml-1">
+                      <span className="text-[14px] text-[var(--label-tertiary)] ml-1">
                         / {formData.target_amount ? formatCompact(parseFloat(formData.target_amount)) : '0'}
                       </span>
                     </div>
                     <span
-                      className="text-[15px] font-bold"
+                      className="text-[16px] font-bold"
                       style={{ color: GOAL_CATEGORIES[formData.category]?.color || '#6B7280' }}
                     >
                       {previewData.progress.toFixed(0)}%
@@ -1575,12 +1577,12 @@ export default function Goals() {
                   {/* Breakdown */}
                   {formData.progress_mode !== 'MANUAL' && previewData.linkedValue > 0 && (
                     <div className="space-y-1 mb-3">
-                      <div className="flex items-center justify-between text-[11px]">
+                      <div className="flex items-center justify-between text-[12px]">
                         <span className="text-[var(--label-tertiary)]">From Assets</span>
                         <span className="font-medium text-[var(--label-secondary)]">{formatCompact(previewData.linkedValue)}</span>
                       </div>
                       {formData.progress_mode === 'HYBRID' && previewData.manualValue > 0 && (
-                        <div className="flex items-center justify-between text-[11px]">
+                        <div className="flex items-center justify-between text-[12px]">
                           <span className="text-[var(--label-tertiary)]">Manual</span>
                           <span className="font-medium text-[var(--label-secondary)]">{formatCompact(previewData.manualValue)}</span>
                         </div>
@@ -1590,13 +1592,13 @@ export default function Goals() {
 
                   {/* Footer */}
                   <div className="flex items-center justify-between">
-                    <span className="text-[12px] text-[var(--label-tertiary)]">
+                    <span className="text-[13px] text-[var(--label-tertiary)]">
                       {formData.target_amount
                         ? `${formatCompact(Math.max(0, parseFloat(formData.target_amount) - previewData.currentValue))} to go`
                         : 'Set target'}
                     </span>
                     {formData.target_date && (
-                      <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-[var(--fill-tertiary)] text-[var(--label-tertiary)]">
+                      <span className="text-[12px] font-medium px-2 py-0.5 rounded-full bg-[var(--fill-tertiary)] text-[var(--label-tertiary)]">
                         {(() => {
                           const remaining = getTimeRemaining(formData.target_date);
                           return remaining?.text || '';
@@ -1609,11 +1611,11 @@ export default function Goals() {
 
               {/* Progress Mode Info */}
               <div className="mt-4 p-3 rounded-xl bg-[var(--fill-tertiary)]">
-                <p className="text-[11px] font-medium text-[var(--label-tertiary)] uppercase mb-1">Mode</p>
-                <p className="text-[13px] font-semibold text-[var(--label-primary)]">
+                <p className="text-[12px] font-medium text-[var(--label-tertiary)] uppercase mb-1">Mode</p>
+                <p className="text-[14px] font-semibold text-[var(--label-primary)]">
                   {PROGRESS_MODES[formData.progress_mode].label}
                 </p>
-                <p className="text-[11px] text-[var(--label-tertiary)] mt-1">
+                <p className="text-[12px] text-[var(--label-tertiary)] mt-1">
                   {PROGRESS_MODES[formData.progress_mode].description}
                 </p>
               </div>
@@ -1659,7 +1661,7 @@ export default function Goals() {
               <svg className="w-12 h-12 mx-auto text-[var(--label-quaternary)] mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
-              <p className="text-[15px] text-[var(--label-tertiary)]">No contribution history yet</p>
+              <p className="text-[16px] text-[var(--label-tertiary)]">No contribution history yet</p>
             </div>
           ) : (
             <div className="space-y-3">
@@ -1670,7 +1672,7 @@ export default function Goals() {
                 >
                   <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
                     c.amount > 0
-                      ? 'bg-[#10B981]/15 text-[#10B981]'
+                      ? 'bg-[var(--system-green)]/15 text-[var(--system-green)]'
                       : 'bg-[var(--system-red)]/15 text-[var(--system-red)]'
                   }`}>
                     {c.amount > 0 ? (
@@ -1684,10 +1686,10 @@ export default function Goals() {
                     )}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-[13px] font-medium text-[var(--label-primary)]">
+                    <p className="text-[14px] font-medium text-[var(--label-primary)]">
                       {c.description || c.contribution_type}
                     </p>
-                    <p className="text-[11px] text-[var(--label-tertiary)]">
+                    <p className="text-[12px] text-[var(--label-tertiary)]">
                       {new Date(c.contribution_date).toLocaleDateString('en-IN', {
                         day: 'numeric',
                         month: 'short',
@@ -1696,8 +1698,8 @@ export default function Goals() {
                       {c.asset_name && ` · ${c.asset_name}`}
                     </p>
                   </div>
-                  <span className={`text-[15px] font-bold ${
-                    c.amount > 0 ? 'text-[#10B981]' : 'text-[var(--system-red)]'
+                  <span className={`text-[16px] font-bold ${
+                    c.amount > 0 ? 'text-[var(--system-green)]' : 'text-[var(--system-red)]'
                   }`}>
                     {c.amount > 0 ? '+' : ''}{formatCompact(c.amount)}
                   </span>

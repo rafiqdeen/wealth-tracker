@@ -16,7 +16,7 @@ export default function ProgressBar({
   const percent = Math.min(Math.max((value / max) * 100, 0), 100);
 
   const Label = () => (
-    <span className="text-[13px] font-medium text-[var(--label-secondary)]" aria-hidden="true">
+    <span className="text-[14px] font-medium text-[var(--label-secondary)]" aria-hidden="true">
       {percent.toFixed(0)}%
     </span>
   );
@@ -99,10 +99,10 @@ export function SegmentedProgressBar({
                 style={{ backgroundColor: segment.color }}
                 aria-hidden="true"
               />
-              <span className="text-[13px] text-[var(--label-secondary)]">
+              <span className="text-[14px] text-[var(--label-secondary)]">
                 {segment.label}
               </span>
-              <span className="text-[13px] font-medium text-[var(--label-primary)]">
+              <span className="text-[14px] font-medium text-[var(--label-primary)]">
                 {((segment.value / total) * 100).toFixed(0)}%
               </span>
             </div>
@@ -163,7 +163,7 @@ export function CircularProgress({
         />
       </svg>
       {showValue && (
-        <span className="absolute text-[11px] font-semibold text-[var(--label-primary)]" aria-hidden="true">
+        <span className="absolute text-[12px] font-semibold text-[var(--label-primary)]" aria-hidden="true">
           {percent.toFixed(0)}
         </span>
       )}

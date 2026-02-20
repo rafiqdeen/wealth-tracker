@@ -340,8 +340,8 @@ export default function useInsightsData() {
     const returnPercent = data.invested > 0 ? (returnAmount / data.invested) * 100 : 0;
     const typeColors = {
       'STOCK': '#3B82F6', 'MUTUAL_FUND': '#8B5CF6', 'ETF': '#06B6D4',
-      'FD': '#10B981', 'PPF': '#059669', 'EPF': '#0D9488', 'RD': '#14B8A6',
-      'NPS': '#0891B2', 'GOLD': '#F59E0B', 'SILVER': '#78716C',
+      'FD': '#1A7A5C', 'PPF': '#2A8F82', 'EPF': '#0D9488', 'RD': '#14B8A6',
+      'NPS': '#0891B2', 'GOLD': '#B8860B', 'SILVER': '#78716C',
       'SAVINGS_ACCOUNT': '#A855F7', 'LAND': '#EA580C', 'PROPERTY': '#F97316',
       'LIC': '#EC4899', 'CRYPTOCURRENCY': '#EC4899',
     };

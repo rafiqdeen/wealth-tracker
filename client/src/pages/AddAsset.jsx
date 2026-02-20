@@ -35,13 +35,13 @@ const DEFAULT_TAGS = [
 
 // Predefined goals with SVG icons
 const DEFAULT_GOALS = [
-  { id: 'retirement', label: 'Retirement', color: 'bg-[#F59E0B]' },
-  { id: 'house', label: 'Buy House', color: 'bg-[#059669]' },
-  { id: 'education', label: 'Education', color: 'bg-[#6366F1]' },
-  { id: 'emergency', label: 'Emergency', color: 'bg-[#EF4444]' },
-  { id: 'vacation', label: 'Vacation', color: 'bg-[#06B6D4]' },
-  { id: 'car', label: 'Buy Car', color: 'bg-[#8B5CF6]' },
-  { id: 'wedding', label: 'Wedding', color: 'bg-[#EC4899]' },
+  { id: 'retirement', label: 'Retirement', color: 'bg-[var(--system-amber)]' },
+  { id: 'house', label: 'Buy House', color: 'bg-[var(--system-green)]' },
+  { id: 'education', label: 'Education', color: 'bg-[var(--system-purple)]' },
+  { id: 'emergency', label: 'Emergency', color: 'bg-[var(--system-red)]' },
+  { id: 'vacation', label: 'Vacation', color: 'bg-[var(--chart-primary)]' },
+  { id: 'car', label: 'Buy Car', color: 'bg-[var(--system-purple)]' },
+  { id: 'wedding', label: 'Wedding', color: 'bg-[var(--system-red)]' },
   { id: 'other', label: 'Other', color: 'bg-[#6B7280]' },
 ];
 
@@ -144,9 +144,9 @@ const MIN_INVESTMENTS = {
 
 // Category card configuration with icons and colors
 const CATEGORY_CARDS = [
-  { key: 'EQUITY', label: 'Equity', description: 'Stocks & Mutual Funds', gradient: 'from-blue-500/15 to-blue-600/5', iconBg: 'bg-[#4F7DF3]' },
-  { key: 'FIXED_INCOME', label: 'Fixed Income', description: 'FD, PPF, Bonds', gradient: 'from-emerald-500/15 to-emerald-600/5', iconBg: 'bg-[#059669]' },
-  { key: 'REAL_ESTATE', label: 'Real Estate', description: 'Property & Land', gradient: 'from-amber-500/15 to-amber-600/5', iconBg: 'bg-[#F59E0B]' },
+  { key: 'EQUITY', label: 'Equity', description: 'Stocks & Mutual Funds', gradient: 'from-blue-500/15 to-blue-600/5', iconBg: 'bg-[var(--chart-primary)]' },
+  { key: 'FIXED_INCOME', label: 'Fixed Income', description: 'FD, PPF, Bonds', gradient: 'from-emerald-500/15 to-emerald-600/5', iconBg: 'bg-[var(--system-green)]' },
+  { key: 'REAL_ESTATE', label: 'Real Estate', description: 'Property & Land', gradient: 'from-amber-500/15 to-amber-600/5', iconBg: 'bg-[var(--system-amber)]' },
   { key: 'PHYSICAL', label: 'Physical Assets', description: 'Gold, Silver, Art', gradient: 'from-orange-500/15 to-orange-600/5', iconBg: 'bg-[#F97316]' },
   { key: 'SAVINGS', label: 'Savings', description: 'Bank Accounts', gradient: 'from-teal-500/15 to-teal-600/5', iconBg: 'bg-[#14B8A6]' },
   { key: 'CRYPTO', label: 'Cryptocurrency', description: 'Bitcoin, Ethereum', gradient: 'from-indigo-500/15 to-indigo-600/5', iconBg: 'bg-[#6366F1]' },
@@ -777,14 +777,14 @@ export default function AddAsset() {
 
   const inputClass = (fieldName) => {
     const hasError = touched[fieldName] && validationErrors[fieldName];
-    return `w-full px-4 py-3 bg-[var(--bg-primary)] border ${hasError ? 'border-[var(--system-red)]' : 'border-[var(--separator-opaque)]'} rounded-xl focus:outline-none focus:ring-2 ${hasError ? 'focus:ring-[var(--system-red)]/30 focus:border-[var(--system-red)]' : 'focus:ring-[var(--chart-primary)]/30 focus:border-[var(--chart-primary)]'} transition-all text-[var(--label-primary)] placeholder-[var(--label-tertiary)] text-[15px]`;
+    return `w-full px-4 py-3 bg-[var(--bg-primary)] border ${hasError ? 'border-[var(--system-red)]' : 'border-[var(--separator-opaque)]'} rounded-xl focus:outline-none focus:ring-2 ${hasError ? 'focus:ring-[var(--system-red)]/30 focus:border-[var(--system-red)]' : 'focus:ring-[var(--chart-primary)]/30 focus:border-[var(--chart-primary)]'} transition-all text-[var(--label-primary)] placeholder-[var(--label-tertiary)] text-[16px]`;
   };
 
-  const selectClass = `w-full px-4 py-3 pr-10 bg-[var(--bg-primary)] border border-[var(--separator-opaque)] rounded-xl focus:outline-none focus:ring-2 focus:ring-[var(--chart-primary)]/30 focus:border-[var(--chart-primary)] transition-all text-[var(--label-primary)] text-[15px] appearance-none cursor-pointer bg-no-repeat bg-[right_12px_center] bg-[length:20px_20px] bg-[url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%238E8E93' stroke-width='2'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' d='M19.5 8.25l-7.5 7.5-7.5-7.5'/%3E%3C/svg%3E")]`;
+  const selectClass = `w-full px-4 py-3 pr-10 bg-[var(--bg-primary)] border border-[var(--separator-opaque)] rounded-xl focus:outline-none focus:ring-2 focus:ring-[var(--chart-primary)]/30 focus:border-[var(--chart-primary)] transition-all text-[var(--label-primary)] text-[16px] appearance-none cursor-pointer bg-no-repeat bg-[right_12px_center] bg-[length:20px_20px] bg-[url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%238E8E93' stroke-width='2'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' d='M19.5 8.25l-7.5 7.5-7.5-7.5'/%3E%3C/svg%3E")]`;
 
   const labelClass = (fieldName, required = false) => {
     const hasError = touched[fieldName] && validationErrors[fieldName];
-    return `block text-[13px] font-medium ${hasError ? 'text-[var(--system-red)]' : 'text-[var(--label-secondary)]'} mb-2${required ? " after:content-['*'] after:ml-0.5 after:text-[var(--system-red)]" : ''}`;
+    return `block text-[14px] font-medium ${hasError ? 'text-[var(--system-red)]' : 'text-[var(--label-secondary)]'} mb-2${required ? " after:content-['*'] after:ml-0.5 after:text-[var(--system-red)]" : ''}`;
   };
 
   const selectedCategoryConfig = CATEGORY_CARDS.find(c => c.key === formData.category);
@@ -840,7 +840,7 @@ export default function AddAsset() {
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: 0.2 }}
                 >
-                  <p className="text-[13px] font-medium text-[var(--system-green)] uppercase tracking-wide mb-1">Added to Portfolio</p>
+                  <p className="text-[14px] font-medium text-[var(--system-green)] uppercase tracking-wide mb-1">Added to Portfolio</p>
                   <h2 className="text-[32px] font-bold text-[var(--label-primary)] tracking-tight">
                     {formatCurrency(addedValue)}
                   </h2>
@@ -862,15 +862,15 @@ export default function AddAsset() {
                       </span>
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="text-[15px] font-semibold text-[var(--label-primary)] truncate">
+                      <p className="text-[16px] font-semibold text-[var(--label-primary)] truncate">
                         {successState.name}
                       </p>
-                      <p className="text-[13px] text-[var(--label-tertiary)]">
+                      <p className="text-[14px] text-[var(--label-tertiary)]">
                         {successTypeConfig?.label} • {successCategoryConfig?.label}
                       </p>
                     </div>
                     {successState.symbol && (
-                      <span className="px-2.5 py-1 bg-[var(--bg-primary)] rounded-lg text-[12px] font-semibold text-[var(--label-secondary)]">
+                      <span className="px-2.5 py-1 bg-[var(--bg-primary)] rounded-lg text-[13px] font-semibold text-[var(--label-secondary)]">
                         {successState.symbol}
                       </span>
                     )}
@@ -904,7 +904,7 @@ export default function AddAsset() {
                 <button
                   type="button"
                   onClick={() => navigate('/assets')}
-                  className="w-full py-2.5 text-[14px] font-medium text-[var(--chart-primary)] hover:text-[var(--chart-primary)]/80 transition-colors"
+                  className="w-full py-2.5 text-[15px] font-medium text-[var(--chart-primary)] hover:text-[var(--chart-primary)]/80 transition-colors"
                 >
                   View All Assets →
                 </button>
@@ -935,7 +935,7 @@ export default function AddAsset() {
                       key={type}
                       type="button"
                       onClick={() => setFormData(prev => ({ ...prev, transaction_type: type }))}
-                      className={`flex-1 rounded-lg text-[14px] font-semibold transition-all ${
+                      className={`flex-1 rounded-lg text-[15px] font-semibold transition-all ${
                         formData.transaction_type === type
                           ? type === 'BUY'
                             ? 'bg-[var(--system-green)] text-white shadow-sm'
@@ -990,14 +990,14 @@ export default function AddAsset() {
                         setFormData(prev => ({ ...prev, sector: response.data.sector }));
                       }
                     } catch (error) {
-                      console.log('Could not fetch sector info:', error.message);
+                      // Sector info fetch is optional, ignore errors
                     }
                   }
                 }}
                 placeholder={asset_type === 'MUTUAL_FUND' ? 'Search mutual fund...' : 'Search stock...'}
               />
               {touched.name && validationErrors.name && (
-                <p className="text-[12px] text-[var(--system-red)] mt-1">{validationErrors.name}</p>
+                <p className="text-[13px] text-[var(--system-red)] mt-1">{validationErrors.name}</p>
               )}
             </div>
 
@@ -1016,14 +1016,14 @@ export default function AddAsset() {
                         <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
                       </svg>
                       <div className="flex-1">
-                        <p className="text-[14px] font-medium text-[var(--label-primary)]">{duplicateWarning.message}</p>
-                        <p className="text-[13px] text-[var(--label-secondary)] mt-1">
+                        <p className="text-[15px] font-medium text-[var(--label-primary)]">{duplicateWarning.message}</p>
+                        <p className="text-[14px] text-[var(--label-secondary)] mt-1">
                           Holdings: {duplicateWarning.asset.quantity} units @ {formatCurrency(duplicateWarning.asset.avg_buy_price)}
                         </p>
                         <button
                           type="button"
                           onClick={() => navigate(`/assets/${duplicateWarning.asset.id}`)}
-                          className="text-[13px] text-[var(--chart-primary)] font-medium mt-2 hover:underline"
+                          className="text-[14px] text-[var(--chart-primary)] font-medium mt-2 hover:underline"
                         >
                           View existing asset →
                         </button>
@@ -1047,7 +1047,7 @@ export default function AddAsset() {
                   className={inputClass('symbol')}
                 />
                 {touched.symbol && validationErrors.symbol && (
-                  <p className="text-[12px] text-[var(--system-red)] mt-1">{validationErrors.symbol}</p>
+                  <p className="text-[13px] text-[var(--system-red)] mt-1">{validationErrors.symbol}</p>
                 )}
               </div>
               {asset_type !== 'MUTUAL_FUND' && (
@@ -1072,7 +1072,7 @@ export default function AddAsset() {
                   className={inputClass('quantity')}
                 />
                 {touched.quantity && validationErrors.quantity && (
-                  <p className="text-[12px] text-[var(--system-red)] mt-1">{validationErrors.quantity}</p>
+                  <p className="text-[13px] text-[var(--system-red)] mt-1">{validationErrors.quantity}</p>
                 )}
               </div>
               <div>
@@ -1090,7 +1090,7 @@ export default function AddAsset() {
                   />
                 </div>
                 {touched.price && validationErrors.price && (
-                  <p className="text-[12px] text-[var(--system-red)] mt-1">{validationErrors.price}</p>
+                  <p className="text-[13px] text-[var(--system-red)] mt-1">{validationErrors.price}</p>
                 )}
               </div>
             </div>
@@ -1116,7 +1116,7 @@ export default function AddAsset() {
                 required
               />
               {touched.name && validationErrors.name && (
-                <p className="text-[12px] text-[var(--system-red)] mt-1">{validationErrors.name}</p>
+                <p className="text-[13px] text-[var(--system-red)] mt-1">{validationErrors.name}</p>
               )}
             </div>
 
@@ -1127,7 +1127,7 @@ export default function AddAsset() {
                   <svg className="w-4 h-4 text-[var(--chart-primary)]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                   </svg>
-                  <span className="text-[13px] text-[var(--label-secondary)]">
+                  <span className="text-[14px] text-[var(--label-secondary)]">
                     Current {asset_type} rate: <span className="font-semibold text-[var(--chart-primary)]">{defaults.rate}% p.a.</span>
                     {defaults.tenure && ` • ${defaults.tenure} years tenure`}
                   </span>
@@ -1169,7 +1169,7 @@ export default function AddAsset() {
                           key={idx}
                           type="button"
                           onClick={() => selectInstitution(inst)}
-                          className="w-full px-4 py-2 text-left text-[14px] text-[var(--label-primary)] hover:bg-[var(--fill-tertiary)] transition-colors"
+                          className="w-full px-4 py-2 text-left text-[15px] text-[var(--label-primary)] hover:bg-[var(--fill-tertiary)] transition-colors"
                         >
                           {inst}
                         </button>
@@ -1199,14 +1199,14 @@ export default function AddAsset() {
                       key={preset.label}
                       type="button"
                       onClick={() => handleQuickAmount(isRD ? 'monthly_deposit' : 'principal', preset.value)}
-                      className="px-2 py-1 text-[10px] font-medium bg-[var(--fill-tertiary)] text-[var(--label-secondary)] rounded-md hover:bg-[var(--fill-secondary)] transition-colors"
+                      className="px-2 py-1 text-[11px] font-medium bg-[var(--fill-tertiary)] text-[var(--label-secondary)] rounded-md hover:bg-[var(--fill-secondary)] transition-colors"
                     >
                       {preset.label}
                     </button>
                   ))}
                 </div>
                 {touched.principal && validationErrors.principal && (
-                  <p className="text-[12px] text-[var(--system-red)] mt-1">{validationErrors.principal}</p>
+                  <p className="text-[13px] text-[var(--system-red)] mt-1">{validationErrors.principal}</p>
                 )}
               </div>
               {!isNPS && (
@@ -1223,7 +1223,7 @@ export default function AddAsset() {
                     className={inputClass('interest_rate')}
                   />
                   {touched.interest_rate && validationErrors.interest_rate && (
-                    <p className="text-[12px] text-[var(--system-red)] mt-1">{validationErrors.interest_rate}</p>
+                    <p className="text-[13px] text-[var(--system-red)] mt-1">{validationErrors.interest_rate}</p>
                   )}
                 </div>
               )}
@@ -1249,14 +1249,14 @@ export default function AddAsset() {
                   className="mt-5"
                 >
                   <div className="p-4 bg-[var(--system-green)]/5 border border-[var(--system-green)]/20 rounded-xl">
-                    <p className="text-[12px] font-medium text-[var(--label-tertiary)] uppercase tracking-wide mb-3">Maturity Projection</p>
+                    <p className="text-[13px] font-medium text-[var(--label-tertiary)] uppercase tracking-wide mb-3">Maturity Projection</p>
                     <div className="grid grid-cols-2 gap-4">
                       <div>
-                        <p className="text-[12px] text-[var(--label-tertiary)]">Maturity Value</p>
+                        <p className="text-[13px] text-[var(--label-tertiary)]">Maturity Value</p>
                         <p className="text-[18px] font-bold text-[var(--system-green)]">{formatCurrency(maturityCalculation.maturityValue)}</p>
                       </div>
                       <div>
-                        <p className="text-[12px] text-[var(--label-tertiary)]">Interest Earned</p>
+                        <p className="text-[13px] text-[var(--label-tertiary)]">Interest Earned</p>
                         <p className="text-[18px] font-bold text-[var(--chart-primary)]">{formatCurrency(maturityCalculation.interestEarned)}</p>
                       </div>
                     </div>
@@ -1312,7 +1312,7 @@ export default function AddAsset() {
                 required
               />
               {touched.name && validationErrors.name && (
-                <p className="text-[12px] text-[var(--system-red)] mt-1">{validationErrors.name}</p>
+                <p className="text-[13px] text-[var(--system-red)] mt-1">{validationErrors.name}</p>
               )}
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -1345,12 +1345,12 @@ export default function AddAsset() {
             {/* Calculation Mode Toggle */}
             <div className="mt-5 mb-4">
               <div className="flex items-center justify-between mb-3">
-                <span className="text-[13px] font-medium text-[var(--label-secondary)]">Calculate By</span>
+                <span className="text-[14px] font-medium text-[var(--label-secondary)]">Calculate By</span>
                 <div className="flex items-center bg-[var(--fill-tertiary)] rounded-lg p-0.5">
                   <button
                     type="button"
                     onClick={() => setFormData(prev => ({ ...prev, real_estate_calc_mode: 'rate', current_value: '' }))}
-                    className={`px-3 py-1.5 text-[12px] font-medium rounded-md transition-all ${
+                    className={`px-3 py-1.5 text-[13px] font-medium rounded-md transition-all ${
                       calcMode === 'rate'
                         ? 'bg-[var(--bg-primary)] text-[var(--label-primary)] shadow-sm'
                         : 'text-[var(--label-secondary)] hover:text-[var(--label-primary)]'
@@ -1361,7 +1361,7 @@ export default function AddAsset() {
                   <button
                     type="button"
                     onClick={() => setFormData(prev => ({ ...prev, real_estate_calc_mode: 'value', appreciation_rate: '' }))}
-                    className={`px-3 py-1.5 text-[12px] font-medium rounded-md transition-all ${
+                    className={`px-3 py-1.5 text-[13px] font-medium rounded-md transition-all ${
                       calcMode === 'value'
                         ? 'bg-[var(--bg-primary)] text-[var(--label-primary)] shadow-sm'
                         : 'text-[var(--label-secondary)] hover:text-[var(--label-primary)]'
@@ -1394,10 +1394,10 @@ export default function AddAsset() {
                     <span className="absolute right-4 top-1/2 -translate-y-1/2 text-[var(--label-tertiary)]">% p.a.</span>
                   </div>
                   {calcMode === 'rate' && (
-                    <p className="text-[11px] text-[var(--label-tertiary)] mt-1">Typical: 5-8% for residential</p>
+                    <p className="text-[12px] text-[var(--label-tertiary)] mt-1">Typical: 5-8% for residential</p>
                   )}
                   {calcMode === 'value' && calculatedRate !== null && (
-                    <p className="text-[11px] text-[var(--label-tertiary)] mt-1">Based on your current value estimate</p>
+                    <p className="text-[12px] text-[var(--label-tertiary)] mt-1">Based on your current value estimate</p>
                   )}
                 </div>
                 <div>
@@ -1418,10 +1418,10 @@ export default function AddAsset() {
                     />
                   </div>
                   {calcMode === 'rate' && appreciatedValue && (
-                    <p className="text-[11px] text-[var(--label-tertiary)] mt-1">Based on {formData.appreciation_rate}% annual growth</p>
+                    <p className="text-[12px] text-[var(--label-tertiary)] mt-1">Based on {formData.appreciation_rate}% annual growth</p>
                   )}
                   {calcMode === 'value' && (
-                    <p className="text-[11px] text-[var(--label-tertiary)] mt-1">Enter estimated market value</p>
+                    <p className="text-[12px] text-[var(--label-tertiary)] mt-1">Enter estimated market value</p>
                   )}
                 </div>
               </div>
@@ -1466,7 +1466,7 @@ export default function AddAsset() {
                 required
               />
               {touched.name && validationErrors.name && (
-                <p className="text-[12px] text-[var(--system-red)] mt-1">{validationErrors.name}</p>
+                <p className="text-[13px] text-[var(--system-red)] mt-1">{validationErrors.name}</p>
               )}
             </div>
 
@@ -1485,8 +1485,8 @@ export default function AddAsset() {
                       </svg>
                     </div>
                     <div>
-                      <p className="text-[13px] font-semibold text-[var(--label-primary)]">Live {metalName} Rate</p>
-                      <p className="text-[11px] text-[var(--label-tertiary)]">
+                      <p className="text-[14px] font-semibold text-[var(--label-primary)]">Live {metalName} Rate</p>
+                      <p className="text-[12px] text-[var(--label-tertiary)]">
                         {metalPrice ? `Updated: ${formatPriceAge(metalPrice.fetchedAt)}` : 'Fetching...'}
                       </p>
                     </div>
@@ -1495,7 +1495,7 @@ export default function AddAsset() {
                     type="button"
                     onClick={handleRefreshMetalPrice}
                     disabled={metalPriceLoading}
-                    className="flex items-center gap-1.5 px-3 py-1.5 text-[12px] font-medium text-amber-600 bg-amber-500/10 rounded-lg hover:bg-amber-500/20 transition-colors disabled:opacity-50"
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-[13px] font-medium text-amber-600 bg-amber-500/10 rounded-lg hover:bg-amber-500/20 transition-colors disabled:opacity-50"
                   >
                     {metalPriceLoading ? (
                       <svg className="w-3.5 h-3.5 animate-spin" viewBox="0 0 24 24" fill="none">
@@ -1512,14 +1512,14 @@ export default function AddAsset() {
                 </div>
 
                 {metalPriceLoading && !metalPrice && (
-                  <div className="flex items-center gap-2 text-[13px] text-[var(--label-tertiary)]">
+                  <div className="flex items-center gap-2 text-[14px] text-[var(--label-tertiary)]">
                     <div className="w-4 h-4 border-2 border-amber-500/30 border-t-amber-500 rounded-full animate-spin" />
                     Fetching current {metalName.toLowerCase()} price...
                   </div>
                 )}
 
                 {metalPriceError && !metalPrice && (
-                  <div className="text-[13px] text-[var(--system-red)]">
+                  <div className="text-[14px] text-[var(--system-red)]">
                     {metalPriceError}
                   </div>
                 )}
@@ -1530,10 +1530,10 @@ export default function AddAsset() {
                       <span className="text-[24px] font-bold text-[var(--label-primary)]">
                         {formatCurrency(metalPrice.pricePerGram24K, 2)}
                       </span>
-                      <span className="text-[13px] text-[var(--label-tertiary)]">/gram (24K)</span>
+                      <span className="text-[14px] text-[var(--label-tertiary)]">/gram (24K)</span>
                     </div>
                     {formData.purity && formData.purity !== '24K' && metalPrice.purityPrices?.[formData.purity] && (
-                      <p className="text-[13px] text-[var(--label-secondary)]">
+                      <p className="text-[14px] text-[var(--label-secondary)]">
                         Your purity ({formData.purity}): <span className="font-semibold">{formatCurrency(metalPrice.purityPrices[formData.purity], 2)}/gram</span>
                       </p>
                     )}
@@ -1604,7 +1604,7 @@ export default function AddAsset() {
                 <label className={labelClass('current_value')}>
                   Current Value
                   {isGoldOrSilver && metalPrice && (
-                    <span className="ml-2 text-[11px] font-normal text-[var(--system-green)]">
+                    <span className="ml-2 text-[12px] font-normal text-[var(--system-green)]">
                       {isValueOverridden ? '(Manual)' : '(Auto-calculated)'}
                     </span>
                   )}
@@ -1623,14 +1623,14 @@ export default function AddAsset() {
                     <button
                       type="button"
                       onClick={resetToCalculatedValue}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-[11px] font-medium text-[var(--chart-primary)] hover:underline"
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-[12px] font-medium text-[var(--chart-primary)] hover:underline"
                     >
                       Reset
                     </button>
                   )}
                 </div>
                 {isGoldOrSilver && metalPrice && formData.weight_grams && formData.purity && !isValueOverridden && (
-                  <p className="text-[11px] text-[var(--label-tertiary)] mt-1">
+                  <p className="text-[12px] text-[var(--label-tertiary)] mt-1">
                     {formData.weight_grams}g × {formatCurrency(metalPrice.purityPrices?.[formData.purity] || metalPrice.pricePerGram24K, 2)} = {formatCurrency(parseFloat(formData.current_value) || 0)}
                   </p>
                 )}
@@ -1655,7 +1655,7 @@ export default function AddAsset() {
                 required
               />
               {touched.name && validationErrors.name && (
-                <p className="text-[12px] text-[var(--system-red)] mt-1">{validationErrors.name}</p>
+                <p className="text-[13px] text-[var(--system-red)] mt-1">{validationErrors.name}</p>
               )}
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -1704,7 +1704,7 @@ export default function AddAsset() {
                           key={idx}
                           type="button"
                           onClick={() => selectInstitution(inst)}
-                          className="w-full px-4 py-2 text-left text-[14px] text-[var(--label-primary)] hover:bg-[var(--fill-tertiary)] transition-colors"
+                          className="w-full px-4 py-2 text-left text-[15px] text-[var(--label-primary)] hover:bg-[var(--fill-tertiary)] transition-colors"
                         >
                           {inst}
                         </button>
@@ -1733,7 +1733,7 @@ export default function AddAsset() {
                 required
               />
               {touched.name && validationErrors.name && (
-                <p className="text-[12px] text-[var(--system-red)] mt-1">{validationErrors.name}</p>
+                <p className="text-[13px] text-[var(--system-red)] mt-1">{validationErrors.name}</p>
               )}
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -1783,7 +1783,7 @@ export default function AddAsset() {
                 required
               />
               {touched.name && validationErrors.name && (
-                <p className="text-[12px] text-[var(--system-red)] mt-1">{validationErrors.name}</p>
+                <p className="text-[13px] text-[var(--system-red)] mt-1">{validationErrors.name}</p>
               )}
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -1871,7 +1871,7 @@ export default function AddAsset() {
                 required
               />
               {touched.name && validationErrors.name && (
-                <p className="text-[12px] text-[var(--system-red)] mt-1">{validationErrors.name}</p>
+                <p className="text-[13px] text-[var(--system-red)] mt-1">{validationErrors.name}</p>
               )}
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -1937,7 +1937,7 @@ export default function AddAsset() {
                 </div>
                 <div>
                   <h3 className="text-[16px] font-semibold text-[var(--label-primary)]">Continue where you left off?</h3>
-                  <p className="text-[13px] text-[var(--label-tertiary)]">You have an unsaved draft</p>
+                  <p className="text-[14px] text-[var(--label-tertiary)]">You have an unsaved draft</p>
                 </div>
               </div>
               <div className="flex gap-3">
@@ -1962,7 +1962,7 @@ export default function AddAsset() {
           className="mb-6"
         >
           <div className="flex items-center justify-between mb-4">
-            <Link to="/assets" className="inline-flex items-center gap-1.5 text-[13px] text-[var(--label-tertiary)] hover:text-[var(--chart-primary)] transition-colors">
+            <Link to="/assets" className="inline-flex items-center gap-1.5 text-[14px] text-[var(--label-tertiary)] hover:text-[var(--chart-primary)] transition-colors">
               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
               </svg>
@@ -1972,7 +1972,7 @@ export default function AddAsset() {
             <button
               type="button"
               onClick={() => setQuickEntryMode(!quickEntryMode)}
-              className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-[12px] font-medium transition-all ${
+              className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-[13px] font-medium transition-all ${
                 quickEntryMode
                   ? 'bg-[var(--chart-primary)] text-white'
                   : 'bg-[var(--fill-tertiary)] text-[var(--label-secondary)] hover:bg-[var(--fill-secondary)]'
@@ -1985,7 +1985,7 @@ export default function AddAsset() {
             </button>
           </div>
           <h1 className="text-[24px] font-bold text-[var(--label-primary)]">Add New Asset</h1>
-          <p className="text-[14px] text-[var(--label-secondary)] mt-1">
+          <p className="text-[15px] text-[var(--label-secondary)] mt-1">
             {quickEntryMode ? 'Minimal fields for fast entry' : 'Choose a category and fill in the details'}
           </p>
         </motion.div>
@@ -1999,7 +1999,7 @@ export default function AddAsset() {
               exit={{ opacity: 0, height: 0 }}
               className="mb-6"
             >
-              <div className="bg-[var(--system-red)]/10 text-[var(--system-red)] px-4 py-3 rounded-xl text-[14px] flex items-center gap-2">
+              <div className="bg-[var(--system-red)]/10 text-[var(--system-red)] px-4 py-3 rounded-xl text-[15px] flex items-center gap-2">
                 <svg className="w-5 h-5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
@@ -2027,8 +2027,8 @@ export default function AddAsset() {
                       </svg>
                     </div>
                     <div>
-                      <h2 className="text-[15px] font-semibold text-[var(--label-primary)]">Select Category</h2>
-                      <p className="text-[12px] text-[var(--label-tertiary)]">What type of asset are you adding?</p>
+                      <h2 className="text-[16px] font-semibold text-[var(--label-primary)]">Select Category</h2>
+                      <p className="text-[13px] text-[var(--label-tertiary)]">What type of asset are you adding?</p>
                     </div>
                   </div>
                 </div>
@@ -2056,8 +2056,8 @@ export default function AddAsset() {
                             <CategoryIcon category={cat.key} />
                           </span>
                         </div>
-                        <p className="text-[14px] font-semibold text-[var(--label-primary)] mb-0.5">{cat.label}</p>
-                        <p className="text-[11px] text-[var(--label-tertiary)] leading-tight">{cat.description}</p>
+                        <p className="text-[15px] font-semibold text-[var(--label-primary)] mb-0.5">{cat.label}</p>
+                        <p className="text-[12px] text-[var(--label-tertiary)] leading-tight">{cat.description}</p>
 
                         {formData.category === cat.key && (
                           <motion.div
@@ -2096,8 +2096,8 @@ export default function AddAsset() {
                           </span>
                         </div>
                         <div>
-                          <h2 className="text-[15px] font-semibold text-[var(--label-primary)]">Select Type</h2>
-                          <p className="text-[12px] text-[var(--label-tertiary)]">Choose the specific asset type</p>
+                          <h2 className="text-[16px] font-semibold text-[var(--label-primary)]">Select Type</h2>
+                          <p className="text-[13px] text-[var(--label-tertiary)]">Choose the specific asset type</p>
                         </div>
                       </div>
                     </div>
@@ -2114,7 +2114,7 @@ export default function AddAsset() {
                             whileHover={{ scale: 1.03 }}
                             whileTap={{ scale: 0.97 }}
                             onClick={() => handleTypeSelect(type.value)}
-                            className={`px-4 py-2.5 rounded-xl text-[14px] font-medium transition-all ${
+                            className={`px-4 py-2.5 rounded-xl text-[15px] font-medium transition-all ${
                               formData.asset_type === type.value
                                 ? `${selectedCategoryConfig?.iconBg || 'bg-[var(--chart-primary)]'} text-white shadow-sm`
                                 : 'bg-[var(--fill-tertiary)] text-[var(--label-primary)] hover:bg-[var(--fill-secondary)]'
@@ -2151,8 +2151,8 @@ export default function AddAsset() {
                             </svg>
                           </div>
                           <div>
-                            <h2 className="text-[15px] font-semibold text-[var(--label-primary)]">Asset Details</h2>
-                            <p className="text-[12px] text-[var(--label-tertiary)]">
+                            <h2 className="text-[16px] font-semibold text-[var(--label-primary)]">Asset Details</h2>
+                            <p className="text-[13px] text-[var(--label-tertiary)]">
                               {selectedType?.label} • {ASSET_CONFIG[formData.category]?.label}
                             </p>
                           </div>
@@ -2183,7 +2183,7 @@ export default function AddAsset() {
                                       key={preset.label}
                                       type="button"
                                       onClick={() => handleDatePreset('purchase_date', preset.getValue)}
-                                      className="px-2 py-1.5 text-[11px] font-medium bg-[var(--fill-tertiary)] text-[var(--label-secondary)] rounded-lg hover:bg-[var(--fill-secondary)] transition-colors"
+                                      className="px-2 py-1.5 text-[12px] font-medium bg-[var(--fill-tertiary)] text-[var(--label-secondary)] rounded-lg hover:bg-[var(--fill-secondary)] transition-colors"
                                     >
                                       {preset.label}
                                     </button>
@@ -2196,7 +2196,7 @@ export default function AddAsset() {
                           {/* Tags Selection */}
                           {!quickEntryMode && (
                             <div className="mb-4">
-                              <label className="block text-[13px] font-medium text-[var(--label-secondary)] mb-2">
+                              <label className="block text-[14px] font-medium text-[var(--label-secondary)] mb-2">
                                 Tags (optional)
                               </label>
                               <div className="flex flex-wrap gap-2">
@@ -2205,7 +2205,7 @@ export default function AddAsset() {
                                     key={tag.id}
                                     type="button"
                                     onClick={() => toggleTag(tag.id)}
-                                    className={`px-3 py-1.5 rounded-lg text-[12px] font-medium transition-all ${
+                                    className={`px-3 py-1.5 rounded-lg text-[13px] font-medium transition-all ${
                                       formData.tags.includes(tag.id)
                                         ? `bg-${tag.color}-500/20 text-${tag.color}-600 ring-1 ring-${tag.color}-500/30`
                                         : 'bg-[var(--fill-tertiary)] text-[var(--label-secondary)] hover:bg-[var(--fill-secondary)]'
@@ -2222,7 +2222,7 @@ export default function AddAsset() {
                           {/* Goal Linking */}
                           {!quickEntryMode && (
                             <div className="mb-4">
-                              <label className="block text-[13px] font-medium text-[var(--label-secondary)] mb-2">
+                              <label className="block text-[14px] font-medium text-[var(--label-secondary)] mb-2">
                                 Link to Goal (optional)
                               </label>
                               <div className="grid grid-cols-4 gap-2">
@@ -2242,7 +2242,7 @@ export default function AddAsset() {
                                         <GoalIcon goalId={goal.id} className="w-5 h-5" />
                                       </span>
                                     </div>
-                                    <span className={`text-[11px] font-medium ${
+                                    <span className={`text-[12px] font-medium ${
                                       formData.goal === goal.id ? 'text-[var(--chart-primary)]' : 'text-[var(--label-secondary)]'
                                     }`}>
                                       {goal.label}
@@ -2315,13 +2315,13 @@ export default function AddAsset() {
                       ? `${selectedCategoryConfig?.gradient || 'from-gray-500/15 to-gray-600/5'}`
                       : 'from-[var(--chart-primary)]/10 via-[var(--chart-primary)]/5 to-transparent'
                   }`}>
-                    <p className="text-[11px] font-medium text-[var(--label-tertiary)] uppercase tracking-wide mb-3">Preview</p>
+                    <p className="text-[12px] font-medium text-[var(--label-tertiary)] uppercase tracking-wide mb-3">Preview</p>
 
                     {/* Hero Value */}
                     <p className="text-[32px] font-bold text-[var(--label-primary)] tracking-tight leading-none mb-1">
                       {formatCurrency(getPreviewValue())}
                     </p>
-                    <p className="text-[13px] text-[var(--label-secondary)]">
+                    <p className="text-[14px] text-[var(--label-secondary)]">
                       {formData.name || 'Asset Name'}
                     </p>
                   </div>
@@ -2330,8 +2330,8 @@ export default function AddAsset() {
                   {formData.category && formData.asset_type && (
                     <div className="px-5 py-3 border-b border-[var(--separator-opaque)]">
                       <div className="flex items-center justify-between mb-2">
-                        <span className="text-[12px] text-[var(--label-tertiary)]">Form completion</span>
-                        <span className="text-[12px] font-medium text-[var(--label-primary)]">{completionPercentage}%</span>
+                        <span className="text-[13px] text-[var(--label-tertiary)]">Form completion</span>
+                        <span className="text-[13px] font-medium text-[var(--label-primary)]">{completionPercentage}%</span>
                       </div>
                       <div className="h-1.5 bg-[var(--fill-tertiary)] rounded-full overflow-hidden">
                         <motion.div
@@ -2364,10 +2364,10 @@ export default function AddAsset() {
                         )}
                       </div>
                       <div className="min-w-0 flex-1">
-                        <p className="text-[15px] font-semibold text-[var(--label-primary)] truncate">
+                        <p className="text-[16px] font-semibold text-[var(--label-primary)] truncate">
                           {selectedType?.label || 'Select type'}
                         </p>
-                        <p className="text-[13px] text-[var(--label-tertiary)]">
+                        <p className="text-[14px] text-[var(--label-tertiary)]">
                           {formData.category ? ASSET_CONFIG[formData.category]?.label : 'Category'}
                         </p>
                       </div>
@@ -2377,8 +2377,8 @@ export default function AddAsset() {
                     <div className="space-y-3">
                       {formData.category === 'EQUITY' && (
                         <div className="flex justify-between items-center">
-                          <span className="text-[13px] text-[var(--label-tertiary)]">Transaction</span>
-                          <span className={`text-[12px] font-semibold px-2.5 py-1 rounded-lg ${
+                          <span className="text-[14px] text-[var(--label-tertiary)]">Transaction</span>
+                          <span className={`text-[13px] font-semibold px-2.5 py-1 rounded-lg ${
                             formData.transaction_type === 'BUY'
                               ? 'bg-[var(--system-green)]/15 text-[var(--system-green)]'
                               : 'bg-[var(--system-orange)]/15 text-[var(--system-orange)]'
@@ -2390,36 +2390,36 @@ export default function AddAsset() {
 
                       {formData.symbol && (
                         <div className="flex justify-between items-center">
-                          <span className="text-[13px] text-[var(--label-tertiary)]">Symbol</span>
-                          <span className="text-[13px] font-semibold text-[var(--label-primary)] bg-[var(--fill-tertiary)] px-2 py-0.5 rounded-md">{formData.symbol}</span>
+                          <span className="text-[14px] text-[var(--label-tertiary)]">Symbol</span>
+                          <span className="text-[14px] font-semibold text-[var(--label-primary)] bg-[var(--fill-tertiary)] px-2 py-0.5 rounded-md">{formData.symbol}</span>
                         </div>
                       )}
 
                       {formData.quantity && (
                         <div className="flex justify-between items-center">
-                          <span className="text-[13px] text-[var(--label-tertiary)]">Quantity</span>
-                          <span className="text-[13px] font-medium text-[var(--label-primary)]">{formData.quantity}</span>
+                          <span className="text-[14px] text-[var(--label-tertiary)]">Quantity</span>
+                          <span className="text-[14px] font-medium text-[var(--label-primary)]">{formData.quantity}</span>
                         </div>
                       )}
 
                       {formData.price && (
                         <div className="flex justify-between items-center">
-                          <span className="text-[13px] text-[var(--label-tertiary)]">Price</span>
-                          <span className="text-[13px] font-medium text-[var(--label-primary)]">{formatCurrency(parseFloat(formData.price), 2)}</span>
+                          <span className="text-[14px] text-[var(--label-tertiary)]">Price</span>
+                          <span className="text-[14px] font-medium text-[var(--label-primary)]">{formatCurrency(parseFloat(formData.price), 2)}</span>
                         </div>
                       )}
 
                       {formData.institution && (
                         <div className="flex justify-between items-center">
-                          <span className="text-[13px] text-[var(--label-tertiary)]">Institution</span>
-                          <span className="text-[13px] font-medium text-[var(--label-primary)] truncate max-w-[120px]">{formData.institution}</span>
+                          <span className="text-[14px] text-[var(--label-tertiary)]">Institution</span>
+                          <span className="text-[14px] font-medium text-[var(--label-primary)] truncate max-w-[120px]">{formData.institution}</span>
                         </div>
                       )}
 
                       {formData.interest_rate && (
                         <div className="flex justify-between items-center">
-                          <span className="text-[13px] text-[var(--label-tertiary)]">Interest Rate</span>
-                          <span className="text-[13px] font-semibold text-[var(--system-green)]">{formData.interest_rate}% p.a.</span>
+                          <span className="text-[14px] text-[var(--label-tertiary)]">Interest Rate</span>
+                          <span className="text-[14px] font-semibold text-[var(--system-green)]">{formData.interest_rate}% p.a.</span>
                         </div>
                       )}
 
@@ -2427,8 +2427,8 @@ export default function AddAsset() {
                       {maturityCalculation && maturityCalculation.maturityValue > 0 && (
                         <div className="pt-3 mt-3 border-t border-[var(--separator-opaque)]">
                           <div className="flex justify-between items-center">
-                            <span className="text-[13px] text-[var(--label-tertiary)]">Est. Maturity</span>
-                            <span className="text-[13px] font-bold text-[var(--system-green)]">{formatCurrency(maturityCalculation.maturityValue)}</span>
+                            <span className="text-[14px] text-[var(--label-tertiary)]">Est. Maturity</span>
+                            <span className="text-[14px] font-bold text-[var(--system-green)]">{formatCurrency(maturityCalculation.maturityValue)}</span>
                           </div>
                         </div>
                       )}
@@ -2436,15 +2436,15 @@ export default function AddAsset() {
                       {/* Portfolio Impact */}
                       {portfolioImpact && getPreviewValue() > 0 && (
                         <div className="pt-3 mt-3 border-t border-[var(--separator-opaque)]">
-                          <p className="text-[11px] font-medium text-[var(--label-tertiary)] uppercase tracking-wide mb-2">Portfolio Impact</p>
+                          <p className="text-[12px] font-medium text-[var(--label-tertiary)] uppercase tracking-wide mb-2">Portfolio Impact</p>
                           <div className="space-y-2">
                             <div className="flex justify-between items-center">
-                              <span className="text-[12px] text-[var(--label-tertiary)]">% of Portfolio</span>
-                              <span className="text-[12px] font-semibold text-[var(--chart-primary)]">{portfolioImpact.percentage}%</span>
+                              <span className="text-[13px] text-[var(--label-tertiary)]">% of Portfolio</span>
+                              <span className="text-[13px] font-semibold text-[var(--chart-primary)]">{portfolioImpact.percentage}%</span>
                             </div>
                             <div className="flex justify-between items-center">
-                              <span className="text-[12px] text-[var(--label-tertiary)]">New Total</span>
-                              <span className="text-[12px] font-medium text-[var(--label-primary)]">{formatCurrency(portfolioImpact.newTotal)}</span>
+                              <span className="text-[13px] text-[var(--label-tertiary)]">New Total</span>
+                              <span className="text-[13px] font-medium text-[var(--label-primary)]">{formatCurrency(portfolioImpact.newTotal)}</span>
                             </div>
                           </div>
                         </div>
@@ -2454,14 +2454,14 @@ export default function AddAsset() {
                       {formData.goal && (
                         <div className="pt-3 mt-3 border-t border-[var(--separator-opaque)]">
                           <div className="flex justify-between items-center">
-                            <span className="text-[13px] text-[var(--label-tertiary)]">Goal</span>
+                            <span className="text-[14px] text-[var(--label-tertiary)]">Goal</span>
                             <div className="flex items-center gap-2">
                               <div className={`w-6 h-6 rounded-lg ${DEFAULT_GOALS.find(g => g.id === formData.goal)?.color} flex items-center justify-center`}>
                                 <span className="text-white">
                                   <GoalIcon goalId={formData.goal} className="w-3.5 h-3.5" />
                                 </span>
                               </div>
-                              <span className="text-[13px] font-medium text-[var(--label-primary)]">
+                              <span className="text-[14px] font-medium text-[var(--label-primary)]">
                                 {DEFAULT_GOALS.find(g => g.id === formData.goal)?.label}
                               </span>
                             </div>
@@ -2472,12 +2472,12 @@ export default function AddAsset() {
                       {/* Selected Tags */}
                       {formData.tags.length > 0 && (
                         <div className="pt-3 mt-3 border-t border-[var(--separator-opaque)]">
-                          <span className="text-[12px] text-[var(--label-tertiary)]">Tags</span>
+                          <span className="text-[13px] text-[var(--label-tertiary)]">Tags</span>
                           <div className="flex flex-wrap gap-1 mt-1">
                             {formData.tags.map(tagId => {
                               const tag = DEFAULT_TAGS.find(t => t.id === tagId);
                               return tag ? (
-                                <span key={tag.id} className="px-2 py-0.5 text-[10px] font-medium bg-[var(--fill-tertiary)] text-[var(--label-secondary)] rounded-md">
+                                <span key={tag.id} className="px-2 py-0.5 text-[11px] font-medium bg-[var(--fill-tertiary)] text-[var(--label-secondary)] rounded-md">
                                   {tag.label}
                                 </span>
                               ) : null;
@@ -2490,7 +2490,7 @@ export default function AddAsset() {
                     {/* Empty State Hint */}
                     {!formData.category && (
                       <div className="text-center py-4">
-                        <p className="text-[13px] text-[var(--label-tertiary)]">
+                        <p className="text-[14px] text-[var(--label-tertiary)]">
                           Select a category to get started
                         </p>
                       </div>
@@ -2498,7 +2498,7 @@ export default function AddAsset() {
 
                     {formData.category && !formData.asset_type && (
                       <div className="text-center py-4">
-                        <p className="text-[13px] text-[var(--label-tertiary)]">
+                        <p className="text-[14px] text-[var(--label-tertiary)]">
                           Now select the asset type
                         </p>
                       </div>
@@ -2507,7 +2507,7 @@ export default function AddAsset() {
                     {/* Auto-save indicator */}
                     {formData.category && formData.asset_type && (
                       <div className="pt-3 mt-3 border-t border-[var(--separator-opaque)]">
-                        <div className="flex items-center gap-2 text-[12px] text-[var(--label-quaternary)]">
+                        <div className="flex items-center gap-2 text-[13px] text-[var(--label-quaternary)]">
                           <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                             <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
                           </svg>

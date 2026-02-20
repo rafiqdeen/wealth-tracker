@@ -323,7 +323,7 @@ export default function DataBackup({ isOpen, onClose }) {
           >
             {/* Header */}
             <div className="flex items-center justify-between px-5 py-4 border-b border-[var(--separator)]/30">
-              <h2 className="text-[17px] font-semibold text-[var(--label-primary)]">Data Backup</h2>
+              <h2 className="text-[18px] font-semibold text-[var(--label-primary)]">Data Backup</h2>
               <button
                 onClick={onClose}
                 className="p-2 -mr-2 text-[var(--label-tertiary)] hover:text-[var(--label-secondary)] hover:bg-[var(--fill-tertiary)] rounded-lg transition-colors"
@@ -341,7 +341,7 @@ export default function DataBackup({ isOpen, onClose }) {
                 <motion.div
                   initial={{ opacity: 0, y: -10 }}
                   animate={{ opacity: 1, y: 0 }}
-                  className={`p-3 rounded-xl text-[14px] ${
+                  className={`p-3 rounded-xl text-[15px] ${
                     importResult.type === 'success'
                       ? 'bg-[var(--system-green)]/10 text-[var(--system-green)]'
                       : 'bg-[var(--system-red)]/10 text-[var(--system-red)]'
@@ -353,7 +353,7 @@ export default function DataBackup({ isOpen, onClose }) {
 
               {/* Export Section */}
               <div>
-                <h3 className="text-[11px] font-semibold text-[var(--label-tertiary)] uppercase tracking-wider mb-3">
+                <h3 className="text-[12px] font-semibold text-[var(--label-tertiary)] uppercase tracking-wider mb-3">
                   Export Data
                 </h3>
                 <div className="space-y-2">
@@ -375,8 +375,8 @@ export default function DataBackup({ isOpen, onClose }) {
                       )}
                     </div>
                     <div>
-                      <p className="text-[15px] font-medium text-[var(--label-primary)]">Full Backup (JSON)</p>
-                      <p className="text-[13px] text-[var(--label-tertiary)]">All assets, goals, transactions & history</p>
+                      <p className="text-[16px] font-medium text-[var(--label-primary)]">Full Backup (JSON)</p>
+                      <p className="text-[14px] text-[var(--label-tertiary)]">All assets, goals, transactions & history</p>
                     </div>
                   </button>
 
@@ -391,8 +391,8 @@ export default function DataBackup({ isOpen, onClose }) {
                       </svg>
                     </div>
                     <div>
-                      <p className="text-[15px] font-medium text-[var(--label-primary)]">Assets (CSV)</p>
-                      <p className="text-[13px] text-[var(--label-tertiary)]">All asset types with category-specific fields</p>
+                      <p className="text-[16px] font-medium text-[var(--label-primary)]">Assets (CSV)</p>
+                      <p className="text-[14px] text-[var(--label-tertiary)]">All asset types with category-specific fields</p>
                     </div>
                   </button>
 
@@ -407,8 +407,8 @@ export default function DataBackup({ isOpen, onClose }) {
                       </svg>
                     </div>
                     <div>
-                      <p className="text-[15px] font-medium text-[var(--label-primary)]">Goals (JSON)</p>
-                      <p className="text-[13px] text-[var(--label-tertiary)]">Goals with asset links & contributions</p>
+                      <p className="text-[16px] font-medium text-[var(--label-primary)]">Goals (JSON)</p>
+                      <p className="text-[14px] text-[var(--label-tertiary)]">Goals with asset links & contributions</p>
                     </div>
                   </button>
                 </div>
@@ -416,13 +416,13 @@ export default function DataBackup({ isOpen, onClose }) {
 
               {/* Import Section */}
               <div>
-                <h3 className="text-[11px] font-semibold text-[var(--label-tertiary)] uppercase tracking-wider mb-3">
+                <h3 className="text-[12px] font-semibold text-[var(--label-tertiary)] uppercase tracking-wider mb-3">
                   Import Data
                 </h3>
 
                 {/* Import Options */}
                 <div className="mb-3 p-3 bg-[var(--fill-tertiary)]/30 rounded-xl space-y-2">
-                  <label className="flex items-center gap-2 text-[13px] text-[var(--label-secondary)]">
+                  <label className="flex items-center gap-2 text-[14px] text-[var(--label-secondary)]">
                     <input
                       type="checkbox"
                       checked={importOptions.importAssets}
@@ -431,7 +431,7 @@ export default function DataBackup({ isOpen, onClose }) {
                     />
                     Import assets & transactions
                   </label>
-                  <label className="flex items-center gap-2 text-[13px] text-[var(--label-secondary)]">
+                  <label className="flex items-center gap-2 text-[14px] text-[var(--label-secondary)]">
                     <input
                       type="checkbox"
                       checked={importOptions.importGoals}
@@ -440,7 +440,7 @@ export default function DataBackup({ isOpen, onClose }) {
                     />
                     Import goals & contributions
                   </label>
-                  <label className="flex items-center gap-2 text-[13px] text-[var(--label-secondary)]">
+                  <label className="flex items-center gap-2 text-[14px] text-[var(--label-secondary)]">
                     <input
                       type="checkbox"
                       checked={importOptions.overwrite}
@@ -469,10 +469,10 @@ export default function DataBackup({ isOpen, onClose }) {
                     )}
                   </div>
                   <div>
-                    <p className="text-[15px] font-medium text-[var(--label-primary)]">
+                    <p className="text-[16px] font-medium text-[var(--label-primary)]">
                       {importing ? 'Importing...' : 'Restore from Backup'}
                     </p>
-                    <p className="text-[13px] text-[var(--label-tertiary)]">Import a JSON backup file</p>
+                    <p className="text-[14px] text-[var(--label-tertiary)]">Import a JSON backup file</p>
                   </div>
                 </button>
                 <input
@@ -487,7 +487,7 @@ export default function DataBackup({ isOpen, onClose }) {
 
             {/* Footer */}
             <div className="px-5 py-3 bg-[var(--fill-tertiary)]/50 border-t border-[var(--separator)]/30">
-              <p className="text-[12px] text-[var(--label-tertiary)] text-center">
+              <p className="text-[13px] text-[var(--label-tertiary)] text-center">
                 Backups include all data from the server database
               </p>
             </div>

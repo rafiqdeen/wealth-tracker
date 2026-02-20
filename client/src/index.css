@@ -1,75 +1,82 @@
 @import "tailwindcss";
 
 :root {
-  /* System Font - Match reference design */
-  --font-system: "Inter", -apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, sans-serif;
-  --font-display: "Plus Jakarta Sans", "Inter", -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  /* Typography - Distinctive font system */
+  --font-system: "Satoshi", -apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, sans-serif;
+  --font-display: "DM Serif Display", "Georgia", serif;
+  --font-mono: "IBM Plex Mono", "SF Mono", "Menlo", monospace;
 
-  /* Primary Colors - Finance Dashboard */
-  --system-blue: #1A1D29;        /* Deep Navy - Brand dark (not blue) */
-  --system-blue-light: #4F7DF3;  /* Bright Blue - Charts, links, accents */
-  --system-blue-muted: #E8EEFB;  /* Light Blue - Chart fills, backgrounds */
-  --system-green: #059669;       /* Green - Positive/Gains */
-  --system-red: #DC2626;         /* Red - Destructive actions */
-  --system-amber: #F59E0B;       /* Amber - Warnings */
-  --system-orange: #F97316;
-  --system-yellow: #EAB308;
-  --system-purple: #8B5CF6;
-  --system-pink: #EC4899;
-  --system-teal: #14B8A6;
-  --system-indigo: #6366F1;
+  /* Primary Colors - Warm, rich wealth palette */
+  --system-blue: #1A1D29;        /* Deep Navy - Brand dark */
+  --system-blue-light: #3D6B9E;  /* Muted Steel Blue - Charts, accents */
+  --system-blue-muted: #E8EEFB;  /* Light Blue - Chart fills */
+  --system-green: #1A7A5C;       /* Deep Emerald - Positive/Gains */
+  --system-red: #C03744;         /* Muted Crimson - Destructive actions */
+  --system-amber: #B8860B;       /* Dark Goldenrod - Warnings */
+  --system-orange: #C2703E;      /* Burnt Sienna - Physical */
+  --system-yellow: #C4960C;      /* Rich Gold */
+  --system-purple: #6B5CA5;      /* Muted Amethyst */
+  --system-pink: #A8516E;        /* Dusty Rose - Insurance */
+  --system-teal: #2A8F82;        /* Deep Teal */
+  --system-indigo: #535BA1;      /* Slate Indigo */
 
-  /* Gray Palette */
-  --system-gray: #6B7280;        /* Gray 500 */
-  --system-gray-2: #9CA3AF;      /* Gray 400 */
-  --system-gray-3: #D1D5DB;      /* Gray 300 */
-  --system-gray-4: #E5E7EB;      /* Gray 200 */
-  --system-gray-5: #F3F4F6;      /* Gray 100 */
-  --system-gray-6: #F9FAFB;      /* Gray 50 */
+  /* Gray Palette - Warmer tones */
+  --system-gray: #636A74;        /* Gray 500 */
+  --system-gray-2: #8F959E;      /* Gray 400 */
+  --system-gray-3: #C6CAD0;      /* Gray 300 */
+  --system-gray-4: #DFE1E5;      /* Gray 200 */
+  --system-gray-5: #EDEFF2;      /* Gray 100 */
+  --system-gray-6: #F6F7F8;      /* Gray 50 */
 
   /* Labels */
-  --label-primary: #1A1D29;      /* Dark - Primary text */
-  --label-secondary: #4B5563;    /* Gray 600 - Secondary text */
-  --label-tertiary: #6B7280;     /* Gray 500 - Tertiary text */
-  --label-quaternary: #9CA3AF;   /* Gray 400 - Muted text */
+  --label-primary: #151820;      /* Near Black - Primary text */
+  --label-secondary: #474D58;    /* Dark Gray - Secondary text */
+  --label-tertiary: #636A74;     /* Gray - Tertiary text */
+  --label-quaternary: #8F959E;   /* Light Gray - Muted text */
 
-  /* Backgrounds - Key to matching the design */
-  --bg-page: #E8EDF5;            /* Light blue-gray page background */
+  /* Backgrounds - Warm parchment tones */
+  --bg-page: #F0EDE8;            /* Warm parchment page background */
   --bg-primary: #FFFFFF;         /* White - Cards/main container */
-  --bg-secondary: #F8FAFC;       /* Very light - subtle sections */
-  --bg-tertiary: #F1F5F9;        /* Light gray - hover states */
+  --bg-secondary: #F9F8F6;       /* Warm off-white - subtle sections */
+  --bg-tertiary: #F2F0ED;        /* Warm light - hover states */
 
   /* Fill Colors */
-  --fill-primary: rgba(26, 29, 41, 0.08);
-  --fill-secondary: rgba(26, 29, 41, 0.05);
-  --fill-tertiary: rgba(26, 29, 41, 0.03);
+  --fill-primary: rgba(21, 24, 32, 0.08);
+  --fill-secondary: rgba(21, 24, 32, 0.05);
+  --fill-tertiary: rgba(21, 24, 32, 0.03);
+  --fill-quaternary: rgba(21, 24, 32, 0.015);
 
   /* Separator */
-  --separator: rgba(26, 29, 41, 0.08);
-  --separator-opaque: #E5E7EB;
+  --separator: rgba(21, 24, 32, 0.08);
+  --separator-opaque: #DFE1E5;
 
-  /* Chart Colors - Match reference stacked bars */
-  --chart-primary: #4F7DF3;      /* Bright Blue - Main bars */
-  --chart-secondary: #C7D7FE;    /* Light Blue - Secondary bars */
-  --chart-tertiary: #E8EEFB;     /* Very Light Blue - Fills */
-  --chart-positive: #059669;     /* Green - Positive values */
-  --chart-negative: #DC2626;     /* Red - Negative values */
+  /* Chart Colors */
+  --chart-primary: #3D6B9E;      /* Steel Blue - Main */
+  --chart-secondary: #B0C9E0;    /* Light Steel - Secondary */
+  --chart-tertiary: #E0EBF3;     /* Very Light - Fills */
+  --chart-positive: #1A7A5C;     /* Emerald - Positive */
+  --chart-negative: #C03744;     /* Crimson - Negative */
 
-  /* Category Colors */
-  --category-equity: #4F7DF3;    /* Blue */
-  --category-mf: #8B5CF6;        /* Purple */
-  --category-fixed: #059669;     /* Green */
-  --category-realestate: #F59E0B;/* Amber */
-  --category-physical: #F97316;  /* Orange */
-  --category-savings: #14B8A6;   /* Teal */
-  --category-crypto: #6366F1;    /* Indigo */
-  --category-insurance: #EC4899; /* Pink */
+  /* Category Colors - Muted jewel tones */
+  --category-equity: #3D6B9E;    /* Steel Blue */
+  --category-mf: #6B5CA5;        /* Amethyst */
+  --category-fixed: #1A7A5C;     /* Emerald */
+  --category-realestate: #B8860B; /* Dark Gold */
+  --category-physical: #C2703E;   /* Burnt Sienna */
+  --category-savings: #2A8F82;    /* Deep Teal */
+  --category-crypto: #535BA1;     /* Slate Indigo */
+  --category-insurance: #A8516E;  /* Dusty Rose */
 
   /* Sidebar */
   --sidebar-bg: #FFFFFF;
   --sidebar-active: #1A1D29;
-  --sidebar-icon: #9CA3AF;
+  --sidebar-icon: #8F959E;
   --sidebar-icon-active: #FFFFFF;
+
+  /* Elevation system */
+  --shadow-flush: none;
+  --shadow-raised: 0 1px 3px rgba(0,0,0,0.04), 0 1px 2px rgba(0,0,0,0.02);
+  --shadow-floating: 0 4px 16px rgba(0,0,0,0.08), 0 2px 6px rgba(0,0,0,0.04);
 }
 
 /* Reduced Motion - Respect user preferences */
@@ -124,12 +131,12 @@ body {
 
 /* Selection color */
 ::selection {
-  background: rgba(30, 58, 95, 0.2);
+  background: rgba(61, 107, 158, 0.2);
 }
 
-/* Focus ring - iOS style */
+/* Focus ring */
 :focus-visible {
-  outline: 2px solid var(--system-blue);
+  outline: 2px solid var(--chart-primary);
   outline-offset: 2px;
 }
 
@@ -148,32 +155,32 @@ input:-webkit-autofill:focus {
   -webkit-text-fill-color: var(--label-primary) !important;
 }
 
-/* Gradient Utility Classes - Private Bank palette */
+/* Gradient Utility Classes - Rich wealth palette */
 .gradient-green {
-  background: linear-gradient(135deg, #059669 0%, #10B981 100%);
+  background: linear-gradient(135deg, #1A7A5C 0%, #22A77A 100%);
 }
 
 .gradient-amber {
-  background: linear-gradient(135deg, #92400E 0%, #B45309 100%);
+  background: linear-gradient(135deg, #92702C 0%, #B8860B 100%);
 }
 
 .gradient-blue {
-  background: linear-gradient(135deg, #1E3A5F 0%, #1E4976 100%);
+  background: linear-gradient(135deg, #1E3A5F 0%, #3D6B9E 100%);
 }
 
 .gradient-purple {
-  background: linear-gradient(135deg, #6B21A8 0%, #7C3AED 100%);
+  background: linear-gradient(135deg, #4A3D7A 0%, #6B5CA5 100%);
 }
 
-/* P&L Badge - Professional with rewarding green */
+/* P&L Badge */
 .pnl-badge-positive {
-  background: rgba(5, 150, 105, 0.1);
+  background: rgba(26, 122, 92, 0.1);
   color: var(--system-green);
 }
 
 .pnl-badge-negative {
-  background: rgba(146, 64, 14, 0.08);
-  color: var(--system-amber);
+  background: rgba(192, 55, 68, 0.08);
+  color: var(--system-red);
 }
 
 /* Shimmer animation for loading */
@@ -197,19 +204,32 @@ input:-webkit-autofill:focus {
   animation: shimmer 1.5s infinite;
 }
 
-/* Card glow effect - Light mode */
+/* Card elevation classes */
+.card-flush {
+  box-shadow: var(--shadow-flush);
+}
+
+.card-raised {
+  box-shadow: var(--shadow-raised);
+}
+
+.card-floating {
+  box-shadow: var(--shadow-floating);
+}
+
+/* Card glow effect */
 .card-glow {
   box-shadow:
     0 1px 2px rgba(0,0,0,0.03),
     0 2px 8px rgba(0,0,0,0.04),
-    0 0 0 1px rgba(30,58,95,0.04);
+    0 0 0 1px rgba(21,24,32,0.04);
 }
 
 .card-glow:hover {
   box-shadow:
     0 2px 8px rgba(0,0,0,0.06),
     0 4px 16px rgba(0,0,0,0.08),
-    0 0 0 1px rgba(30,58,95,0.08);
+    0 0 0 1px rgba(21,24,32,0.08);
 }
 
 /* Smooth number transitions */
@@ -219,7 +239,7 @@ input:-webkit-autofill:focus {
 
 /* Glass effect utilities */
 .glass {
-  background: rgba(255, 255, 255, 0.7);
+  background: rgba(255, 255, 255, 0.75);
   backdrop-filter: blur(20px) saturate(180%);
   -webkit-backdrop-filter: blur(20px) saturate(180%);
 }
@@ -227,4 +247,29 @@ input:-webkit-autofill:focus {
 /* Display font utility */
 .font-display {
   font-family: var(--font-display);
+}
+
+/* Monospace numbers utility */
+.font-mono-nums {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Subtle page texture */
+.page-texture {
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.025'/%3E%3C/svg%3E");
+}
+
+/* Hero card dark surface */
+.hero-card {
+  background: linear-gradient(135deg, #151820 0%, #1E2433 40%, #1A2030 100%);
+  color: #FFFFFF;
+}
+
+.hero-card .label-secondary {
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.hero-card .label-tertiary {
+  color: rgba(255, 255, 255, 0.4);
 }

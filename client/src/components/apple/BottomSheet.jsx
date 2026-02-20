@@ -90,7 +90,7 @@ export default function BottomSheet({
             {/* Header */}
             {title && (
               <div className={`flex items-center justify-between px-5 border-b border-[var(--separator)]/30 ${maxWidth ? 'py-4' : 'pb-3'}`}>
-                <h2 className="text-[17px] font-semibold text-[var(--label-primary)]">{title}</h2>
+                <h2 className="text-[18px] font-semibold text-[var(--label-primary)]">{title}</h2>
                 <button
                   onClick={onClose}
                   className="p-2 -mr-2 text-[var(--label-tertiary)] hover:text-[var(--label-secondary)] hover:bg-[var(--fill-tertiary)] rounded-lg transition-colors"

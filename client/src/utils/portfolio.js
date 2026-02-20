@@ -91,9 +91,9 @@ export function getInvestedValue(asset, deps) {
 
 export const VISUAL_GROUP_CONFIG = {
   'EQUITY': { color: '#3B82F6', label: 'Stocks & Funds' },
-  'FIXED_INCOME': { color: '#10B981', label: 'Fixed Income' },
+  'FIXED_INCOME': { color: '#1A7A5C', label: 'Fixed Income' },
   'REAL_ESTATE': { color: '#06B6D4', label: 'Real Estate' },
-  'PHYSICAL': { color: '#F59E0B', label: 'Physical Assets' },
+  'PHYSICAL': { color: '#B8860B', label: 'Physical Assets' },
   'SAVINGS': { color: '#8B5CF6', label: 'Savings' },
   'CRYPTO': { color: '#EC4899', label: 'Crypto' },
   'INSURANCE': { color: '#F472B6', label: 'Insurance' },

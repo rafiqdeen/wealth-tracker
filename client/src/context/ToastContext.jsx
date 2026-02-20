@@ -68,7 +68,7 @@ function Toast({ id, type = 'info', message, onDismiss }) {
       className={`flex items-center gap-3 px-4 py-3 rounded-xl shadow-lg ${colors.bg} ${colors.text} min-w-[280px] max-w-[400px]`}
     >
       <div className="flex-shrink-0">{icon}</div>
-      <p className="flex-1 text-[14px] font-medium">{message}</p>
+      <p className="flex-1 text-[15px] font-medium">{message}</p>
       <button
         onClick={() => onDismiss(id)}
         className="flex-shrink-0 p-1 rounded-lg hover:bg-white/20 transition-colors"

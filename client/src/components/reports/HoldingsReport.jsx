@@ -1,25 +1,11 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { formatCurrency, formatCompact } from '../../utils/formatting';
-
-function AssetTypeBadge({ type }) {
-  const labels = {
-    'STOCK': 'Stock', 'MUTUAL_FUND': 'MF', 'ETF': 'ETF', 'FD': 'FD',
-    'PPF': 'PPF', 'EPF': 'EPF', 'RD': 'RD', 'GOLD': 'Gold', 'SILVER': 'Silver',
-    'CRYPTOCURRENCY': 'Crypto', 'LAND': 'Land', 'PROPERTY': 'Property',
-    'SAVINGS_ACCOUNT': 'Savings', 'LIC': 'LIC', 'NPS': 'NPS',
-  };
-  const label = labels[type] || type?.replace(/_/g, ' ') || '';
-  return (
-    <span className="px-1.5 py-0.5 text-[9px] font-semibold rounded bg-[var(--fill-tertiary)] text-[var(--label-tertiary)] uppercase tracking-wide shrink-0">
-      {label}
-    </span>
-  );
-}
+import AssetTypeBadge from '../shared/AssetTypeBadge';
 
 const groupColors = {
-  EQUITY: '#3B82F6', FIXED_INCOME: '#10B981', PHYSICAL: '#F59E0B',
-  REAL_ESTATE: '#EF4444', OTHER: '#6B7280', INSURANCE: '#06B6D4',
+  EQUITY: 'var(--chart-primary)', FIXED_INCOME: 'var(--system-green)', PHYSICAL: 'var(--system-amber)',
+  REAL_ESTATE: 'var(--system-red)', OTHER: '#6B7280', INSURANCE: 'var(--chart-primary)',
 };
 
 export default function HoldingsReport({ assets }) {
@@ -34,8 +20,8 @@ export default function HoldingsReport({ assets }) {
             <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 6.75h12M8.25 12h12m-12 5.25h12M3.75 6.75h.007v.008H3.75V6.75zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zM3.75 12h.007v.008H3.75V12zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm-.375 5.25h.007v.008H3.75v-.008zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z" />
           </svg>
         </div>
-        <p className="text-[14px] font-medium text-[var(--label-secondary)] mb-1">No Holdings</p>
-        <p className="text-[12px] text-[var(--label-tertiary)]">Add assets to see your holdings report</p>
+        <p className="text-[15px] font-medium text-[var(--label-secondary)] mb-1">No Holdings</p>
+        <p className="text-[13px] text-[var(--label-tertiary)]">Add assets to see your holdings report</p>
       </div>
     );
   }
@@ -63,30 +49,24 @@ export default function HoldingsReport({ assets }) {
 
   return (
     <div>
-      {/* Title */}
-      <div className="mb-6">
-        <h2 className="text-[18px] font-bold text-[var(--label-primary)]">Holdings</h2>
-        <p className="text-[13px] text-[var(--label-tertiary)] mt-0.5">{assets.length} assets sorted by value</p>
-      </div>
-
       {/* Hero: Top Holding */}
       {topHolding && (
-        <div className="mb-6 p-5 bg-gradient-to-br from-[#10B981]/10 to-[#059669]/5 border border-[#10B981]/20 rounded-2xl">
+        <div className="mb-6 p-5 bg-gradient-to-br from-[var(--system-green)]/10 to-[var(--system-green)]/5 border border-[var(--system-green)]/20 rounded-2xl">
           <div className="flex items-center gap-2 mb-3">
-            <div className="w-8 h-8 rounded-xl bg-[#10B981]/15 flex items-center justify-center">
-              <svg className="w-4 h-4 text-[#10B981]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+            <div className="w-8 h-8 rounded-xl bg-[var(--system-green)]/15 flex items-center justify-center">
+              <svg className="w-4 h-4 text-[var(--system-green)]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 10.5L12 3m0 0l7.5 7.5M12 3v18" />
               </svg>
             </div>
-            <span className="text-[12px] font-semibold text-[#10B981] uppercase tracking-wide">Top Holding</span>
+            <span className="text-[13px] font-semibold text-[var(--system-green)] uppercase tracking-wide">Top Holding</span>
             <AssetTypeBadge type={topHolding.asset_type || topHolding.typeName} />
           </div>
           <p className="text-[16px] font-semibold text-[var(--label-primary)] mb-1">{topHolding.name}</p>
           <div className="flex items-baseline gap-3">
-            <p className="text-[36px] font-bold text-[var(--label-primary)] tabular-nums leading-none">
+            <p className="text-[36px] font-bold text-[var(--label-primary)] tabular-nums leading-none" style={{ fontFamily: 'var(--font-display)' }}>
               {formatCompact(topHolding.currentValue)}
             </p>
-            <p className={`text-[14px] font-semibold tabular-nums ${(topHolding.gainPercent || 0) >= 0 ? 'text-[#10B981]/70' : 'text-[#DC2626]/70'}`}>
+            <p className={`text-[15px] font-semibold tabular-nums ${(topHolding.gainPercent || 0) >= 0 ? 'text-[var(--system-green)]/70' : 'text-[var(--system-red)]/70'}`}>
               {(topHolding.gainPercent || 0) >= 0 ? '+' : ''}{(topHolding.gainPercent || 0).toFixed(1)}%
             </p>
           </div>
@@ -98,33 +78,33 @@ export default function HoldingsReport({ assets }) {
         {/* Left: Top Holdings */}
         <div>
           <div className="flex items-center gap-2 mb-3">
-            <div className="w-5 h-5 rounded-md bg-[#10B981]/15 flex items-center justify-center">
-              <svg className="w-3 h-3 text-[#10B981]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+            <div className="w-5 h-5 rounded-md bg-[var(--system-green)]/15 flex items-center justify-center">
+              <svg className="w-3 h-3 text-[var(--system-green)]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 10.5L12 3m0 0l7.5 7.5M12 3v18" />
               </svg>
             </div>
-            <h4 className="text-[13px] font-semibold text-[var(--label-secondary)] uppercase tracking-wide">Top Holdings</h4>
+            <h4 className="text-[14px] font-semibold text-[var(--label-secondary)] uppercase tracking-wide">Top Holdings</h4>
           </div>
           <div className="space-y-2">
             {topHoldings.map((asset, index) => {
               const isGain = (asset.gainPercent || 0) >= 0;
-              const color = isGain ? '#10B981' : '#EF4444';
+              const color = isGain ? 'var(--system-green)' : 'var(--system-red)';
               return (
                 <div key={asset.id || index} className="flex items-start gap-2.5 p-2.5 bg-[var(--bg-secondary)] rounded-xl border border-[var(--separator-opaque)]/40">
-                  <span className="text-[12px] font-bold text-[var(--label-tertiary)] tabular-nums mt-0.5 w-5 shrink-0 text-center">{index + 1}</span>
+                  <span className="text-[13px] font-bold text-[var(--label-tertiary)] tabular-nums mt-0.5 w-5 shrink-0 text-center">{index + 1}</span>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center justify-between mb-0.5 gap-2">
                       <div className="flex items-center gap-1.5 min-w-0">
-                        <p className="text-[13px] font-medium text-[var(--label-primary)] truncate">{asset.name}</p>
+                        <p className="text-[14px] font-medium text-[var(--label-primary)] truncate">{asset.name}</p>
                         <AssetTypeBadge type={asset.asset_type || asset.typeName} />
                       </div>
-                      <p className="text-[13px] font-bold tabular-nums shrink-0" style={{ color }}>
+                      <p className="text-[14px] font-bold tabular-nums shrink-0" style={{ color }}>
                         {isGain ? '+' : ''}{(asset.gainPercent || 0).toFixed(1)}%
                       </p>
                     </div>
                     <div className="flex items-center justify-between">
-                      <p className="text-[11px] text-[var(--label-tertiary)] tabular-nums">{formatCompact(asset.currentValue)}</p>
-                      <p className="text-[11px] tabular-nums" style={{ color: `${color}99` }}>
+                      <p className="text-[12px] text-[var(--label-tertiary)] tabular-nums">{formatCompact(asset.currentValue)}</p>
+                      <p className="text-[12px] tabular-nums" style={{ color: `${color}99` }}>
                         {isGain ? '+' : ''}{formatCompact(asset.gain)}
                       </p>
                     </div>
@@ -145,7 +125,7 @@ export default function HoldingsReport({ assets }) {
           {sorted.length > 5 && (
             <button
               onClick={() => setShowAllHoldings(!showAllHoldings)}
-              className="mt-2 text-[12px] font-medium text-[#10B981] hover:text-[#059669] transition-colors"
+              className="mt-2 text-[13px] font-medium text-[var(--system-green)] hover:text-[var(--system-green)] transition-colors"
             >
               {showAllHoldings ? 'Show less' : `See all ${sorted.length} holdings`}
             </button>
@@ -154,17 +134,17 @@ export default function HoldingsReport({ assets }) {
 
         {/* Right: By Type */}
         <div>
-          <h4 className="text-[13px] font-semibold text-[var(--label-secondary)] uppercase tracking-wide mb-3">By Type</h4>
+          <h4 className="text-[14px] font-semibold text-[var(--label-secondary)] uppercase tracking-wide mb-3">By Type</h4>
           <div className="space-y-2">
             {displayTypes.map((group) => (
               <div key={group.key} className="flex items-center gap-2 px-2 py-2 rounded-lg hover:bg-[var(--fill-quaternary)] transition-colors">
                 <div className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: group.color }} />
-                <span className="flex-1 text-[13px] font-medium text-[var(--label-primary)] truncate min-w-0">{group.label}</span>
+                <span className="flex-1 text-[14px] font-medium text-[var(--label-primary)] truncate min-w-0">{group.label}</span>
                 <span className="px-1.5 py-0.5 text-[9px] font-semibold rounded bg-[var(--fill-tertiary)] text-[var(--label-tertiary)] uppercase tracking-wide shrink-0">
                   {group.count}
                 </span>
-                <span className="text-[12px] text-[var(--label-tertiary)] tabular-nums shrink-0">{formatCompact(group.value)}</span>
-                <span className="text-[13px] font-semibold text-[var(--label-secondary)] tabular-nums w-10 text-right shrink-0">
+                <span className="text-[13px] text-[var(--label-tertiary)] tabular-nums shrink-0">{formatCompact(group.value)}</span>
+                <span className="text-[14px] font-semibold text-[var(--label-secondary)] tabular-nums w-10 text-right shrink-0">
                   {group.percent.toFixed(0)}%
                 </span>
               </div>
@@ -173,7 +153,7 @@ export default function HoldingsReport({ assets }) {
           {typeGroupList.length > 5 && (
             <button
               onClick={() => setShowAllTypes(!showAllTypes)}
-              className="mt-2 text-[12px] font-medium text-[var(--system-blue)] hover:text-[var(--system-blue)]/80 transition-colors"
+              className="mt-2 text-[13px] font-medium text-[var(--system-blue)] hover:text-[var(--system-blue)]/80 transition-colors"
             >
               {showAllTypes ? 'Show less' : `Show all ${typeGroupList.length} types`}
             </button>
@@ -183,9 +163,9 @@ export default function HoldingsReport({ assets }) {
 
       {/* All Holdings - full width */}
       <div className="mt-6">
-        <h4 className="text-[13px] font-semibold text-[var(--label-secondary)] uppercase tracking-wide mb-3">All Holdings</h4>
+        <h4 className="text-[14px] font-semibold text-[var(--label-secondary)] uppercase tracking-wide mb-3">All Holdings</h4>
         {/* Table header */}
-        <div className="flex items-center gap-2 px-2 pb-2 border-b border-[var(--separator-opaque)] text-[10px] font-semibold text-[var(--label-tertiary)] uppercase tracking-wide">
+        <div className="flex items-center gap-2 px-2 pb-2 border-b border-[var(--separator-opaque)] text-[11px] font-semibold text-[var(--label-tertiary)] uppercase tracking-wide">
           <span className="flex-1 min-w-0">Asset</span>
           <span className="w-20 text-right shrink-0">Invested</span>
           <span className="w-20 text-right shrink-0">Current</span>
@@ -195,17 +175,17 @@ export default function HoldingsReport({ assets }) {
           {sorted.slice(0, showAllHoldings ? sorted.length : 10).map((asset, idx) => (
             <div key={asset.id || idx} className="flex items-center gap-2 px-2 py-2 rounded-lg hover:bg-[var(--fill-quaternary)] transition-colors">
               <div className="flex-1 min-w-0 flex items-center gap-1.5">
-                <span className="text-[12px] font-medium text-[var(--label-primary)] truncate">{asset.name}</span>
+                <span className="text-[13px] font-medium text-[var(--label-primary)] truncate">{asset.name}</span>
                 <AssetTypeBadge type={asset.asset_type || asset.typeName} />
               </div>
-              <span className="w-20 text-right text-[11px] text-[var(--label-tertiary)] tabular-nums shrink-0">
+              <span className="w-20 text-right text-[12px] text-[var(--label-tertiary)] tabular-nums shrink-0">
                 {formatCompact(asset.invested)}
               </span>
-              <span className="w-20 text-right text-[11px] font-semibold text-[var(--label-primary)] tabular-nums shrink-0">
+              <span className="w-20 text-right text-[12px] font-semibold text-[var(--label-primary)] tabular-nums shrink-0">
                 {formatCompact(asset.currentValue)}
               </span>
-              <span className={`w-20 text-right text-[12px] font-bold tabular-nums shrink-0 ${
-                (asset.gain || 0) >= 0 ? 'text-[#059669]' : 'text-[#DC2626]'
+              <span className={`w-20 text-right text-[13px] font-bold tabular-nums shrink-0 ${
+                (asset.gain || 0) >= 0 ? 'text-[var(--system-green)]' : 'text-[var(--system-red)]'
               }`}>
                 {(asset.gain || 0) >= 0 ? '+' : ''}{formatCompact(asset.gain)}
               </span>
@@ -215,7 +195,7 @@ export default function HoldingsReport({ assets }) {
         {sorted.length > 10 && !showAllHoldings && (
           <button
             onClick={() => setShowAllHoldings(true)}
-            className="mt-2 text-[12px] font-medium text-[var(--system-blue)] hover:text-[var(--system-blue)]/80 transition-colors"
+            className="mt-2 text-[13px] font-medium text-[var(--system-blue)] hover:text-[var(--system-blue)]/80 transition-colors"
           >
             Show all {sorted.length} holdings
           </button>

@@ -81,7 +81,7 @@ export const ASSET_CONFIG = {
       { value: 'NSC', label: 'NSC' },
       { value: 'KVP', label: 'KVP' },
     ],
-    color: '#10B981',
+    color: '#1A7A5C',
   },
   REAL_ESTATE: {
     label: 'Real Estate',
@@ -90,7 +90,7 @@ export const ASSET_CONFIG = {
       { value: 'PROPERTY', label: 'Property' },
       { value: 'REIT', label: 'REIT' },
     ],
-    color: '#F59E0B',
+    color: '#B8860B',
   },
   PHYSICAL: {
     label: 'Physical Assets',

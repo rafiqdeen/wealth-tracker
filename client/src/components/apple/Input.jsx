@@ -30,7 +30,7 @@ export default function Input({
       {label && (
         <label
           htmlFor={inputId}
-          className="block text-[13px] font-medium text-[var(--label-secondary)] mb-1.5 uppercase tracking-wide"
+          className="block text-[14px] font-medium text-[var(--label-secondary)] mb-1.5 uppercase tracking-wide"
         >
           {label}
           {required && <span className="text-[var(--system-red)] ml-0.5">*</span>}
@@ -67,7 +67,7 @@ export default function Input({
             px-4 py-3
             bg-[var(--bg-primary)]
             border rounded-xl
-            text-[17px] text-[var(--label-primary)]
+            text-[18px] text-[var(--label-primary)]
             placeholder:text-[var(--label-tertiary)]
             disabled:opacity-50 disabled:cursor-not-allowed
             outline-none
@@ -81,7 +81,7 @@ export default function Input({
           {...props}
         />
         {suffix && (
-          <div className="absolute right-3.5 top-1/2 -translate-y-1/2 text-[var(--label-secondary)] text-[15px]">
+          <div className="absolute right-3.5 top-1/2 -translate-y-1/2 text-[var(--label-secondary)] text-[16px]">
             {suffix}
           </div>
         )}
@@ -96,7 +96,7 @@ export default function Input({
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -4 }}
             transition={spring.snappy}
-            className="text-[13px] text-[var(--system-red)] mt-1.5"
+            className="text-[14px] text-[var(--system-red)] mt-1.5"
           >
             {error}
           </motion.p>
@@ -106,7 +106,7 @@ export default function Input({
             id={helperId}
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
-            className="text-[13px] text-[var(--label-tertiary)] mt-1.5"
+            className="text-[14px] text-[var(--label-tertiary)] mt-1.5"
           >
             {helper}
           </motion.p>
@@ -146,7 +146,7 @@ export function SearchInput({
           pl-10 pr-10 py-2.5
           bg-[var(--fill-tertiary)]
           rounded-xl
-          text-[17px] text-[var(--label-primary)]
+          text-[18px] text-[var(--label-primary)]
           placeholder:text-[var(--label-tertiary)]
           outline-none
           focus:ring-2 focus:ring-[var(--system-blue)]/30
@@ -190,7 +190,7 @@ export function Select({
       {label && (
         <label
           htmlFor={selectId}
-          className="block text-[13px] font-medium text-[var(--label-secondary)] mb-1.5 uppercase tracking-wide"
+          className="block text-[14px] font-medium text-[var(--label-secondary)] mb-1.5 uppercase tracking-wide"
         >
           {label}
           {required && <span className="text-[var(--system-red)] ml-0.5">*</span>}
@@ -218,7 +218,7 @@ export function Select({
             px-4 py-3 pr-10
             bg-[var(--bg-primary)]
             border rounded-xl
-            text-[17px] text-[var(--label-primary)]
+            text-[18px] text-[var(--label-primary)]
             outline-none
             appearance-none
             cursor-pointer
@@ -247,7 +247,7 @@ export function Select({
         </svg>
       </div>
       {error && (
-        <p id={errorId} role="alert" className="text-[13px] text-[var(--system-red)] mt-1.5">{error}</p>
+        <p id={errorId} role="alert" className="text-[14px] text-[var(--system-red)] mt-1.5">{error}</p>
       )}
     </div>
   );

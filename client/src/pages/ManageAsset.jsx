@@ -1,7 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
-// eslint-disable-next-line no-unused-vars
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 import { transactionService } from '../services/transactions';
 import { assetService, priceService, ASSET_CONFIG } from '../services/assets';
 import { Card, Skeleton, SkeletonRow, BottomSheet, Modal } from '../components/apple';
@@ -15,9 +14,9 @@ import StockAutocomplete from '../components/StockAutocomplete';
 
 // Category card configuration
 const CATEGORY_CARDS = {
-  EQUITY: { label: 'Equity', description: 'Stocks & Mutual Funds', gradient: 'from-blue-500/15 to-blue-600/5', iconBg: 'bg-[#4F7DF3]' },
-  FIXED_INCOME: { label: 'Fixed Income', description: 'FD, PPF, Bonds', gradient: 'from-emerald-500/15 to-emerald-600/5', iconBg: 'bg-[#059669]' },
-  REAL_ESTATE: { label: 'Real Estate', description: 'Property & Land', gradient: 'from-amber-500/15 to-amber-600/5', iconBg: 'bg-[#F59E0B]' },
+  EQUITY: { label: 'Equity', description: 'Stocks & Mutual Funds', gradient: 'from-blue-500/15 to-blue-600/5', iconBg: 'bg-[var(--chart-primary)]' },
+  FIXED_INCOME: { label: 'Fixed Income', description: 'FD, PPF, Bonds', gradient: 'from-emerald-500/15 to-emerald-600/5', iconBg: 'bg-[var(--system-green)]' },
+  REAL_ESTATE: { label: 'Real Estate', description: 'Property & Land', gradient: 'from-amber-500/15 to-amber-600/5', iconBg: 'bg-[var(--system-amber)]' },
   PHYSICAL: { label: 'Physical Assets', description: 'Gold, Silver, Art', gradient: 'from-orange-500/15 to-orange-600/5', iconBg: 'bg-[#F97316]' },
   SAVINGS: { label: 'Savings', description: 'Bank Accounts', gradient: 'from-teal-500/15 to-teal-600/5', iconBg: 'bg-[#14B8A6]' },
   CRYPTO: { label: 'Cryptocurrency', description: 'Bitcoin, Ethereum', gradient: 'from-indigo-500/15 to-indigo-600/5', iconBg: 'bg-[#6366F1]' },
@@ -35,8 +34,8 @@ function PriceCompareIndicator({ txnPrice, currentPrice, type }) {
   if (type === 'BUY') {
     return (
       <span
-        className={`inline-flex items-center gap-0.5 text-[10px] font-medium ${
-          isPositive ? 'text-[#059669]' : 'text-[#DC2626]'
+        className={`inline-flex items-center gap-0.5 text-[11px] font-medium ${
+          isPositive ? 'text-[var(--system-green)]' : 'text-[var(--system-red)]'
         }`}
         title={`Current price is ${isPositive ? 'above' : 'below'} your buy price`}
       >
@@ -115,10 +114,10 @@ export default function ManageAsset() {
   const [txnSaving, setTxnSaving] = useState(false);
 
   // Input styles - matching Edit Transaction modal
-  const inputClass = "w-full px-3 py-2.5 bg-[var(--fill-tertiary)] border border-[var(--separator-opaque)] rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--chart-primary)]/30 focus:border-[var(--chart-primary)] transition-all text-[var(--label-primary)] placeholder-[var(--label-quaternary)] text-[14px]";
-  const selectClass = `w-full px-3 py-2.5 pr-10 bg-[var(--fill-tertiary)] border border-[var(--separator-opaque)] rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--chart-primary)]/30 focus:border-[var(--chart-primary)] transition-all text-[var(--label-primary)] text-[14px] appearance-none cursor-pointer bg-no-repeat bg-[right_12px_center] bg-[length:20px_20px] bg-[url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%238E8E93' stroke-width='2'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' d='M19.5 8.25l-7.5 7.5-7.5-7.5'/%3E%3C/svg%3E")]`;
-  const labelClass = "block text-[12px] font-medium text-[var(--label-secondary)] mb-1.5";
-  const readOnlyInputClass = "w-full px-3 py-2.5 bg-[var(--fill-tertiary)] border border-[var(--separator-opaque)] rounded-lg text-[var(--label-secondary)] text-[14px] cursor-not-allowed";
+  const inputClass = "w-full px-3 py-2.5 bg-[var(--fill-tertiary)] border border-[var(--separator-opaque)] rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--chart-primary)]/30 focus:border-[var(--chart-primary)] transition-all text-[var(--label-primary)] placeholder-[var(--label-quaternary)] text-[15px]";
+  const selectClass = `w-full px-3 py-2.5 pr-10 bg-[var(--fill-tertiary)] border border-[var(--separator-opaque)] rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--chart-primary)]/30 focus:border-[var(--chart-primary)] transition-all text-[var(--label-primary)] text-[15px] appearance-none cursor-pointer bg-no-repeat bg-[right_12px_center] bg-[length:20px_20px] bg-[url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%238E8E93' stroke-width='2'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' d='M19.5 8.25l-7.5 7.5-7.5-7.5'/%3E%3C/svg%3E")]`;
+  const labelClass = "block text-[13px] font-medium text-[var(--label-secondary)] mb-1.5";
+  const readOnlyInputClass = "w-full px-3 py-2.5 bg-[var(--fill-tertiary)] border border-[var(--separator-opaque)] rounded-lg text-[var(--label-secondary)] text-[15px] cursor-not-allowed";
 
   useEffect(() => {
     fetchData();
@@ -383,18 +382,18 @@ export default function ManageAsset() {
   // Get category color for gradient
   const getCategoryColor = () => {
     if (asset?.category === 'EQUITY' && asset?.asset_type === 'MUTUAL_FUND') {
-      return '#8B5CF6';
+      return 'var(--system-purple)';
     }
     const colors = {
-      'EQUITY': '#4F7DF3',
-      'FIXED_INCOME': '#059669',
-      'REAL_ESTATE': '#F59E0B',
-      'GOLD': '#F97316',
-      'SAVINGS': '#14B8A6',
-      'CRYPTO': '#6366F1',
-      'INSURANCE': '#EC4899',
+      'EQUITY': 'var(--chart-primary)',
+      'FIXED_INCOME': 'var(--system-green)',
+      'REAL_ESTATE': 'var(--system-amber)',
+      'GOLD': 'var(--system-amber)',
+      'SAVINGS': 'var(--system-green)',
+      'CRYPTO': 'var(--system-purple)',
+      'INSURANCE': 'var(--system-red)',
     };
-    return colors[asset?.category] || '#4F7DF3';
+    return colors[asset?.category] || 'var(--chart-primary)';
   };
 
   // Transaction counts for filter badges
@@ -468,14 +467,14 @@ export default function ManageAsset() {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className={labelClass}>Quantity <span className="text-[var(--label-quaternary)] font-normal">(calculated)</span></label>
-                  <p className="text-[17px] font-semibold text-[var(--label-primary)] tabular-nums">{formData.quantity || '0'}</p>
+                  <p className="text-[18px] font-semibold text-[var(--label-primary)] tabular-nums">{formData.quantity || '0'}</p>
                 </div>
                 <div>
                   <label className={labelClass}>Avg Buy Price <span className="text-[var(--label-quaternary)] font-normal">(calculated)</span></label>
-                  <p className="text-[17px] font-semibold text-[var(--label-primary)] tabular-nums">{formData.avg_buy_price ? formatCurrency(formData.avg_buy_price) : '₹0'}</p>
+                  <p className="text-[18px] font-semibold text-[var(--label-primary)] tabular-nums">{formData.avg_buy_price ? formatCurrency(formData.avg_buy_price) : '₹0'}</p>
                 </div>
               </div>
-              <p className="text-[12px] text-[var(--label-tertiary)] mt-3 flex items-center gap-1.5">
+              <p className="text-[13px] text-[var(--label-tertiary)] mt-3 flex items-center gap-1.5">
                 <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M11.25 11.25l.041-.02a.75.75 0 011.063.852l-.708 2.836a.75.75 0 001.063.853l.041-.021M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9-3.75h.008v.008H12V8.25z" />
                 </svg>
@@ -533,12 +532,12 @@ export default function ManageAsset() {
             </div>
             <div className="mb-5 p-4 bg-[var(--fill-tertiary)]/50 rounded-xl">
               <div className="flex items-center justify-between mb-4">
-                <span className="text-[13px] font-semibold text-[var(--label-primary)]">Valuation Method</span>
+                <span className="text-[14px] font-semibold text-[var(--label-primary)]">Valuation Method</span>
                 <div className="flex items-center bg-[var(--bg-primary)] rounded-lg p-1 shadow-sm">
                   <button
                     type="button"
                     onClick={() => { setFormData(prev => ({ ...prev, real_estate_calc_mode: 'rate', current_value: '' })); setHasUnsavedChanges(true); }}
-                    className={`px-4 py-2 text-[13px] font-semibold rounded-md transition-all ${
+                    className={`px-4 py-2 text-[14px] font-semibold rounded-md transition-all ${
                       calcMode === 'rate' ? 'bg-[var(--chart-primary)] text-white shadow-sm' : 'text-[var(--label-secondary)] hover:text-[var(--label-primary)]'
                     }`}
                   >
@@ -547,7 +546,7 @@ export default function ManageAsset() {
                   <button
                     type="button"
                     onClick={() => { setFormData(prev => ({ ...prev, real_estate_calc_mode: 'value', appreciation_rate: '' })); setHasUnsavedChanges(true); }}
-                    className={`px-4 py-2 text-[13px] font-semibold rounded-md transition-all ${
+                    className={`px-4 py-2 text-[14px] font-semibold rounded-md transition-all ${
                       calcMode === 'value' ? 'bg-[var(--chart-primary)] text-white shadow-sm' : 'text-[var(--label-secondary)] hover:text-[var(--label-primary)]'
                     }`}
                   >
@@ -557,14 +556,14 @@ export default function ManageAsset() {
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                 <div>
-                  <label className={labelClass}>Appreciation Rate {calcMode === 'value' && <span className="text-[var(--system-green)] ml-1 text-[11px]">(Auto)</span>}</label>
+                  <label className={labelClass}>Appreciation Rate {calcMode === 'value' && <span className="text-[var(--system-green)] ml-1 text-[12px]">(Auto)</span>}</label>
                   <div className="relative">
                     <input type="number" name="appreciation_rate" value={formData.appreciation_rate} onChange={handleFormChange} placeholder="6" step="0.1" readOnly={calcMode === 'value'} className={`${calcMode === 'value' ? readOnlyInputClass : inputClass} pr-16`} />
-                    <span className="absolute right-4 top-1/2 -translate-y-1/2 text-[var(--label-tertiary)] text-[13px]">% p.a.</span>
+                    <span className="absolute right-4 top-1/2 -translate-y-1/2 text-[var(--label-tertiary)] text-[14px]">% p.a.</span>
                   </div>
                 </div>
                 <div>
-                  <label className={labelClass}>Current Value {calcMode === 'rate' && <span className="text-[var(--system-green)] ml-1 text-[11px]">(Auto)</span>}</label>
+                  <label className={labelClass}>Current Value {calcMode === 'rate' && <span className="text-[var(--system-green)] ml-1 text-[12px]">(Auto)</span>}</label>
                   <div className="relative">
                     <span className="absolute left-4 top-1/2 -translate-y-1/2 text-[var(--label-tertiary)]">₹</span>
                     <input type="number" name="current_value" value={formData.current_value} onChange={handleFormChange} placeholder="0" readOnly={calcMode === 'rate'} className={`${calcMode === 'rate' ? readOnlyInputClass : inputClass} pl-8`} />
@@ -737,7 +736,7 @@ export default function ManageAsset() {
 
   if (loading) {
     return (
-      <div className="p-4 md:px-12 md:py-6 h-full overflow-auto">
+      <div className="p-4 md:px-10 md:py-6 h-full overflow-auto">
         <Card padding="p-0" className="overflow-hidden">
           <div className="px-5 py-4 border-b border-[var(--separator-opaque)]">
             <Skeleton width="250px" height="1.5rem" rounded="md" className="mb-2" />
@@ -756,12 +755,12 @@ export default function ManageAsset() {
 
   if (error || !asset) {
     return (
-      <div className="p-4 md:px-12 md:py-6 h-full overflow-auto">
+      <div className="p-4 md:px-10 md:py-6 h-full overflow-auto">
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={spring.gentle}>
-          <Card padding="p-6" className="bg-[#DC2626]/10 border-[#DC2626]/20">
-            <p className="text-[#DC2626] text-[15px] font-medium">{error || 'Asset not found'}</p>
+          <Card padding="p-6" className="bg-[var(--system-red)]/10 border-[var(--system-red)]/20">
+            <p className="text-[var(--system-red)] text-[16px] font-medium">{error || 'Asset not found'}</p>
           </Card>
-          <Link to="/assets" className="mt-4 inline-flex items-center gap-1.5 text-[var(--chart-primary)] text-[14px] font-medium hover:underline">
+          <Link to="/assets" className="mt-4 inline-flex items-center gap-1.5 text-[var(--chart-primary)] text-[15px] font-medium hover:underline">
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
             </svg>
@@ -889,7 +888,7 @@ export default function ManageAsset() {
                 {/* Back Button */}
                 <Link
                   to="/assets"
-                  className="inline-flex items-center gap-1.5 text-[13px] text-[var(--label-tertiary)] hover:text-[var(--chart-primary)] transition-colors mb-6"
+                  className="inline-flex items-center gap-1.5 text-[14px] text-[var(--label-tertiary)] hover:text-[var(--chart-primary)] transition-colors mb-6"
                   title="Press Esc to go back"
                 >
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -914,21 +913,21 @@ export default function ManageAsset() {
 
                   {/* Asset Name & Type */}
                   <h1 className="text-[22px] font-bold text-[var(--label-primary)] leading-tight mb-1" style={{ fontFamily: 'var(--font-display)' }}>{asset.name}</h1>
-                  <p className="text-[13px] text-[var(--label-secondary)]">
+                  <p className="text-[14px] text-[var(--label-secondary)]">
                     {selectedType?.label || formData.asset_type?.replace(/_/g, ' ')} • {categoryConfig?.label || formData.category}
                   </p>
                   {asset.symbol && !isFixedIncome && (
-                    <p className="text-[12px] text-[var(--label-tertiary)] mt-1 font-mono">{asset.symbol}</p>
+                    <p className="text-[13px] text-[var(--label-tertiary)] mt-1 font-mono">{asset.symbol}</p>
                   )}
 
                   {/* LTP Glass Card */}
                   {currentPrice && !isNaN(currentPrice) && !isFixedIncome && (
                     <div className="mt-4 p-3 bg-[var(--bg-primary)]/80 backdrop-blur-sm border border-[var(--separator-opaque)] rounded-xl">
                       <div className="flex items-center justify-between">
-                        <span className="text-[11px] text-[var(--label-tertiary)] uppercase tracking-wide">Last Traded Price</span>
+                        <span className="text-[12px] text-[var(--label-tertiary)] uppercase tracking-wide">Last Traded Price</span>
                       </div>
                       <div className="flex items-baseline gap-2 mt-1">
-                        <span className="text-[20px] font-bold text-[var(--label-primary)] tabular-nums">{formatPrice(currentPrice)}</span>
+                        <span className="text-[24px] font-bold text-[var(--label-primary)] tabular-nums" style={{ fontFamily: 'var(--font-display)' }}>{formatPrice(currentPrice)}</span>
                       </div>
                     </div>
                   )}
@@ -941,11 +940,11 @@ export default function ManageAsset() {
                       {/* Value Card */}
                       <div className="p-3 bg-[var(--bg-primary)]/60 border border-[var(--separator-opaque)] rounded-xl space-y-3">
                         <div className="flex items-center justify-between">
-                          <span className="text-[11px] text-[var(--label-tertiary)] uppercase tracking-wide">Invested</span>
+                          <span className="text-[12px] text-[var(--label-tertiary)] uppercase tracking-wide">Invested</span>
                           <span className="text-[16px] font-semibold text-[var(--label-primary)] tabular-nums">{formatCompact(statsData.invested)}</span>
                         </div>
                         <div className="flex items-center justify-between">
-                          <span className="text-[11px] text-[var(--label-tertiary)] uppercase tracking-wide">
+                          <span className="text-[12px] text-[var(--label-tertiary)] uppercase tracking-wide">
                             Current {statsData.isPriceEstimated && <span className="text-[9px]">(est)</span>}
                           </span>
                           <span className="text-[16px] font-semibold text-[var(--label-primary)] tabular-nums">{formatCompact(statsData.currentValue)}</span>
@@ -954,12 +953,12 @@ export default function ManageAsset() {
 
                       {/* Performance Highlight Card with Gradient */}
                       <div
-                        className={`p-3 rounded-xl border border-[var(--separator-opaque)] overflow-hidden ${statsData.isPositive ? 'bg-gradient-to-r from-[#059669]/12 via-[#059669]/6 to-transparent' : 'bg-gradient-to-r from-[#DC2626]/12 via-[#DC2626]/6 to-transparent'}`}
+                        className={`p-3 rounded-xl border border-[var(--separator-opaque)] overflow-hidden ${statsData.isPositive ? 'bg-gradient-to-r from-[var(--system-green)]/12 via-[var(--system-green)]/6 to-transparent' : 'bg-gradient-to-r from-[var(--system-red)]/12 via-[var(--system-red)]/6 to-transparent'}`}
                       >
                         <div className="space-y-2.5">
                           <div className="flex items-center justify-between">
-                            <span className="text-[11px] text-[var(--label-tertiary)] uppercase tracking-wide">P&L</span>
-                            <span className={`text-[17px] font-bold tabular-nums ${statsData.isPositive ? 'text-[#059669]' : 'text-[#DC2626]'}`}>
+                            <span className="text-[12px] text-[var(--label-tertiary)] uppercase tracking-wide">P&L</span>
+                            <span className={`text-[20px] font-bold tabular-nums ${statsData.isPositive ? 'text-[var(--system-green)]' : 'text-[var(--system-red)]'}`} style={{ fontFamily: 'var(--font-display)' }}>
                               {statsData.isPositive ? '+' : ''}{formatCompact(statsData.gainLoss)}
                             </span>
                           </div>
@@ -967,23 +966,23 @@ export default function ManageAsset() {
                           {/* Progress Bar */}
                           <div className="h-1.5 bg-[var(--bg-primary)]/60 rounded-full overflow-hidden">
                             <div
-                              className={`h-full rounded-full transition-all ${statsData.isPositive ? 'bg-[#059669]' : 'bg-[#DC2626]'}`}
+                              className={`h-full rounded-full transition-all ${statsData.isPositive ? 'bg-[var(--system-green)]' : 'bg-[var(--system-red)]'}`}
                               style={{ width: `${Math.min(Math.abs(statsData.returnPct), 100)}%` }}
                             />
                           </div>
 
                           <div className="flex items-center justify-between">
-                            <span className="text-[11px] text-[var(--label-tertiary)] uppercase tracking-wide">Return</span>
-                            <span className={`text-[15px] font-bold tabular-nums ${statsData.isPositive ? 'text-[#059669]' : 'text-[#DC2626]'}`}>
+                            <span className="text-[12px] text-[var(--label-tertiary)] uppercase tracking-wide">Return</span>
+                            <span className={`text-[16px] font-bold tabular-nums ${statsData.isPositive ? 'text-[var(--system-green)]' : 'text-[var(--system-red)]'}`}>
                               {statsData.isPositive ? '+' : ''}{statsData.returnPct.toFixed(2)}%
                             </span>
                           </div>
 
                           <div className="flex items-center justify-between">
-                            <span className="text-[11px] text-[var(--label-tertiary)] uppercase tracking-wide">
+                            <span className="text-[12px] text-[var(--label-tertiary)] uppercase tracking-wide">
                               XIRR {statsData.holdingDays < 30 && <span className="text-[9px]">(30d+)</span>}
                             </span>
-                            <span className={`text-[15px] font-bold tabular-nums ${statsData.xirrIsPositive ? 'text-[#059669]' : 'text-[#DC2626]'}`}>
+                            <span className={`text-[16px] font-bold tabular-nums ${statsData.xirrIsPositive ? 'text-[var(--system-green)]' : 'text-[var(--system-red)]'}`} style={{ fontFamily: 'var(--font-display)' }}>
                               {statsData.xirr ? `${statsData.xirrIsPositive ? '+' : ''}${statsData.xirr.toFixed(2)}%${statsData.xirrCapped ? '+' : ''}` : '—'}
                             </span>
                           </div>
@@ -993,16 +992,16 @@ export default function ManageAsset() {
                       {/* Details Card */}
                       <div className="p-3 bg-[var(--bg-primary)]/60 border border-[var(--separator-opaque)] rounded-xl space-y-3">
                         <div className="flex items-center justify-between">
-                          <span className="text-[11px] text-[var(--label-tertiary)] uppercase tracking-wide">Avg Price</span>
-                          <span className="text-[15px] font-semibold text-[var(--label-primary)] tabular-nums">{formatPrice(statsData.avgBuyPrice)}</span>
+                          <span className="text-[12px] text-[var(--label-tertiary)] uppercase tracking-wide">Avg Price</span>
+                          <span className="text-[16px] font-semibold text-[var(--label-primary)] tabular-nums">{formatPrice(statsData.avgBuyPrice)}</span>
                         </div>
                         <div className="flex items-center justify-between">
-                          <span className="text-[11px] text-[var(--label-tertiary)] uppercase tracking-wide">Units</span>
-                          <span className="text-[15px] font-semibold text-[var(--label-primary)] tabular-nums">{formatNumber(statsData.quantity, 2)}</span>
+                          <span className="text-[12px] text-[var(--label-tertiary)] uppercase tracking-wide">Units</span>
+                          <span className="text-[16px] font-semibold text-[var(--label-primary)] tabular-nums">{formatNumber(statsData.quantity, 2)}</span>
                         </div>
                         <div className="flex items-center justify-between">
-                          <span className="text-[11px] text-[var(--label-tertiary)] uppercase tracking-wide">Holding</span>
-                          <span className="text-[15px] font-semibold text-[var(--label-primary)] tabular-nums">{statsData.holdingPeriod}</span>
+                          <span className="text-[12px] text-[var(--label-tertiary)] uppercase tracking-wide">Holding</span>
+                          <span className="text-[16px] font-semibold text-[var(--label-primary)] tabular-nums">{statsData.holdingPeriod}</span>
                         </div>
                       </div>
                     </>
@@ -1011,7 +1010,7 @@ export default function ManageAsset() {
                       {/* Fixed Income Stats */}
                       {statsData.needsTxns && (
                         <div className="px-3 py-2.5 bg-[var(--system-orange)]/10 border border-[var(--system-orange)]/20 rounded-xl">
-                          <p className="text-[11px] text-[var(--system-orange)]">
+                          <p className="text-[12px] text-[var(--system-orange)]">
                             Add periodic contributions to calculate accurate interest.
                           </p>
                         </div>
@@ -1020,36 +1019,36 @@ export default function ManageAsset() {
                       {/* Value Card */}
                       <div className="p-3 bg-[var(--bg-primary)]/60 border border-[var(--separator-opaque)] rounded-xl space-y-3">
                         <div className="flex items-center justify-between">
-                          <span className="text-[11px] text-[var(--label-tertiary)] uppercase tracking-wide">Deposited</span>
+                          <span className="text-[12px] text-[var(--label-tertiary)] uppercase tracking-wide">Deposited</span>
                           <span className="text-[16px] font-semibold text-[var(--label-primary)] tabular-nums">{formatCompact(statsData.fiDeposited)}</span>
                         </div>
                         <div className="flex items-center justify-between">
-                          <span className="text-[11px] text-[var(--label-tertiary)] uppercase tracking-wide">Current</span>
+                          <span className="text-[12px] text-[var(--label-tertiary)] uppercase tracking-wide">Current</span>
                           <span className="text-[16px] font-semibold text-[var(--label-primary)] tabular-nums">{statsData.needsTxns ? '—' : formatCompact(statsData.fiCurrentValue)}</span>
                         </div>
                       </div>
 
                       {/* Performance Highlight Card with Gradient */}
-                      <div className="p-3 rounded-xl border border-[var(--separator-opaque)] overflow-hidden bg-gradient-to-r from-[#059669]/12 via-[#059669]/6 to-transparent">
+                      <div className="p-3 rounded-xl border border-[var(--separator-opaque)] overflow-hidden bg-gradient-to-r from-[var(--system-green)]/12 via-[var(--system-green)]/6 to-transparent">
                         <div className="space-y-2.5">
                           <div className="flex items-center justify-between">
-                            <span className="text-[11px] text-[var(--label-tertiary)] uppercase tracking-wide">Interest</span>
-                            <span className="text-[17px] font-bold text-[#059669] tabular-nums">{statsData.needsTxns ? '—' : `+${formatCompact(statsData.fiInterest)}`}</span>
+                            <span className="text-[12px] text-[var(--label-tertiary)] uppercase tracking-wide">Interest</span>
+                            <span className="text-[20px] font-bold text-[var(--system-green)] tabular-nums" style={{ fontFamily: 'var(--font-display)' }}>{statsData.needsTxns ? '—' : `+${formatCompact(statsData.fiInterest)}`}</span>
                           </div>
 
                           {/* Progress Bar */}
                           {!statsData.needsTxns && (
                             <div className="h-1.5 bg-[var(--bg-primary)]/60 rounded-full overflow-hidden">
                               <div
-                                className="h-full rounded-full bg-[#059669] transition-all"
+                                className="h-full rounded-full bg-[var(--system-green)] transition-all"
                                 style={{ width: `${Math.min(statsData.fiInterestPercent, 100)}%` }}
                               />
                             </div>
                           )}
 
                           <div className="flex items-center justify-between">
-                            <span className="text-[11px] text-[var(--label-tertiary)] uppercase tracking-wide">Return</span>
-                            <span className="text-[15px] font-bold text-[#059669] tabular-nums">{statsData.needsTxns ? '—' : `+${statsData.fiInterestPercent.toFixed(1)}%`}</span>
+                            <span className="text-[12px] text-[var(--label-tertiary)] uppercase tracking-wide">Return</span>
+                            <span className="text-[16px] font-bold text-[var(--system-green)] tabular-nums">{statsData.needsTxns ? '—' : `+${statsData.fiInterestPercent.toFixed(1)}%`}</span>
                           </div>
                         </div>
                       </div>
@@ -1057,13 +1056,13 @@ export default function ManageAsset() {
                       {/* Details Card */}
                       <div className="p-3 bg-[var(--bg-primary)]/60 border border-[var(--separator-opaque)] rounded-xl space-y-3">
                         <div className="flex items-center justify-between">
-                          <span className="text-[11px] text-[var(--label-tertiary)] uppercase tracking-wide">Holding</span>
-                          <span className="text-[15px] font-semibold text-[var(--label-primary)] tabular-nums">{statsData.holdingPeriod}</span>
+                          <span className="text-[12px] text-[var(--label-tertiary)] uppercase tracking-wide">Holding</span>
+                          <span className="text-[16px] font-semibold text-[var(--label-primary)] tabular-nums">{statsData.holdingPeriod}</span>
                         </div>
                         {asset.institution && (
                           <div className="flex items-center justify-between">
-                            <span className="text-[11px] text-[var(--label-tertiary)] uppercase tracking-wide">Institution</span>
-                            <span className="text-[13px] font-medium text-[var(--label-primary)]">{asset.institution}</span>
+                            <span className="text-[12px] text-[var(--label-tertiary)] uppercase tracking-wide">Institution</span>
+                            <span className="text-[14px] font-medium text-[var(--label-primary)]">{asset.institution}</span>
                           </div>
                         )}
                       </div>
@@ -1075,14 +1074,14 @@ export default function ManageAsset() {
                 <div className="mt-6">
                   <button
                     onClick={() => setMetadataExpanded(!metadataExpanded)}
-                    className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-[var(--bg-primary)] border border-[var(--separator-opaque)] rounded-xl text-[13px] font-semibold text-[var(--label-primary)] hover:bg-[var(--fill-tertiary)] transition-all hover:shadow-sm"
+                    className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-[var(--bg-primary)] border border-[var(--separator-opaque)] rounded-xl text-[14px] font-semibold text-[var(--label-primary)] hover:bg-[var(--fill-tertiary)] transition-all hover:shadow-sm"
                   >
                     <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                       <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125" />
                     </svg>
                     Edit Asset Details
                     {hasUnsavedChanges && (
-                      <span className="px-1.5 py-0.5 bg-[var(--system-orange)]/15 text-[var(--system-orange)] text-[10px] font-semibold rounded">Unsaved</span>
+                      <span className="px-1.5 py-0.5 bg-[var(--system-orange)]/15 text-[var(--system-orange)] text-[11px] font-semibold rounded">Unsaved</span>
                     )}
                   </button>
                 </div>
@@ -1094,10 +1093,10 @@ export default function ManageAsset() {
               {/* Transactions Header */}
               <div className="px-5 py-4 border-b border-[var(--separator-opaque)] flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div>
-                  <h2 className="text-[17px] font-bold text-[var(--label-primary)]">
+                  <h2 className="text-[18px] font-bold text-[var(--label-primary)]">
                     {isFixedIncome ? 'Deposits' : 'Transactions'}
                   </h2>
-                  <p className="text-[12px] text-[var(--label-tertiary)] mt-0.5">
+                  <p className="text-[13px] text-[var(--label-tertiary)] mt-0.5">
                     {transactions.length} record{transactions.length !== 1 ? 's' : ''}
                   </p>
                 </div>
@@ -1105,7 +1104,7 @@ export default function ManageAsset() {
                   {transactions.length > 0 && (
                     <button
                       onClick={handleExportCSV}
-                      className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-[var(--fill-tertiary)] border border-[var(--separator-opaque)] text-[var(--label-primary)] hover:bg-[var(--fill-secondary)] transition-colors text-[13px] font-semibold"
+                      className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-[var(--fill-tertiary)] border border-[var(--separator-opaque)] text-[var(--label-primary)] hover:bg-[var(--fill-secondary)] transition-colors text-[14px] font-semibold"
                       title="Export to CSV (E)"
                     >
                       <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -1117,7 +1116,7 @@ export default function ManageAsset() {
                   {!isFixedIncome && (
                     <button
                       onClick={() => setShowCSVImport(true)}
-                      className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-[var(--fill-tertiary)] border border-[var(--separator-opaque)] text-[var(--label-primary)] hover:bg-[var(--fill-secondary)] transition-colors text-[13px] font-semibold"
+                      className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-[var(--fill-tertiary)] border border-[var(--separator-opaque)] text-[var(--label-primary)] hover:bg-[var(--fill-secondary)] transition-colors text-[14px] font-semibold"
                     >
                       <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                         <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
@@ -1127,7 +1126,7 @@ export default function ManageAsset() {
                   )}
                   <Link to="/assets/add" state={{ symbol: asset.symbol, assetType: asset.asset_type, exchange: asset.exchange, category: asset.category, assetId: asset.id }}>
                     <button
-                      className="flex items-center gap-2 px-3.5 py-2 text-white rounded-xl text-[13px] font-semibold transition-colors hover:opacity-90 border border-transparent"
+                      className="flex items-center gap-2 px-3.5 py-2 text-white rounded-xl text-[14px] font-semibold transition-colors hover:opacity-90 border border-transparent"
                       style={{ backgroundColor: categoryColor }}
                       title="Add Transaction (N)"
                     >
@@ -1144,19 +1143,19 @@ export default function ManageAsset() {
             {transactions.length > 0 && (
               <div className="px-5 py-2.5 border-b border-[var(--separator-opaque)] flex flex-wrap items-center justify-between gap-3">
                 <div className="flex items-center gap-2">
-                  <span className="text-[12px] text-[var(--label-tertiary)]">Filter:</span>
+                  <span className="text-[13px] text-[var(--label-tertiary)]">Filter:</span>
                   <div className="flex gap-1">
                     {['ALL', 'BUY', 'SELL'].map((type) => (
-                      <button key={type} onClick={() => setFilterType(type)} className={`px-2.5 py-1 rounded-md text-[11px] font-semibold transition-colors flex items-center gap-1.5 ${filterType === type ? type === 'BUY' ? 'bg-[#059669]/15 text-[#059669]' : type === 'SELL' ? 'bg-[#DC2626]/15 text-[#DC2626]' : 'bg-[var(--fill-secondary)] text-[var(--label-primary)]' : 'text-[var(--label-tertiary)] hover:bg-[var(--fill-tertiary)]'}`}>
+                      <button key={type} onClick={() => setFilterType(type)} className={`px-2.5 py-1 rounded-md text-[12px] font-semibold transition-colors flex items-center gap-1.5 ${filterType === type ? type === 'BUY' ? 'bg-[var(--system-green)]/15 text-[var(--system-green)]' : type === 'SELL' ? 'bg-[var(--system-red)]/15 text-[var(--system-red)]' : 'bg-[var(--fill-secondary)] text-[var(--label-primary)]' : 'text-[var(--label-tertiary)] hover:bg-[var(--fill-tertiary)]'}`}>
                         {type === 'ALL' ? 'All' : isFixedIncome ? 'DEP' : type}
-                        <span className={`text-[10px] px-1.5 py-0.5 rounded ${filterType === type ? 'bg-white/30' : 'bg-[var(--fill-tertiary)]'}`}>{transactionCounts[type]}</span>
+                        <span className={`text-[11px] px-1.5 py-0.5 rounded ${filterType === type ? 'bg-white/30' : 'bg-[var(--fill-tertiary)]'}`}>{transactionCounts[type]}</span>
                       </button>
                     ))}
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
-                  <span className="text-[12px] text-[var(--label-tertiary)]">Sort:</span>
-                  <select value={sortOrder} onChange={(e) => setSortOrder(e.target.value)} className="px-2 py-1 rounded-md text-[12px] font-medium bg-[var(--fill-tertiary)] text-[var(--label-primary)] border-none outline-none cursor-pointer">
+                  <span className="text-[13px] text-[var(--label-tertiary)]">Sort:</span>
+                  <select value={sortOrder} onChange={(e) => setSortOrder(e.target.value)} className="px-2 py-1 rounded-md text-[13px] font-medium bg-[var(--fill-tertiary)] text-[var(--label-primary)] border-none outline-none cursor-pointer">
                     <option value="latest">Latest First</option>
                     <option value="oldest">Oldest First</option>
                   </select>
@@ -1171,13 +1170,13 @@ export default function ManageAsset() {
                   <table className="min-w-full">
                     <thead className="sticky top-0 z-10">
                       <tr className="bg-[var(--fill-tertiary)]/80 backdrop-blur-sm">
-                        <th className="px-5 py-2.5 text-left text-[10px] font-semibold text-[var(--label-tertiary)] uppercase tracking-wider">Date</th>
-                        <th className="px-5 py-2.5 text-left text-[10px] font-semibold text-[var(--label-tertiary)] uppercase tracking-wider">Type</th>
-                        {!isFixedIncome && <th className="px-5 py-2.5 text-right text-[10px] font-semibold text-[var(--label-tertiary)] uppercase tracking-wider">Qty</th>}
-                        {!isFixedIncome && <th className="px-5 py-2.5 text-right text-[10px] font-semibold text-[var(--label-tertiary)] uppercase tracking-wider">Price</th>}
-                        <th className="px-5 py-2.5 text-right text-[10px] font-semibold text-[var(--label-tertiary)] uppercase tracking-wider">{isFixedIncome ? 'Amount' : 'Total'}</th>
-                        {!isFixedIncome && <th className="px-5 py-2.5 text-right text-[10px] font-semibold text-[var(--label-tertiary)] uppercase tracking-wider">Gain/Loss</th>}
-                        <th className="px-5 py-2.5 text-left text-[10px] font-semibold text-[var(--label-tertiary)] uppercase tracking-wider">Notes</th>
+                        <th className="px-5 py-2.5 text-left text-[11px] font-semibold text-[var(--label-tertiary)] uppercase tracking-wider">Date</th>
+                        <th className="px-5 py-2.5 text-left text-[11px] font-semibold text-[var(--label-tertiary)] uppercase tracking-wider">Type</th>
+                        {!isFixedIncome && <th className="px-5 py-2.5 text-right text-[11px] font-semibold text-[var(--label-tertiary)] uppercase tracking-wider">Qty</th>}
+                        {!isFixedIncome && <th className="px-5 py-2.5 text-right text-[11px] font-semibold text-[var(--label-tertiary)] uppercase tracking-wider">Price</th>}
+                        <th className="px-5 py-2.5 text-right text-[11px] font-semibold text-[var(--label-tertiary)] uppercase tracking-wider">{isFixedIncome ? 'Amount' : 'Total'}</th>
+                        {!isFixedIncome && <th className="px-5 py-2.5 text-right text-[11px] font-semibold text-[var(--label-tertiary)] uppercase tracking-wider">Gain/Loss</th>}
+                        <th className="px-5 py-2.5 text-left text-[11px] font-semibold text-[var(--label-tertiary)] uppercase tracking-wider">Notes</th>
                         <th className="px-5 py-2.5 w-20"></th>
                       </tr>
                     </thead>
@@ -1186,41 +1185,41 @@ export default function ManageAsset() {
                         {processedTransactions.map((txn, index) => (
                           <motion.tr key={txn.id} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ ...spring.snappy, delay: Math.min(index * ANIMATION.STAGGER_DELAY, ANIMATION.STAGGER_DELAY_MAX) }} className="group hover:bg-[var(--fill-tertiary)]/40 transition-colors">
                             <td className="px-5 py-3.5 whitespace-nowrap">
-                              <span className="text-[14px] font-medium text-[var(--label-primary)] tabular-nums">{formatDate(txn.transaction_date)}</span>
+                              <span className="text-[15px] font-medium text-[var(--label-primary)] tabular-nums">{formatDate(txn.transaction_date)}</span>
                             </td>
                             <td className="px-5 py-3.5 whitespace-nowrap">
-                              <span className={`inline-flex items-center justify-center w-14 py-1 rounded-md text-[11px] font-bold ${txn.type === 'BUY' ? 'bg-[#059669] text-white' : 'bg-[#DC2626] text-white'}`}>
+                              <span className={`inline-flex items-center justify-center w-14 py-1 rounded-md text-[12px] font-bold ${txn.type === 'BUY' ? 'bg-[var(--system-green)] text-white' : 'bg-[var(--system-red)] text-white'}`}>
                                 {isFixedIncome ? 'DEP' : txn.type}
                               </span>
-                              {txn.is_initial_holding === 1 && <span className="ml-2 text-[10px] text-[var(--label-quaternary)] cursor-help" title="This was recorded as an initial/existing holding">Initial</span>}
+                              {txn.is_initial_holding === 1 && <span className="ml-2 text-[11px] text-[var(--label-quaternary)] cursor-help" title="This was recorded as an initial/existing holding">Initial</span>}
                             </td>
                             {!isFixedIncome && (
                               <td className="px-5 py-3.5 whitespace-nowrap text-right">
-                                <span className="text-[15px] font-semibold text-[var(--label-primary)] tabular-nums">{formatNumber(txn.quantity)}</span>
+                                <span className="text-[16px] font-semibold text-[var(--label-primary)] tabular-nums">{formatNumber(txn.quantity)}</span>
                               </td>
                             )}
                             {!isFixedIncome && (
                               <td className="px-5 py-3.5 whitespace-nowrap text-right">
                                 <div className="flex items-center justify-end gap-2">
-                                  <span className="text-[14px] text-[var(--label-secondary)] tabular-nums">{formatPrice(txn.price)}</span>
+                                  <span className="text-[15px] text-[var(--label-secondary)] tabular-nums">{formatPrice(txn.price)}</span>
                                   <PriceCompareIndicator txnPrice={txn.price} currentPrice={currentPrice} type={txn.type} />
                                 </div>
                               </td>
                             )}
                             <td className="px-5 py-3.5 whitespace-nowrap text-right">
-                              <span className="text-[15px] font-bold text-[var(--label-primary)] tabular-nums">{formatCurrency(txn.total_amount)}</span>
+                              <span className="text-[16px] font-bold text-[var(--label-primary)] tabular-nums">{formatCurrency(txn.total_amount)}</span>
                             </td>
                             {!isFixedIncome && (
                               <td className="px-5 py-3.5 whitespace-nowrap text-right">
                                 {txn.type === 'SELL' && txn.realized_gain !== null ? (
-                                  <span className={`text-[14px] font-semibold tabular-nums ${txn.realized_gain >= 0 ? 'text-[#059669]' : 'text-[#DC2626]'}`}>
+                                  <span className={`text-[15px] font-semibold tabular-nums ${txn.realized_gain >= 0 ? 'text-[var(--system-green)]' : 'text-[var(--system-red)]'}`}>
                                     {txn.realized_gain >= 0 ? '+' : ''}{formatCurrency(txn.realized_gain)}
                                   </span>
                                 ) : <span className="text-[var(--label-quaternary)]">—</span>}
                               </td>
                             )}
                             <td className="px-5 py-3.5 max-w-[180px]">
-                              <span className="text-[13px] text-[var(--label-tertiary)] truncate block cursor-help" title={txn.notes || 'No notes'}>
+                              <span className="text-[14px] text-[var(--label-tertiary)] truncate block cursor-help" title={txn.notes || 'No notes'}>
                                 {txn.notes || <span className="text-[var(--label-quaternary)]">—</span>}
                               </span>
                             </td>
@@ -1231,7 +1230,7 @@ export default function ManageAsset() {
                                     <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125" />
                                   </svg>
                                 </motion.button>
-                                <motion.button whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.95 }} onClick={() => handleDeleteClick(txn)} className="w-8 h-8 flex items-center justify-center rounded-lg text-[var(--label-quaternary)] hover:text-[#DC2626] hover:bg-[#DC2626]/10 transition-all" title="Delete transaction">
+                                <motion.button whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.95 }} onClick={() => handleDeleteClick(txn)} className="w-8 h-8 flex items-center justify-center rounded-lg text-[var(--label-quaternary)] hover:text-[var(--system-red)] hover:bg-[var(--system-red)]/10 transition-all" title="Delete transaction">
                                   <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                                     <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
                                   </svg>
@@ -1252,27 +1251,27 @@ export default function ManageAsset() {
                       <div className="flex items-start justify-between gap-3">
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 mb-2">
-                            <span className={`inline-flex items-center justify-center px-2.5 py-1 rounded-md text-[11px] font-bold ${txn.type === 'BUY' ? 'bg-[#059669] text-white' : 'bg-[#DC2626] text-white'}`}>
+                            <span className={`inline-flex items-center justify-center px-2.5 py-1 rounded-md text-[12px] font-bold ${txn.type === 'BUY' ? 'bg-[var(--system-green)] text-white' : 'bg-[var(--system-red)] text-white'}`}>
                               {isFixedIncome ? 'DEPOSIT' : txn.type}
                             </span>
-                            <span className="text-[13px] text-[var(--label-tertiary)]">{formatDate(txn.transaction_date)}</span>
+                            <span className="text-[14px] text-[var(--label-tertiary)]">{formatDate(txn.transaction_date)}</span>
                           </div>
                           <div className="grid grid-cols-2 gap-x-4 gap-y-2">
                             {!isFixedIncome && (
                               <>
                                 <div>
-                                  <p className="text-[10px] text-[var(--label-tertiary)] uppercase">Qty</p>
-                                  <p className="text-[15px] font-semibold text-[var(--label-primary)] tabular-nums">{formatNumber(txn.quantity)}</p>
+                                  <p className="text-[11px] text-[var(--label-tertiary)] uppercase">Qty</p>
+                                  <p className="text-[16px] font-semibold text-[var(--label-primary)] tabular-nums">{formatNumber(txn.quantity)}</p>
                                 </div>
                                 <div>
-                                  <p className="text-[10px] text-[var(--label-tertiary)] uppercase">Price</p>
-                                  <p className="text-[14px] text-[var(--label-secondary)] tabular-nums">{formatPrice(txn.price)}</p>
+                                  <p className="text-[11px] text-[var(--label-tertiary)] uppercase">Price</p>
+                                  <p className="text-[15px] text-[var(--label-secondary)] tabular-nums">{formatPrice(txn.price)}</p>
                                 </div>
                               </>
                             )}
                             <div>
-                              <p className="text-[10px] text-[var(--label-tertiary)] uppercase">{isFixedIncome ? 'Amount' : 'Total'}</p>
-                              <p className="text-[15px] font-bold text-[var(--label-primary)] tabular-nums">{formatCurrency(txn.total_amount)}</p>
+                              <p className="text-[11px] text-[var(--label-tertiary)] uppercase">{isFixedIncome ? 'Amount' : 'Total'}</p>
+                              <p className="text-[16px] font-bold text-[var(--label-primary)] tabular-nums">{formatCurrency(txn.total_amount)}</p>
                             </div>
                           </div>
                         </div>
@@ -1282,7 +1281,7 @@ export default function ManageAsset() {
                               <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125" />
                             </svg>
                           </button>
-                          <button onClick={() => handleDeleteClick(txn)} className="w-8 h-8 flex items-center justify-center rounded-lg text-[var(--label-quaternary)] hover:text-[#DC2626] hover:bg-[#DC2626]/10 transition-all">
+                          <button onClick={() => handleDeleteClick(txn)} className="w-8 h-8 flex items-center justify-center rounded-lg text-[var(--label-quaternary)] hover:text-[var(--system-red)] hover:bg-[var(--system-red)]/10 transition-all">
                             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                               <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
                             </svg>
@@ -1295,8 +1294,8 @@ export default function ManageAsset() {
               </>
             ) : transactions.length > 0 ? (
               <div className="px-6 py-10 text-center">
-                <p className="text-[14px] text-[var(--label-tertiary)]">No {filterType.toLowerCase()} transactions found</p>
-                <button onClick={() => setFilterType('ALL')} className="mt-2 text-[13px] font-medium hover:underline" style={{ color: categoryColor }}>Show all transactions</button>
+                <p className="text-[15px] text-[var(--label-tertiary)]">No {filterType.toLowerCase()} transactions found</p>
+                <button onClick={() => setFilterType('ALL')} className="mt-2 text-[14px] font-medium hover:underline" style={{ color: categoryColor }}>Show all transactions</button>
               </div>
             ) : (
               <div className="px-6 py-12 text-center">
@@ -1306,9 +1305,9 @@ export default function ManageAsset() {
                   </svg>
                 </div>
                 <h3 className="text-[16px] font-semibold text-[var(--label-primary)] mb-1">No transactions yet</h3>
-                <p className="text-[13px] text-[var(--label-secondary)] mb-4">Record your first {isFixedIncome ? 'deposit' : 'buy or sell transaction'}</p>
+                <p className="text-[14px] text-[var(--label-secondary)] mb-4">Record your first {isFixedIncome ? 'deposit' : 'buy or sell transaction'}</p>
                 <Link to="/assets/add" state={{ symbol: asset.symbol, assetType: asset.asset_type, exchange: asset.exchange, category: asset.category, assetId: asset.id }}>
-                  <motion.button whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }} className="inline-flex items-center gap-2 px-4 py-2.5 text-white text-[13px] font-medium rounded-lg hover:opacity-90 transition-opacity" style={{ backgroundColor: categoryColor }}>
+                  <motion.button whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }} className="inline-flex items-center gap-2 px-4 py-2.5 text-white text-[14px] font-medium rounded-lg hover:opacity-90 transition-opacity" style={{ backgroundColor: categoryColor }}>
                     <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                       <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
                     </svg>
@@ -1320,7 +1319,7 @@ export default function ManageAsset() {
 
               {/* Keyboard Shortcuts Hint */}
               {transactions.length > 0 && (
-                <div className="hidden lg:flex px-5 py-2 border-t border-[var(--separator-opaque)] bg-[var(--fill-tertiary)]/30 items-center justify-center gap-6 text-[11px] text-[var(--label-quaternary)]">
+                <div className="hidden lg:flex px-5 py-2 border-t border-[var(--separator-opaque)] bg-[var(--fill-tertiary)]/30 items-center justify-center gap-6 text-[12px] text-[var(--label-quaternary)]">
                   <span><kbd className="px-1.5 py-0.5 bg-[var(--bg-primary)] rounded border border-[var(--separator-opaque)] font-mono">N</kbd> New</span>
                   <span><kbd className="px-1.5 py-0.5 bg-[var(--bg-primary)] rounded border border-[var(--separator-opaque)] font-mono">E</kbd> Export</span>
                   <span><kbd className="px-1.5 py-0.5 bg-[var(--bg-primary)] rounded border border-[var(--separator-opaque)] font-mono">Esc</kbd> Back</span>
@@ -1338,17 +1337,17 @@ export default function ManageAsset() {
       <Modal isOpen={deleteModal.show} onClose={() => setDeleteModal({ show: false, transaction: null })} title="Delete Transaction" size="sm">
         <div className="p-5">
           <div className="flex items-start gap-4 mb-6">
-            <div className="w-12 h-12 rounded-full bg-[#DC2626]/10 flex items-center justify-center flex-shrink-0">
-              <svg className="w-6 h-6 text-[#DC2626]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+            <div className="w-12 h-12 rounded-2xl bg-[var(--system-red)]/10 flex items-center justify-center flex-shrink-0 shadow-[var(--shadow-floating)]">
+              <svg className="w-6 h-6 text-[var(--system-red)]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
               </svg>
             </div>
             <div>
-              <p className="text-[15px] text-[var(--label-primary)] mb-1">Are you sure you want to delete this transaction?</p>
-              <p className="text-[13px] text-[var(--label-secondary)]">This will recalculate your holdings and cannot be undone.</p>
+              <p className="text-[16px] font-semibold text-[var(--label-primary)] mb-1">Are you sure you want to delete this transaction?</p>
+              <p className="text-[14px] text-[var(--label-secondary)]">This will recalculate your holdings and cannot be undone.</p>
               {deleteModal.transaction && (
-                <div className="mt-3 p-3 bg-[var(--fill-tertiary)] rounded-lg">
-                  <p className="text-[12px] text-[var(--label-tertiary)]">
+                <div className="mt-3 p-3 bg-[var(--fill-tertiary)] rounded-2xl">
+                  <p className="text-[13px] text-[var(--label-tertiary)] tabular-nums">
                     {deleteModal.transaction.type} • {formatDate(deleteModal.transaction.transaction_date)} • {formatCurrency(deleteModal.transaction.total_amount)}
                   </p>
                 </div>
@@ -1356,8 +1355,8 @@ export default function ManageAsset() {
             </div>
           </div>
           <div className="flex gap-3">
-            <button onClick={() => setDeleteModal({ show: false, transaction: null })} className="flex-1 px-4 py-2.5 bg-[var(--fill-tertiary)] hover:bg-[var(--fill-secondary)] text-[var(--label-primary)] rounded-lg text-[14px] font-medium transition-colors">Cancel</button>
-            <button onClick={handleDeleteConfirm} disabled={deleting} className="flex-1 px-4 py-2.5 bg-[#DC2626] hover:bg-[#B91C1C] text-white rounded-lg text-[14px] font-medium transition-colors disabled:opacity-50">{deleting ? 'Deleting...' : 'Delete'}</button>
+            <button onClick={() => setDeleteModal({ show: false, transaction: null })} className="flex-1 px-4 py-2.5 bg-[var(--fill-tertiary)] hover:bg-[var(--fill-secondary)] text-[var(--label-primary)] rounded-2xl text-[15px] font-medium transition-colors">Cancel</button>
+            <button onClick={handleDeleteConfirm} disabled={deleting} className="flex-1 px-4 py-2.5 bg-[var(--system-red)] hover:bg-[var(--system-red)]/90 text-white rounded-2xl text-[15px] font-medium transition-colors disabled:opacity-50">{deleting ? 'Deleting...' : 'Delete'}</button>
           </div>
         </div>
       </Modal>
@@ -1368,31 +1367,31 @@ export default function ManageAsset() {
           {editModal.transaction && (
             <div className="space-y-4">
               <div className="flex items-center gap-2 mb-4">
-                <span className={`inline-flex items-center justify-center px-2.5 py-1 rounded-md text-[11px] font-bold ${editModal.transaction.type === 'BUY' ? 'bg-[#059669] text-white' : 'bg-[#DC2626] text-white'}`}>{editModal.transaction.type}</span>
+                <span className={`inline-flex items-center justify-center px-2.5 py-1 rounded-md text-[12px] font-bold ${editModal.transaction.type === 'BUY' ? 'bg-[var(--system-green)] text-white' : 'bg-[var(--system-red)] text-white'}`}>{editModal.transaction.type}</span>
               </div>
               <div>
-                <label className="block text-[12px] font-medium text-[var(--label-secondary)] mb-1.5">Date</label>
-                <input type="date" value={editForm.transaction_date} onChange={(e) => setEditForm(prev => ({ ...prev, transaction_date: e.target.value }))} max={new Date().toISOString().split('T')[0]} className="w-full px-3 py-2.5 bg-[var(--fill-tertiary)] border border-[var(--separator-opaque)] rounded-lg text-[14px] text-[var(--label-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--chart-primary)]/30" />
+                <label className="block text-[13px] font-medium text-[var(--label-secondary)] mb-1.5">Date</label>
+                <input type="date" value={editForm.transaction_date} onChange={(e) => setEditForm(prev => ({ ...prev, transaction_date: e.target.value }))} max={new Date().toISOString().split('T')[0]} className="w-full px-3 py-2.5 bg-[var(--fill-tertiary)] border border-[var(--separator-opaque)] rounded-lg text-[15px] text-[var(--label-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--chart-primary)]/30" />
               </div>
               {!isFixedIncome && (
                 <>
                   <div>
-                    <label className="block text-[12px] font-medium text-[var(--label-secondary)] mb-1.5">Quantity</label>
-                    <input type="number" step="any" value={editForm.quantity} onChange={(e) => setEditForm(prev => ({ ...prev, quantity: e.target.value }))} className="w-full px-3 py-2.5 bg-[var(--fill-tertiary)] border border-[var(--separator-opaque)] rounded-lg text-[14px] text-[var(--label-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--chart-primary)]/30" />
+                    <label className="block text-[13px] font-medium text-[var(--label-secondary)] mb-1.5">Quantity</label>
+                    <input type="number" step="any" value={editForm.quantity} onChange={(e) => setEditForm(prev => ({ ...prev, quantity: e.target.value }))} className="w-full px-3 py-2.5 bg-[var(--fill-tertiary)] border border-[var(--separator-opaque)] rounded-lg text-[15px] text-[var(--label-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--chart-primary)]/30" />
                   </div>
                   <div>
-                    <label className="block text-[12px] font-medium text-[var(--label-secondary)] mb-1.5">Price</label>
-                    <input type="number" step="any" value={editForm.price} onChange={(e) => setEditForm(prev => ({ ...prev, price: e.target.value }))} className="w-full px-3 py-2.5 bg-[var(--fill-tertiary)] border border-[var(--separator-opaque)] rounded-lg text-[14px] text-[var(--label-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--chart-primary)]/30" />
+                    <label className="block text-[13px] font-medium text-[var(--label-secondary)] mb-1.5">Price</label>
+                    <input type="number" step="any" value={editForm.price} onChange={(e) => setEditForm(prev => ({ ...prev, price: e.target.value }))} className="w-full px-3 py-2.5 bg-[var(--fill-tertiary)] border border-[var(--separator-opaque)] rounded-lg text-[15px] text-[var(--label-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--chart-primary)]/30" />
                   </div>
                 </>
               )}
               <div>
-                <label className="block text-[12px] font-medium text-[var(--label-secondary)] mb-1.5">Notes</label>
-                <textarea value={editForm.notes} onChange={(e) => setEditForm(prev => ({ ...prev, notes: e.target.value }))} rows={3} placeholder="Add notes..." className="w-full px-3 py-2.5 bg-[var(--fill-tertiary)] border border-[var(--separator-opaque)] rounded-lg text-[14px] text-[var(--label-primary)] placeholder:text-[var(--label-quaternary)] focus:outline-none focus:ring-2 focus:ring-[var(--chart-primary)]/30 resize-none" />
+                <label className="block text-[13px] font-medium text-[var(--label-secondary)] mb-1.5">Notes</label>
+                <textarea value={editForm.notes} onChange={(e) => setEditForm(prev => ({ ...prev, notes: e.target.value }))} rows={3} placeholder="Add notes..." className="w-full px-3 py-2.5 bg-[var(--fill-tertiary)] border border-[var(--separator-opaque)] rounded-lg text-[15px] text-[var(--label-primary)] placeholder:text-[var(--label-quaternary)] focus:outline-none focus:ring-2 focus:ring-[var(--chart-primary)]/30 resize-none" />
               </div>
               <div className="flex gap-3 pt-2">
-                <button onClick={() => setEditModal({ show: false, transaction: null })} className="flex-1 px-4 py-2.5 bg-[var(--fill-tertiary)] hover:bg-[var(--fill-secondary)] text-[var(--label-primary)] rounded-lg text-[14px] font-medium transition-colors">Cancel</button>
-                <button onClick={handleEditSave} disabled={txnSaving} className="flex-1 px-4 py-2.5 text-white rounded-lg text-[14px] font-medium transition-colors disabled:opacity-50" style={{ backgroundColor: categoryColor }}>{txnSaving ? 'Saving...' : 'Save Changes'}</button>
+                <button onClick={() => setEditModal({ show: false, transaction: null })} className="flex-1 px-4 py-2.5 bg-[var(--fill-tertiary)] hover:bg-[var(--fill-secondary)] text-[var(--label-primary)] rounded-lg text-[15px] font-medium transition-colors">Cancel</button>
+                <button onClick={handleEditSave} disabled={txnSaving} className="flex-1 px-4 py-2.5 text-white rounded-lg text-[15px] font-medium transition-colors disabled:opacity-50" style={{ backgroundColor: categoryColor }}>{txnSaving ? 'Saving...' : 'Save Changes'}</button>
               </div>
             </div>
           )}
@@ -1440,7 +1439,7 @@ export default function ManageAsset() {
               </div>
               <div>
                 <label className={labelClass}>Added On <span className="text-[var(--label-quaternary)] font-normal ml-1">(read-only)</span></label>
-                <div className="flex items-center px-3 py-2.5 bg-[var(--fill-tertiary)] border border-[var(--separator-opaque)] rounded-lg text-[14px] text-[var(--label-secondary)]">
+                <div className="flex items-center px-3 py-2.5 bg-[var(--fill-tertiary)] border border-[var(--separator-opaque)] rounded-lg text-[15px] text-[var(--label-secondary)]">
                   {formData.created_at ? new Date(formData.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—'}
                 </div>
               </div>
@@ -1456,14 +1455,14 @@ export default function ManageAsset() {
             <button
               type="button"
               onClick={() => setMetadataExpanded(false)}
-              className="flex-1 px-4 py-2.5 bg-[var(--fill-tertiary)] hover:bg-[var(--fill-secondary)] text-[var(--label-primary)] rounded-lg text-[14px] font-medium transition-colors"
+              className="flex-1 px-4 py-2.5 bg-[var(--fill-tertiary)] hover:bg-[var(--fill-secondary)] text-[var(--label-primary)] rounded-lg text-[15px] font-medium transition-colors"
             >
               Cancel
             </button>
             <button
               type="submit"
               disabled={!hasUnsavedChanges || saving}
-              className="flex-1 px-4 py-2.5 text-white rounded-lg text-[14px] font-medium transition-colors disabled:opacity-50"
+              className="flex-1 px-4 py-2.5 text-white rounded-lg text-[15px] font-medium transition-colors disabled:opacity-50"
               style={{ backgroundColor: categoryColor }}
             >
               {saving ? 'Saving...' : 'Save Changes'}

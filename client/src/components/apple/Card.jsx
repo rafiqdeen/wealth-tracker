@@ -8,6 +8,7 @@ export default function Card({
   tappable = false,
   padding = "p-4",
   glow = false,
+  elevation = "raised", // flush, raised, floating
   onClick,
   as: Component = "div",
   ...props
@@ -15,10 +16,16 @@ export default function Card({
   const MotionComponent = motion[Component] || motion.div;
   const isInteractive = !!onClick || hoverable;
 
+  const elevationClasses = {
+    flush: 'shadow-none',
+    raised: 'shadow-[var(--shadow-raised)]',
+    floating: 'shadow-[var(--shadow-floating)]',
+  };
+
   // Subtle hover animation - minimal lift
   const hoverAnimation = hoverable ? {
-    y: -1,
-    boxShadow: '0 2px 8px rgba(0,0,0,0.06), 0 4px 12px rgba(0,0,0,0.04)',
+    y: -2,
+    boxShadow: '0 4px 16px rgba(0,0,0,0.08), 0 2px 6px rgba(0,0,0,0.04)',
   } : undefined;
 
   return (
@@ -38,9 +45,9 @@ export default function Card({
       className={`
         bg-[var(--bg-primary)]
         rounded-2xl
-        border border-[var(--separator-opaque)]/60
-        shadow-[0_1px_3px_rgba(0,0,0,0.02)]
-        transition-shadow duration-200
+        border border-[var(--separator-opaque)]/40
+        ${elevationClasses[elevation] || elevationClasses.raised}
+        transition-all duration-200
         ${padding}
         ${onClick ? 'cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--chart-primary)] focus-visible:ring-offset-2' : ''}
         ${className}
@@ -52,12 +59,12 @@ export default function Card({
   );
 }
 
-// Glass card with frosted effect - more subtle
+// Glass card with frosted effect
 export function GlassCard({
   children,
   className = "",
   padding = "p-4",
-  blur = "md", // sm, md, lg, xl
+  blur = "md",
   ...props
 }) {
   const blurClasses = {
@@ -74,7 +81,7 @@ export function GlassCard({
         ${blurClasses[blur]}
         rounded-xl
         border border-[var(--separator)]/10
-        shadow-[0_1px_4px_rgba(0,0,0,0.04)]
+        shadow-[var(--shadow-raised)]
         ${padding}
         ${className}
       `}
@@ -107,11 +114,11 @@ export function CardHeader({ title, subtitle, action }) {
   return (
     <div className="flex items-center justify-between mb-4">
       <div>
-        <h3 className="text-[17px] font-semibold text-[var(--label-primary)]">
+        <h3 className="text-[18px] font-semibold text-[var(--label-primary)]">
           {title}
         </h3>
         {subtitle && (
-          <p className="text-[13px] text-[var(--label-secondary)] mt-0.5">
+          <p className="text-[14px] text-[var(--label-secondary)] mt-0.5">
             {subtitle}
           </p>
         )}
@@ -127,21 +134,21 @@ export function StatCard({
   value,
   trend,
   trendValue,
-  color = "var(--system-blue)",
+  color = "var(--chart-primary)",
   className = ""
 }) {
   const isPositive = trend === 'up';
 
   return (
     <Card className={`${className}`} padding="p-5" hoverable>
-      <p className="text-[12px] font-medium text-[var(--label-tertiary)] uppercase tracking-wide mb-2">
+      <p className="text-[13px] font-medium text-[var(--label-tertiary)] uppercase tracking-wide mb-2">
         {label}
       </p>
       <p className="text-[26px] font-semibold text-[var(--label-primary)] tracking-tight">
         {value}
       </p>
       {trendValue && (
-        <p className={`text-[13px] font-medium mt-1 ${isPositive ? 'text-[var(--system-green)]' : 'text-[var(--system-amber)]'}`}>
+        <p className={`text-[14px] font-medium mt-1 ${isPositive ? 'text-[var(--system-green)]' : 'text-[var(--system-red)]'}`}>
           {isPositive ? '↑' : '↓'} {trendValue}
         </p>
       )}

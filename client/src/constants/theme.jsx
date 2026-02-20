@@ -1,9 +1,9 @@
-// iOS System category colors for asset types
+// Muted jewel-tone category colors for asset types
 export const categoryColors = {
   EQUITY: {
-    color: 'var(--system-blue)',
-    bg: 'bg-[var(--system-blue)]/10',
-    text: 'text-[var(--system-blue)]'
+    color: 'var(--category-equity)',
+    bg: 'bg-[var(--category-equity)]/10',
+    text: 'text-[var(--category-equity)]'
   },
   FIXED_INCOME: {
     color: 'var(--system-green)',

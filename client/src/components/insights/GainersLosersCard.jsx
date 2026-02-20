@@ -25,29 +25,29 @@ function AssetTypeBadge({ type }) {
 }
 
 function PerformerRow({ item, index, isGain }) {
-  const color = isGain ? '#10B981' : '#EF4444';
+  const color = isGain ? 'var(--system-green)' : 'var(--system-red)';
   const holding = formatHoldingPeriod(item.holdingYears);
 
   return (
     <div className="flex items-start gap-2.5 p-2.5 bg-[var(--bg-secondary)] rounded-xl border border-[var(--separator-opaque)]/40">
-      <span className="text-[12px] font-bold text-[var(--label-tertiary)] tabular-nums mt-0.5 w-5 shrink-0 text-center">{index + 1}</span>
+      <span className="text-[13px] font-bold text-[var(--label-tertiary)] tabular-nums mt-0.5 w-5 shrink-0 text-center">{index + 1}</span>
       <div className="flex-1 min-w-0">
         <div className="flex items-center justify-between mb-0.5 gap-2">
           <div className="flex items-center gap-1.5 min-w-0">
-            <p className="text-[13px] font-medium text-[var(--label-primary)] truncate">{item.asset.name}</p>
+            <p className="text-[14px] font-medium text-[var(--label-primary)] truncate">{item.asset.name}</p>
             <AssetTypeBadge type={item.asset.asset_type} />
           </div>
           <div className="flex items-center gap-1.5 shrink-0">
-            <p className="text-[13px] font-bold tabular-nums" style={{ color }}>
+            <p className="text-[14px] font-bold tabular-nums" style={{ color }}>
               {isGain ? '+' : ''}{item.returnPercent.toFixed(1)}%
             </p>
           </div>
         </div>
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            {holding && <p className="text-[10px] text-[var(--label-tertiary)]">Held {holding}</p>}
+            {holding && <p className="text-[11px] text-[var(--label-tertiary)]">Held {holding}</p>}
           </div>
-          <p className="text-[11px] tabular-nums" style={{ color: `${color}99` }}>
+          <p className="text-[12px] tabular-nums" style={{ color: `${color}99` }}>
             {isGain ? '+' : ''}{formatCompact(item.returnAmount)}
           </p>
         </div>
@@ -83,8 +83,8 @@ export default function GainersLosersCard({ assetsWithReturns, topPerformers, as
             <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 18L9 11.25l4.306 4.307a11.95 11.95 0 015.814-5.519l2.74-1.22m0 0l-5.94-2.28m5.94 2.28l-2.28 5.941" />
           </svg>
         </div>
-        <p className="text-[14px] font-medium text-[var(--label-secondary)] mb-1">No Performance Data</p>
-        <p className="text-[12px] text-[var(--label-tertiary)]">Add assets to see top performers</p>
+        <p className="text-[15px] font-medium text-[var(--label-secondary)] mb-1">No Performance Data</p>
+        <p className="text-[13px] text-[var(--label-tertiary)]">Add assets to see top performers</p>
       </div>
     );
   }
@@ -94,32 +94,32 @@ export default function GainersLosersCard({ assetsWithReturns, topPerformers, as
       {/* Title */}
       <div className="mb-6">
         <h2 className="text-[18px] font-bold text-[var(--label-primary)]">Gainers & Losers</h2>
-        <p className="text-[13px] text-[var(--label-tertiary)] mt-0.5">Best and worst performing assets</p>
+        <p className="text-[14px] text-[var(--label-tertiary)] mt-0.5">Best and worst performing assets</p>
       </div>
 
       {/* Hero: Featured Top Gainer */}
       {topGainer && (
-        <div className="mb-6 p-5 bg-gradient-to-br from-[#10B981]/10 to-[#059669]/5 border border-[#10B981]/20 rounded-2xl">
+        <div className="mb-6 p-5 bg-gradient-to-br from-[var(--system-green)]/10 to-[var(--system-green)]/5 border border-[var(--system-green)]/20 rounded-2xl">
           <div className="flex items-center gap-2 mb-3">
-            <div className="w-8 h-8 rounded-xl bg-[#10B981]/15 flex items-center justify-center">
-              <svg className="w-4 h-4 text-[#10B981]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+            <div className="w-8 h-8 rounded-xl bg-[var(--system-green)]/15 flex items-center justify-center">
+              <svg className="w-4 h-4 text-[var(--system-green)]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 10.5L12 3m0 0l7.5 7.5M12 3v18" />
               </svg>
             </div>
-            <span className="text-[12px] font-semibold text-[#10B981] uppercase tracking-wide">Top Performer</span>
+            <span className="text-[13px] font-semibold text-[var(--system-green)] uppercase tracking-wide">Top Performer</span>
             <AssetTypeBadge type={topGainer.asset.asset_type} />
           </div>
           <p className="text-[16px] font-semibold text-[var(--label-primary)] mb-1">{topGainer.asset.name}</p>
           <div className="flex items-baseline gap-3">
-            <p className="text-[36px] font-bold text-[#10B981] tabular-nums leading-none">
+            <p className="text-[36px] font-bold text-[var(--system-green)] tabular-nums leading-none" style={{ fontFamily: 'var(--font-display)' }}>
               +{topGainer.returnPercent.toFixed(1)}%
             </p>
-            <p className="text-[14px] text-[#10B981]/70 tabular-nums">
+            <p className="text-[15px] text-[var(--system-green)]/70 tabular-nums">
               +{formatCompact(topGainer.returnAmount)}
             </p>
           </div>
           {topGainer.holdingYears && (
-            <p className="text-[12px] text-[var(--label-tertiary)] mt-2">
+            <p className="text-[13px] text-[var(--label-tertiary)] mt-2">
               Held for {formatHoldingPeriod(topGainer.holdingYears)}
             </p>
           )}
@@ -132,12 +132,12 @@ export default function GainersLosersCard({ assetsWithReturns, topPerformers, as
         {gainers.length > 0 && (
           <div>
             <div className="flex items-center gap-2 mb-3">
-              <div className="w-5 h-5 rounded-md bg-[#10B981]/15 flex items-center justify-center">
-                <svg className="w-3 h-3 text-[#10B981]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+              <div className="w-5 h-5 rounded-md bg-[var(--system-green)]/15 flex items-center justify-center">
+                <svg className="w-3 h-3 text-[var(--system-green)]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 10.5L12 3m0 0l7.5 7.5M12 3v18" />
                 </svg>
               </div>
-              <h4 className="text-[13px] font-semibold text-[#10B981] uppercase tracking-wide">Top Gainers</h4>
+              <h4 className="text-[14px] font-semibold text-[var(--system-green)] uppercase tracking-wide">Top Gainers</h4>
             </div>
             <div className="space-y-2">
               {displayGainers.map((item, index) => (
@@ -147,7 +147,7 @@ export default function GainersLosersCard({ assetsWithReturns, topPerformers, as
             {gainers.length > 3 && (
               <button
                 onClick={() => setShowAllGainers(!showAllGainers)}
-                className="mt-2 text-[12px] font-medium text-[#10B981] hover:text-[#059669] transition-colors"
+                className="mt-2 text-[13px] font-medium text-[var(--system-green)] hover:text-[var(--system-green)] transition-colors"
               >
                 {showAllGainers ? 'Show less' : `See all ${gainers.length} gainers`}
               </button>
@@ -159,12 +159,12 @@ export default function GainersLosersCard({ assetsWithReturns, topPerformers, as
         {losers.length > 0 && (
           <div>
             <div className="flex items-center gap-2 mb-3">
-              <div className="w-5 h-5 rounded-md bg-[#EF4444]/15 flex items-center justify-center">
-                <svg className="w-3 h-3 text-[#EF4444]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+              <div className="w-5 h-5 rounded-md bg-[var(--system-red)]/15 flex items-center justify-center">
+                <svg className="w-3 h-3 text-[var(--system-red)]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 13.5L12 21m0 0l-7.5-7.5M12 21V3" />
                 </svg>
               </div>
-              <h4 className="text-[13px] font-semibold text-[#EF4444] uppercase tracking-wide">Top Losers</h4>
+              <h4 className="text-[14px] font-semibold text-[var(--system-red)] uppercase tracking-wide">Top Losers</h4>
             </div>
             <div className="space-y-2">
               {displayLosers.map((item, index) => (
@@ -174,7 +174,7 @@ export default function GainersLosersCard({ assetsWithReturns, topPerformers, as
             {losers.length > 3 && (
               <button
                 onClick={() => setShowAllLosers(!showAllLosers)}
-                className="mt-2 text-[12px] font-medium text-[#EF4444] hover:text-[#DC2626] transition-colors"
+                className="mt-2 text-[13px] font-medium text-[var(--system-red)] hover:text-[var(--system-red)] transition-colors"
               >
                 {showAllLosers ? 'Show less' : `See all ${losers.length} losers`}
               </button>

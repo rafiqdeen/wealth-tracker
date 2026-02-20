@@ -96,7 +96,7 @@ export default function StockAutocomplete({
           onFocus={() => results.length > 0 && setShowDropdown(true)}
           placeholder={placeholder}
           disabled={disabled}
-          className="w-full px-4 py-3 bg-[var(--fill-tertiary)] border-0 rounded-xl focus:outline-none focus:ring-2 focus:ring-[var(--system-blue)] transition-all text-[var(--label-primary)] placeholder-[var(--label-tertiary)] text-[15px] disabled:opacity-50"
+          className="w-full px-4 py-3 bg-[var(--fill-tertiary)] border-0 rounded-xl focus:outline-none focus:ring-2 focus:ring-[var(--system-blue)] transition-all text-[var(--label-primary)] placeholder-[var(--label-tertiary)] text-[16px] disabled:opacity-50"
         />
 
         {loading && (
@@ -144,11 +144,11 @@ export default function StockAutocomplete({
                 onClick={() => handleSelect(item)}
                 className="px-4 py-3 cursor-pointer hover:bg-[var(--fill-tertiary)] border-b border-[var(--separator)]/20 last:border-b-0 transition-colors"
               >
-                <div className="font-medium text-[15px] text-[var(--label-primary)]">{item.name}</div>
-                <div className="text-[13px] text-[var(--label-tertiary)] mt-0.5">
+                <div className="font-medium text-[16px] text-[var(--label-primary)]">{item.name}</div>
+                <div className="text-[14px] text-[var(--label-tertiary)] mt-0.5">
                   {item.symbol}
                   {item.exchange && (
-                    <span className="ml-2 px-1.5 py-0.5 bg-[var(--fill-secondary)] rounded text-[11px] font-medium">
+                    <span className="ml-2 px-1.5 py-0.5 bg-[var(--fill-secondary)] rounded text-[12px] font-medium">
                       {item.exchange}
                     </span>
                   )}
@@ -164,7 +164,7 @@ export default function StockAutocomplete({
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -10 }}
             transition={spring.snappy}
-            className="absolute z-50 mt-2 w-full bg-[var(--bg-primary)] rounded-xl shadow-lg shadow-black/10 p-4 text-[15px] text-[var(--label-tertiary)] border border-[var(--separator)]/30"
+            className="absolute z-50 mt-2 w-full bg-[var(--bg-primary)] rounded-xl shadow-lg shadow-black/10 p-4 text-[16px] text-[var(--label-tertiary)] border border-[var(--separator)]/30"
           >
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 bg-[var(--fill-tertiary)] rounded-xl flex items-center justify-center">
@@ -174,7 +174,7 @@ export default function StockAutocomplete({
               </div>
               <div>
                 <p className="font-medium text-[var(--label-primary)]">No results found</p>
-                <p className="text-[13px]">Try a different search term</p>
+                <p className="text-[14px]">Try a different search term</p>
               </div>
             </div>
           </motion.div>
@@ -186,7 +186,7 @@ export default function StockAutocomplete({
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -10 }}
             transition={spring.snappy}
-            className="absolute z-50 mt-2 w-full bg-[var(--bg-primary)] rounded-xl shadow-lg shadow-black/10 p-3 text-[14px] text-[var(--label-tertiary)] border border-[var(--separator)]/30"
+            className="absolute z-50 mt-2 w-full bg-[var(--bg-primary)] rounded-xl shadow-lg shadow-black/10 p-3 text-[15px] text-[var(--label-tertiary)] border border-[var(--separator)]/30"
           >
             <div className="flex items-center gap-2">
               <svg className="w-4 h-4 text-[var(--label-quaternary)]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>

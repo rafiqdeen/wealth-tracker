@@ -35,7 +35,7 @@ function getFreshnessInfo(lastUpdated) {
   if (age < FRESH_THRESHOLD) {
     return {
       status: 'fresh',
-      color: '#059669',        // Green
+      color: 'var(--system-green)',        // Green
       bgColor: 'rgba(5, 150, 105, 0.1)',
       label: 'Fresh'
     };
@@ -49,7 +49,7 @@ function getFreshnessInfo(lastUpdated) {
   } else {
     return {
       status: 'old',
-      color: '#DC2626',        // Red
+      color: 'var(--system-red)',        // Red
       bgColor: 'rgba(220, 38, 38, 0.1)',
       label: 'Old'
     };
@@ -122,7 +122,7 @@ export function FreshnessBadge({ lastUpdated, source, showSource = true, classNa
 
   return (
     <span
-      className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-medium ${className}`}
+      className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-medium ${className}`}
       style={{
         backgroundColor: freshness.bgColor,
         color: freshness.color
@@ -159,7 +159,7 @@ export function CombinedFreshnessBadge({ lastUpdated, source, marketStatus, clas
 
   return (
     <span
-      className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-medium whitespace-nowrap ${className}`}
+      className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-medium whitespace-nowrap ${className}`}
       style={{
         background: `linear-gradient(135deg, ${freshness.color}12, ${freshness.color}06)`,
         border: `1px solid ${freshness.color}18`
@@ -209,7 +209,7 @@ export function PriceFreshness({
 
   // Default: inline variant
   return (
-    <span className={`inline-flex items-center gap-1.5 text-[11px] ${className}`}>
+    <span className={`inline-flex items-center gap-1.5 text-[12px] ${className}`}>
       <FreshnessDot lastUpdated={lastUpdated} size={6} />
       <span style={{ color: 'var(--label-tertiary)' }}>
         {relativeTime}

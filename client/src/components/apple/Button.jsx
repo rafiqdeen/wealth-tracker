@@ -26,9 +26,9 @@ export default function Button({
   };
 
   const sizes = {
-    sm: "px-3 py-1.5 text-[15px] rounded-xl",
-    md: "px-4 py-2.5 text-[17px] rounded-xl",
-    lg: "px-6 py-3.5 text-[17px] rounded-xl",
+    sm: "px-3 py-1.5 text-[16px] rounded-xl",
+    md: "px-4 py-2.5 text-[18px] rounded-xl",
+    lg: "px-6 py-3.5 text-[18px] rounded-xl",
   };
 
   const content = (
@@ -132,7 +132,7 @@ export function TextButton({
       onClick={onClick}
       disabled={disabled}
       className={`
-        text-[17px] font-normal
+        text-[18px] font-normal
         focus:outline-none focus-visible:underline
         ${destructive ? 'text-[var(--system-red)]' : 'text-[var(--system-blue)]'}
         ${disabled ? 'opacity-40 cursor-not-allowed' : ''}

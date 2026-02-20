@@ -685,145 +685,127 @@ export default function Dashboard() {
 
   if (loading) {
     return (
-      <div className="p-4 md:px-12 md:py-6">
+      <div className="p-4 md:px-10 md:py-6">
         <DashboardSkeleton />
       </div>
     );
   }
 
   return (
-    <div className="p-4 md:px-12 md:py-6">
+    <div className="p-4 md:px-10 md:py-6">
       <motion.div
         variants={staggerContainer}
         initial="initial"
         animate="animate"
-        className="space-y-5"
+        className="space-y-6"
       >
-          {/* Main Dashboard Grid - Desktop: 2 columns, Mobile: stacked */}
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
+          {/* Hero Portfolio Card - Compact Row Layout */}
+          <motion.div variants={staggerItem}>
+            <div className="hero-card rounded-2xl overflow-hidden shadow-[var(--shadow-floating)]">
+              <div className="p-5 md:p-6 relative">
+                {/* Subtle gradient overlay */}
+                <div className="absolute inset-0 bg-gradient-to-br from-white/[0.03] via-transparent to-white/[0.01] pointer-events-none" />
 
-            {/* Left Column - Portfolio Summary + Holdings + Allocation */}
-            <motion.div variants={staggerItem} className="lg:col-span-3 space-y-4">
-              {/* Portfolio Summary Card - Gradient Style */}
-              <Card padding="p-0" className="overflow-hidden">
-                <div className="p-5 bg-gradient-to-br from-[var(--chart-primary)]/10 via-[var(--chart-primary)]/5 to-transparent">
-                  {/* Header */}
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="text-[11px] font-medium text-[var(--label-tertiary)] uppercase tracking-wide">Portfolio Value</span>
-                    <button
-                      onClick={handleRefresh}
-                      disabled={refreshing}
-                      className="p-1.5 rounded-lg text-[var(--label-tertiary)] hover:bg-[var(--bg-primary)]/50 transition-colors disabled:opacity-50"
-                      title="Sync prices"
-                    >
-                      {refreshing ? (
-                        <svg className="w-4 h-4 animate-spin" viewBox="0 0 24 24" fill="none">
-                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" />
-                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                        </svg>
-                      ) : (
-                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" />
-                        </svg>
-                      )}
-                    </button>
-                  </div>
-
-                  {/* Hero Value */}
-                  <p className="text-[48px] font-bold text-[var(--label-primary)] tracking-tight leading-none" style={{ fontFamily: 'var(--font-display)' }}>
-                    <AnimatedNumber value={totalValue} format="compact" />
-                  </p>
-
-                  {/* Returns Percentage & Freshness Badge */}
-                  <div className="flex items-center gap-2 mt-2 mb-4">
-                    <span className={`text-[18px] font-bold tracking-tight ${totalPnL >= 0 ? 'text-[#059669]' : 'text-[#DC2626]'}`}>
-                      {totalPnL >= 0 ? '+' : ''}{totalPnLPercent.toFixed(1)}%
-                    </span>
-                    {lastUpdated && (
-                      <CombinedFreshnessBadge
-                        lastUpdated={lastUpdated}
-                        source={marketStatus?.isOpen ? 'live' : 'cached'}
-                        marketStatus={marketStatus}
-                      />
-                    )}
-                  </div>
-
-                  {/* Divider */}
-                  <div className="h-px bg-[var(--separator-opaque)]/50 mb-4" />
-
-                  {/* Metrics Row */}
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-[11px] text-[var(--label-tertiary)] uppercase tracking-wide mb-0.5">Invested</p>
-                      <p className="text-[18px] font-bold text-[var(--label-primary)] tracking-tight">
-                        <AnimatedNumber value={totalInvested} format="compact" />
-                      </p>
-                    </div>
-                    <div className="h-8 w-px bg-[var(--separator-opaque)]/50" />
-                    <div className="text-right">
-                      <p className="text-[11px] text-[var(--label-tertiary)] uppercase tracking-wide mb-0.5">Returns</p>
-                      <p className={`text-[18px] font-bold tracking-tight ${totalPnL >= 0 ? 'text-[#059669]' : 'text-[#DC2626]'}`}>
-                        {totalPnL >= 0 ? '+' : ''}<AnimatedNumber value={Math.abs(totalPnL)} format="compact" />
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              </Card>
-
-              {/* XIRR Card */}
-              <Card
-                padding="p-0"
-                className={`overflow-hidden ${portfolioXIRR !== null ? 'cursor-pointer group' : ''}`}
-                onClick={() => portfolioXIRR !== null && setShowXirrDebug(true)}
-              >
-                <div className={`p-4 flex items-center gap-3 transition-all ${portfolioXIRR !== null ? 'hover:brightness-[0.98]' : ''}`}
-                  style={{
-                    background: portfolioXIRR !== null
-                      ? portfolioXIRR >= 0
-                        ? 'linear-gradient(to right, rgba(5, 150, 105, 0.08), rgba(5, 150, 105, 0.03), transparent)'
-                        : 'linear-gradient(to right, rgba(220, 38, 38, 0.08), rgba(220, 38, 38, 0.03), transparent)'
-                      : undefined
-                  }}
-                >
-                  {/* Icon */}
-                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
-                    portfolioXIRR !== null
-                      ? portfolioXIRR >= 0 ? 'bg-[#059669]/15' : 'bg-[#DC2626]/15'
-                      : 'bg-[var(--fill-tertiary)]'
-                  }`}>
-                    <svg className={`w-5 h-5 ${
-                      portfolioXIRR !== null
-                        ? portfolioXIRR >= 0 ? 'text-[#059669]' : 'text-[#DC2626]'
-                        : 'text-[var(--label-tertiary)]'
-                    }`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 18L9 11.25l4.306 4.307a11.95 11.95 0 015.814-5.519l2.74-1.22m0 0l-5.94-2.28m5.94 2.28l-2.28 5.941" />
-                    </svg>
-                  </div>
-
-                  {/* Content */}
-                  <div className="flex-1 min-w-0">
-                    <p className="text-[11px] font-medium text-[var(--label-tertiary)] uppercase tracking-wide mb-0.5">XIRR</p>
-                    {portfolioXIRR !== null ? (
-                      <p className={`text-[22px] font-bold tracking-tight leading-none ${portfolioXIRR >= 0 ? 'text-[#059669]' : 'text-[#DC2626]'}`}>
-                        {portfolioXIRR >= 0 ? '+' : ''}{portfolioXIRR.toFixed(1)}%
-                        <span className="text-[12px] font-medium text-[var(--label-tertiary)] ml-1">p.a.</span>
-                      </p>
-                    ) : (
-                      <p className="text-[22px] font-bold text-[var(--label-quaternary)]">—</p>
-                    )}
-                  </div>
-
-                  {/* Chevron - indicates tappable */}
-                  {portfolioXIRR !== null && (
-                    <div className="flex items-center gap-1 text-[var(--label-quaternary)] group-hover:text-[var(--label-secondary)] transition-colors">
-                      <span className="text-[11px] hidden sm:inline">Details</span>
-                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
-                      </svg>
-                    </div>
+                {/* Top bar: label + freshness + refresh */}
+                <div className="relative flex items-center gap-3 mb-4">
+                  <span className="text-[13px] font-semibold text-white/70 uppercase tracking-widest">Portfolio Value</span>
+                  {lastUpdated && (
+                    <CombinedFreshnessBadge
+                      lastUpdated={lastUpdated}
+                      source={marketStatus?.isOpen ? 'live' : 'cached'}
+                      marketStatus={marketStatus}
+                    />
                   )}
+                  <button
+                    onClick={handleRefresh}
+                    disabled={refreshing}
+                    className="p-1.5 rounded-lg text-white/40 hover:text-white/70 hover:bg-white/10 transition-all disabled:opacity-50 ml-auto"
+                    title="Sync prices"
+                  >
+                    {refreshing ? (
+                      <svg className="w-4 h-4 animate-spin" viewBox="0 0 24 24" fill="none">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" />
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                      </svg>
+                    ) : (
+                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" />
+                      </svg>
+                    )}
+                  </button>
                 </div>
-              </Card>
+
+                {/* Compact row: all metrics in one line */}
+                <div className="relative grid grid-cols-2 md:grid-cols-5 gap-4 md:gap-0 md:divide-x md:divide-white/[0.08]">
+                  {/* Portfolio Value */}
+                  <div className="md:pr-6">
+                    <p className="text-[36px] md:text-[42px] font-bold text-white tracking-tight leading-none" style={{ fontFamily: 'var(--font-display)' }}>
+                      <AnimatedNumber value={totalValue} format="compact" />
+                    </p>
+                    <p className="text-[13px] font-medium text-white/60 mt-1.5">Current Value</p>
+                  </div>
+
+                  {/* P&L */}
+                  <div className="md:px-6">
+                    <p className={`text-[36px] md:text-[42px] font-bold tracking-tight leading-none ${
+                      totalPnL >= 0 ? 'text-emerald-300' : 'text-red-300'
+                    }`} style={{ fontFamily: 'var(--font-display)' }}>
+                      {totalPnL >= 0 ? '+' : ''}<AnimatedNumber value={Math.abs(totalPnL)} format="compact" />
+                    </p>
+                    <p className="text-[13px] font-medium text-white/60 mt-1.5">P&L</p>
+                  </div>
+
+                  {/* Invested */}
+                  <div className="md:px-6">
+                    <p className="text-[36px] md:text-[42px] font-bold text-white/80 tracking-tight leading-none" style={{ fontFamily: 'var(--font-display)' }}>
+                      <AnimatedNumber value={totalInvested} format="compact" />
+                    </p>
+                    <p className="text-[13px] font-medium text-white/60 mt-1.5">Invested</p>
+                  </div>
+
+                  {/* Returns % */}
+                  <div className="md:px-6">
+                    <p className={`text-[36px] md:text-[42px] font-bold tracking-tight leading-none ${
+                      totalPnL >= 0 ? 'text-emerald-300' : 'text-red-300'
+                    }`} style={{ fontFamily: 'var(--font-display)' }}>
+                      {totalPnL >= 0 ? '+' : ''}{totalPnLPercent.toFixed(1)}%
+                    </p>
+                    <p className="text-[13px] font-medium text-white/60 mt-1.5">Returns</p>
+                  </div>
+
+                  {/* XIRR */}
+                  <div className="md:pl-6">
+                    {portfolioXIRR !== null ? (
+                      <div
+                        className="cursor-pointer group"
+                        onClick={() => setShowXirrDebug(true)}
+                      >
+                        <p className={`text-[36px] md:text-[42px] font-bold tracking-tight leading-none group-hover:opacity-80 transition-opacity ${
+                          portfolioXIRR >= 0 ? 'text-emerald-300' : 'text-red-300'
+                        }`} style={{ fontFamily: 'var(--font-display)' }}>
+                          {portfolioXIRR >= 0 ? '+' : ''}{portfolioXIRR.toFixed(1)}%
+                        </p>
+                        <p className="text-[13px] font-medium text-white/60 mt-1.5">XIRR <span className="text-white/35">· tap for details</span></p>
+                      </div>
+                    ) : (
+                      <div>
+                        <p className="text-[36px] md:text-[42px] font-bold text-white/30 tracking-tight leading-none" style={{ fontFamily: 'var(--font-display)' }}>
+                          —
+                        </p>
+                        <p className="text-[13px] font-medium text-white/60 mt-1.5">XIRR</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </motion.div>
+
+          {/* Main Dashboard Grid */}
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+
+            {/* Left Column - Allocation + Goals */}
+            <motion.div variants={staggerItem} className="lg:col-span-3 space-y-5">
 
               {/* Allocation - Donut Chart */}
               <Card padding="p-0" className="overflow-hidden">
@@ -834,7 +816,7 @@ export default function Dashboard() {
                       <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 10.5H21A7.5 7.5 0 0013.5 3v7.5z" />
                     </svg>
                   </div>
-                  <span className="text-[15px] font-semibold text-[var(--label-primary)]">Allocation</span>
+                  <span className="text-[16px] font-semibold text-[var(--label-primary)]">Allocation</span>
                 </div>
                 <div className="p-4">
                   {categoryBreakdown.length > 0 ? (
@@ -875,9 +857,9 @@ export default function Dashboard() {
                                       <div className="bg-[var(--bg-primary)] border border-[var(--separator-opaque)] rounded-xl px-3 py-2 shadow-lg whitespace-nowrap">
                                         <div className="flex items-center gap-2">
                                           <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: data.color }} />
-                                          <p className="text-[12px] font-semibold text-[var(--label-primary)]">{data.name}</p>
+                                          <p className="text-[13px] font-semibold text-[var(--label-primary)]">{data.name}</p>
                                         </div>
-                                        <p className="text-[11px] text-[var(--label-secondary)] ml-[18px]">{formatCompact(data.value)} · {data.percent.toFixed(1)}%</p>
+                                        <p className="text-[12px] text-[var(--label-secondary)] ml-[18px]">{formatCompact(data.value)} · {data.percent.toFixed(1)}%</p>
                                       </div>
                                     );
                                   }
@@ -888,7 +870,7 @@ export default function Dashboard() {
                           </ResponsiveContainer>
                           {/* Center Text */}
                           <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-                            <span className="text-[10px] font-medium text-[var(--label-tertiary)] uppercase tracking-wide">Total</span>
+                            <span className="text-[11px] font-medium text-[var(--label-tertiary)] uppercase tracking-wide">Total</span>
                             <span className="text-[18px] font-bold text-[var(--label-primary)]">{formatCompact(totalValue)}</span>
                           </div>
                         </div>
@@ -902,8 +884,8 @@ export default function Dashboard() {
                               className="w-2.5 h-2.5 rounded-full flex-shrink-0 ring-2 ring-transparent group-hover:ring-[var(--label-tertiary)]/20 transition-all"
                               style={{ backgroundColor: cat.color }}
                             />
-                            <span className="text-[11px] text-[var(--label-secondary)] truncate flex-1">{cat.name}</span>
-                            <span className="text-[11px] font-semibold text-[var(--label-primary)]">
+                            <span className="text-[12px] text-[var(--label-secondary)] truncate flex-1">{cat.name}</span>
+                            <span className="text-[12px] font-semibold text-[var(--label-primary)]">
                               {cat.percent.toFixed(1)}%
                             </span>
                           </div>
@@ -912,7 +894,7 @@ export default function Dashboard() {
                     </>
                   ) : (
                     <div className="py-6 text-center">
-                      <p className="text-[13px] text-[var(--label-tertiary)]">No allocation data</p>
+                      <p className="text-[14px] text-[var(--label-tertiary)]">No allocation data</p>
                     </div>
                   )}
                 </div>
@@ -923,15 +905,15 @@ export default function Dashboard() {
                 <Card padding="p-0" className="overflow-hidden">
                   {/* Header */}
                   <Link to="/goals" className="block">
-                    <div className="flex items-center gap-3 py-3.5 px-4 bg-gradient-to-r from-[#FF9500]/10 via-[#FF9500]/5 to-transparent">
-                      <div className="w-9 h-9 rounded-xl bg-[#FF9500] flex items-center justify-center shadow-sm">
+                    <div className="flex items-center gap-3 py-3.5 px-4 bg-gradient-to-r from-[var(--system-amber)]/10 via-[var(--system-amber)]/5 to-transparent">
+                      <div className="w-9 h-9 rounded-xl bg-[var(--system-amber)] flex items-center justify-center shadow-sm">
                         <svg className="w-[18px] h-[18px] text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                           <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12c0 1.268-.63 2.39-1.593 3.068a3.745 3.745 0 01-1.043 3.296 3.745 3.745 0 01-3.296 1.043A3.745 3.745 0 0112 21c-1.268 0-2.39-.63-3.068-1.593a3.746 3.746 0 01-3.296-1.043 3.745 3.745 0 01-1.043-3.296A3.745 3.745 0 013 12c0-1.268.63-2.39 1.593-3.068a3.745 3.745 0 011.043-3.296 3.746 3.746 0 013.296-1.043A3.746 3.746 0 0112 3c1.268 0 2.39.63 3.068 1.593a3.746 3.746 0 013.296 1.043 3.746 3.746 0 011.043 3.296A3.745 3.745 0 0121 12z" />
                         </svg>
                       </div>
-                      <span className="text-[15px] font-semibold text-[var(--label-primary)]">Goals</span>
+                      <span className="text-[16px] font-semibold text-[var(--label-primary)]">Goals</span>
                       <div className="flex items-center gap-1.5 ml-auto">
-                        <span className="text-[12px] font-medium text-[var(--label-tertiary)]">{activeGoals.length} Active</span>
+                        <span className="text-[13px] font-medium text-[var(--label-tertiary)]">{activeGoals.length} Active</span>
                         <svg className="w-4 h-4 text-[var(--label-quaternary)]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                           <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
                         </svg>
@@ -950,8 +932,8 @@ export default function Dashboard() {
                       // Calculate status based on target date and progress (only show if notable)
                       const getGoalStatus = () => {
                         if (!goal.target_date) {
-                          if (progressPercent >= 100) return { text: 'Completed', icon: '✓', color: '#10B981' };
-                          if (progressPercent >= 75) return { text: 'Almost there', icon: '✓', color: '#10B981' };
+                          if (progressPercent >= 100) return { text: 'Completed', icon: '✓', color: 'var(--system-green)' };
+                          if (progressPercent >= 75) return { text: 'Almost there', icon: '✓', color: 'var(--system-green)' };
                           return null; // No status for regular progress
                         }
 
@@ -980,13 +962,13 @@ export default function Dashboard() {
                         }
 
                         if (progressPercent >= 100) {
-                          return { text: 'Completed', icon: '✓', color: '#10B981' };
+                          return { text: 'Completed', icon: '✓', color: 'var(--system-green)' };
                         } else if (daysLeft < 0) {
-                          return { text: timeText, icon: '⚠', color: '#EF4444' };
+                          return { text: timeText, icon: '⚠', color: 'var(--system-red)' };
                         } else if (progressPercent >= expectedProgress + 10) {
-                          return { text: `Ahead · ${timeText}`, icon: '✓', color: '#10B981' };
+                          return { text: `Ahead · ${timeText}`, icon: '✓', color: 'var(--system-green)' };
                         } else if (progressPercent < expectedProgress - 10) {
-                          return { text: `Behind · ${timeText}`, icon: '⚠', color: '#F59E0B' };
+                          return { text: `Behind · ${timeText}`, icon: '⚠', color: 'var(--system-amber)' };
                         }
                         // On track - just show time remaining
                         return { text: timeText, icon: '→', color: 'var(--label-tertiary)' };
@@ -1071,10 +1053,10 @@ export default function Dashboard() {
                             <div className="flex-1 min-w-0">
                               {/* Name and Amount */}
                               <div className="flex items-center justify-between">
-                                <span className="text-[13px] font-semibold text-[var(--label-primary)] truncate">
+                                <span className="text-[14px] font-semibold text-[var(--label-primary)] truncate">
                                   {goal.name}
                                 </span>
-                                <span className="text-[11px] ml-2 shrink-0">
+                                <span className="text-[12px] ml-2 shrink-0">
                                   <span className="font-semibold text-[var(--label-primary)]">{formatCompact(goal.current_value || 0)}</span>
                                   <span className="font-medium text-[var(--label-quaternary)] mx-0.5">/</span>
                                   <span className="font-semibold text-[var(--label-secondary)]">{formatCompact(goal.target_amount)}</span>
@@ -1093,7 +1075,7 @@ export default function Dashboard() {
                                   />
                                 </div>
                                 <span
-                                  className="text-[12px] font-bold shrink-0 w-9 text-right"
+                                  className="text-[13px] font-bold shrink-0 w-9 text-right"
                                   style={{ color: categoryConfig.color }}
                                 >
                                   {progressPercent.toFixed(0)}%
@@ -1104,7 +1086,7 @@ export default function Dashboard() {
                               {status && (
                                 <div className="mt-1">
                                   <span
-                                    className="text-[10px] font-medium"
+                                    className="text-[11px] font-medium"
                                     style={{ color: status.color }}
                                   >
                                     {status.icon} {status.text}
@@ -1121,7 +1103,7 @@ export default function Dashboard() {
                   {/* Footer - More Goals */}
                   {activeGoals.length > 3 && (
                     <Link to="/goals" className="block px-4 py-2.5 border-t border-[var(--separator-opaque)]/50 bg-[var(--fill-tertiary)]/20 hover:bg-[var(--fill-tertiary)]/40 transition-colors">
-                      <p className="text-[12px] font-medium text-[var(--chart-primary)] text-center">
+                      <p className="text-[13px] font-medium text-[var(--chart-primary)] text-center">
                         +{activeGoals.length - 3} more goals →
                       </p>
                     </Link>
@@ -1138,7 +1120,7 @@ export default function Dashboard() {
                         <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 11.25v7.5" />
                       </svg>
                     </div>
-                    <span className="text-[15px] font-semibold text-[var(--label-primary)]">Maturities</span>
+                    <span className="text-[16px] font-semibold text-[var(--label-primary)]">Maturities</span>
                   </div>
 
                   {/* Maturity List */}
@@ -1151,15 +1133,15 @@ export default function Dashboard() {
                           <div className="flex items-center gap-2.5">
                             {/* Days Badge */}
                             <div className={`w-10 h-10 rounded-lg flex flex-col items-center justify-center shrink-0 ${
-                              isUrgent ? 'bg-[#EF4444]/10' : isSoon ? 'bg-[#F59E0B]/10' : 'bg-[var(--fill-tertiary)]'
+                              isUrgent ? 'bg-[var(--system-red)]/10' : isSoon ? 'bg-[var(--system-amber)]/10' : 'bg-[var(--fill-tertiary)]'
                             }`}>
-                              <span className={`text-[13px] font-bold leading-none ${
-                                isUrgent ? 'text-[#EF4444]' : isSoon ? 'text-[#F59E0B]' : 'text-[var(--label-primary)]'
+                              <span className={`text-[14px] font-bold leading-none ${
+                                isUrgent ? 'text-[var(--system-red)]' : isSoon ? 'text-[var(--system-amber)]' : 'text-[var(--label-primary)]'
                               }`}>
                                 {asset.daysUntilMaturity}
                               </span>
                               <span className={`text-[9px] font-medium ${
-                                isUrgent ? 'text-[#EF4444]' : isSoon ? 'text-[#F59E0B]' : 'text-[var(--label-tertiary)]'
+                                isUrgent ? 'text-[var(--system-red)]' : isSoon ? 'text-[var(--system-amber)]' : 'text-[var(--label-tertiary)]'
                               }`}>
                                 days
                               </span>
@@ -1168,18 +1150,18 @@ export default function Dashboard() {
                             {/* Content */}
                             <div className="flex-1 min-w-0">
                               <div className="flex items-center justify-between">
-                                <span className="text-[13px] font-semibold text-[var(--label-primary)] truncate">
+                                <span className="text-[14px] font-semibold text-[var(--label-primary)] truncate">
                                   {asset.name}
                                 </span>
-                                <span className="text-[12px] font-semibold text-[var(--label-primary)] ml-2 shrink-0">
+                                <span className="text-[13px] font-semibold text-[var(--label-primary)] ml-2 shrink-0">
                                   {formatCompact(asset.maturityValue)}
                                 </span>
                               </div>
                               <div className="flex items-center justify-between mt-0.5">
-                                <span className="text-[11px] text-[var(--label-tertiary)]">
+                                <span className="text-[12px] text-[var(--label-tertiary)]">
                                   {asset.asset_type} • {asset.institution || 'N/A'}
                                 </span>
-                                <span className="text-[10px] text-[var(--label-tertiary)]">
+                                <span className="text-[11px] text-[var(--label-tertiary)]">
                                   {asset.formattedDate}
                                 </span>
                               </div>
@@ -1193,7 +1175,7 @@ export default function Dashboard() {
                   {/* Footer */}
                   {upcomingMaturities.length > 3 && (
                     <Link to="/assets" className="block px-4 py-2.5 border-t border-[var(--separator-opaque)]/50 bg-[var(--fill-tertiary)]/20 hover:bg-[var(--fill-tertiary)]/40 transition-colors">
-                      <p className="text-[12px] font-medium text-[var(--chart-primary)] text-center">
+                      <p className="text-[13px] font-medium text-[var(--chart-primary)] text-center">
                         +{upcomingMaturities.length - 3} more →
                       </p>
                     </Link>
@@ -1203,7 +1185,7 @@ export default function Dashboard() {
             </motion.div>
 
             {/* Right Column - Chart + Category Performance */}
-            <motion.div variants={staggerItem} className="lg:col-span-9 space-y-4">
+            <motion.div variants={staggerItem} className="lg:col-span-9 space-y-5">
               <Card padding="p-0" className="overflow-hidden">
                 {/* Header */}
                 <div className="flex items-center justify-between py-3.5 px-5 bg-gradient-to-r from-[var(--chart-primary)]/10 via-[var(--chart-primary)]/5 to-transparent">
@@ -1213,13 +1195,13 @@ export default function Dashboard() {
                         <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 18L9 11.25l4.306 4.307a11.95 11.95 0 015.814-5.519l2.74-1.22m0 0l-5.94-2.28m5.94 2.28l-2.28 5.941" />
                       </svg>
                     </div>
-                    <span className="text-[15px] font-semibold text-[var(--label-primary)]">Investment Journey</span>
+                    <span className="text-[16px] font-semibold text-[var(--label-primary)]">Investment Journey</span>
                   </div>
                   {/* Export Button */}
                   <button
                     onClick={handleExportPDF}
                     disabled={assets.length === 0}
-                    className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-[var(--fill-tertiary)] border border-[var(--separator-opaque)] text-[var(--label-primary)] hover:bg-[var(--fill-secondary)] transition-colors disabled:opacity-50 text-[13px] font-semibold"
+                    className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-[var(--fill-tertiary)] border border-[var(--separator-opaque)] text-[var(--label-primary)] hover:bg-[var(--fill-secondary)] transition-colors disabled:opacity-50 text-[14px] font-semibold"
                   >
                     <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                       <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
@@ -1237,7 +1219,7 @@ export default function Dashboard() {
                         {formatCurrency(totalInvested)}
                       </p>
                       {totalPnLPercent !== 0 && (
-                        <span className={`text-[12px] font-semibold px-2 py-0.5 rounded ${totalPnL >= 0 ? 'bg-[#059669]/10 text-[#059669]' : 'bg-[#DC2626]/10 text-[#DC2626]'}`}>
+                        <span className={`text-[13px] font-semibold px-2 py-0.5 rounded ${totalPnL >= 0 ? 'bg-[var(--system-green)]/10 text-[var(--system-green)]' : 'bg-[var(--system-red)]/10 text-[var(--system-red)]'}`}>
                           {totalPnL >= 0 ? '+' : ''}{totalPnLPercent.toFixed(1)}%
                         </span>
                       )}
@@ -1246,7 +1228,7 @@ export default function Dashboard() {
                     <div className="hidden md:flex items-center gap-4">
                       <div className="flex items-center gap-1.5">
                         <div className="w-2 h-2 rounded-full bg-[var(--chart-primary)]" />
-                        <span className="text-[11px] text-[var(--label-tertiary)]">Invested</span>
+                        <span className="text-[12px] text-[var(--label-tertiary)]">Invested</span>
                       </div>
                     </div>
                   </div>
@@ -1259,7 +1241,7 @@ export default function Dashboard() {
                           key={period}
                           whileTap={tapScale}
                           onClick={() => handlePeriodChange(period)}
-                          className={`px-3 py-1.5 rounded-md text-[12px] font-medium transition-colors relative z-10 ${
+                          className={`px-3 py-1.5 rounded-md text-[13px] font-medium transition-colors relative z-10 ${
                             selectedPeriod === period
                               ? 'text-[var(--label-primary)]'
                               : 'text-[var(--label-tertiary)] hover:text-[var(--label-secondary)]'
@@ -1282,7 +1264,7 @@ export default function Dashboard() {
 
                 {/* Area Chart */}
                 {chartData.length > 0 ? (
-                  <div className="h-[300px] mt-4 pr-2">
+                  <div className="h-[380px] mt-4 pr-2">
                     <ResponsiveContainer width="100%" height="100%">
                       <AreaChart data={chartData} margin={{ top: 10, right: 10, left: 10, bottom: 5 }}>
                         <defs>
@@ -1359,8 +1341,8 @@ export default function Dashboard() {
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 013 19.875v-6.75zM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V8.625zM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V4.125z" />
                       </svg>
                     </div>
-                    <p className="text-[14px] text-[var(--label-tertiary)]">No investment data yet</p>
-                    <p className="text-[12px] text-[var(--label-quaternary)] mt-1">Add assets with transactions to see your journey</p>
+                    <p className="text-[15px] text-[var(--label-tertiary)]">No investment data yet</p>
+                    <p className="text-[13px] text-[var(--label-quaternary)] mt-1">Add assets with transactions to see your journey</p>
                   </div>
                 )}
               </Card>
@@ -1374,10 +1356,10 @@ export default function Dashboard() {
                         <path strokeLinecap="round" strokeLinejoin="round" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
                       </svg>
                     </div>
-                    <span className="text-[15px] font-semibold text-[var(--label-primary)]">Holdings</span>
-                    <span className="text-[12px] text-[var(--label-tertiary)]">({holdings.length} assets)</span>
+                    <span className="text-[16px] font-semibold text-[var(--label-primary)]">Holdings</span>
+                    <span className="text-[13px] text-[var(--label-tertiary)]">({holdings.length} assets)</span>
                   </div>
-                  <Link to="/assets" className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-[var(--fill-tertiary)] border border-[var(--separator-opaque)] text-[var(--label-primary)] hover:bg-[var(--fill-secondary)] transition-colors text-[13px] font-semibold">
+                  <Link to="/assets" className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-[var(--fill-tertiary)] border border-[var(--separator-opaque)] text-[var(--label-primary)] hover:bg-[var(--fill-secondary)] transition-colors text-[14px] font-semibold">
                     View All
                     <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                       <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
@@ -1389,7 +1371,7 @@ export default function Dashboard() {
                   <div className="overflow-x-auto">
                     <table className="w-full">
                       <thead>
-                        <tr className="text-[11px] font-medium text-[var(--label-tertiary)] uppercase tracking-wider border-b border-[var(--separator-opaque)]/50">
+                        <tr className="text-[12px] font-medium text-[var(--label-tertiary)] uppercase tracking-wider border-b border-[var(--separator-opaque)]/50">
                           <th className="text-left px-4 py-3 font-medium">Category</th>
                           <th className="text-right px-4 py-3 font-medium">Assets</th>
                           <th className="text-right px-4 py-3 font-medium">Invested</th>
@@ -1441,17 +1423,17 @@ export default function Dashboard() {
                                     )}
                                   </svg>
                                 </div>
-                                <span className="text-[14px] font-medium text-[var(--label-primary)]">{cat.label}</span>
+                                <span className="text-[15px] font-medium text-[var(--label-primary)]">{cat.label}</span>
                               </div>
                             </td>
                             <td className="text-right px-4 py-3">
-                              <span className="text-[14px] text-[var(--label-secondary)]">{cat.assetCount}</span>
+                              <span className="text-[15px] text-[var(--label-secondary)]">{cat.assetCount}</span>
                             </td>
                             <td className="text-right px-4 py-3">
-                              <span className="text-[14px] text-[var(--label-secondary)]">{formatCompact(cat.invested)}</span>
+                              <span className="text-[15px] text-[var(--label-secondary)]">{formatCompact(cat.invested)}</span>
                             </td>
                             <td className="text-right px-4 py-3">
-                              <span className="text-[14px] font-semibold text-[var(--label-primary)]">{formatCompact(cat.current)}</span>
+                              <span className="text-[15px] font-semibold text-[var(--label-primary)]">{formatCompact(cat.current)}</span>
                             </td>
                             <td className="text-right px-4 py-3">
                               {cat.isEquity && !pricesLoaded ? (
@@ -1460,14 +1442,14 @@ export default function Dashboard() {
                                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" />
                                     <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
                                   </svg>
-                                  <span className="text-[12px] text-[var(--label-tertiary)]">Loading...</span>
+                                  <span className="text-[13px] text-[var(--label-tertiary)]">Loading...</span>
                                 </div>
                               ) : (
                                 <>
-                                  <p className={`text-[14px] font-semibold ${cat.pnl >= 0 ? 'text-[#059669]' : 'text-[#DC2626]'}`}>
+                                  <p className={`text-[15px] font-semibold ${cat.pnl >= 0 ? 'text-[var(--system-green)]' : 'text-[var(--system-red)]'}`}>
                                     {cat.pnl >= 0 ? '+' : ''}{formatCompact(cat.pnl)}
                                   </p>
-                                  <p className={`text-[11px] ${cat.pnlPercent >= 0 ? 'text-[#059669]' : 'text-[#DC2626]'}`}>
+                                  <p className={`text-[12px] ${cat.pnlPercent >= 0 ? 'text-[var(--system-green)]' : 'text-[var(--system-red)]'}`}>
                                     {cat.pnlPercent >= 0 ? '+' : ''}{cat.pnlPercent.toFixed(1)}%
                                   </p>
                                 </>
@@ -1484,7 +1466,7 @@ export default function Dashboard() {
                                     }}
                                   />
                                 </div>
-                                <span className="text-[13px] font-medium text-[var(--label-primary)] w-12 text-right">
+                                <span className="text-[14px] font-medium text-[var(--label-primary)] w-12 text-right">
                                   {totalValue > 0 ? ((cat.current / totalValue) * 100).toFixed(1) : 0}%
                                 </span>
                               </div>
@@ -1501,8 +1483,8 @@ export default function Dashboard() {
                         <path strokeLinecap="round" strokeLinejoin="round" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
                       </svg>
                     </div>
-                    <p className="text-[14px] text-[var(--label-secondary)] mb-1">No holdings yet</p>
-                    <p className="text-[12px] text-[var(--label-tertiary)] mb-4">Add your first asset to start tracking</p>
+                    <p className="text-[15px] text-[var(--label-secondary)] mb-1">No holdings yet</p>
+                    <p className="text-[13px] text-[var(--label-tertiary)] mb-4">Add your first asset to start tracking</p>
                     <Link to="/assets/add">
                       <Button variant="filled" size="sm">Add Asset</Button>
                     </Link>
@@ -1522,7 +1504,7 @@ export default function Dashboard() {
                   </svg>
                 </div>
                 <h3 className="text-[20px] font-semibold text-[var(--label-primary)] mb-1">Start Tracking</h3>
-                <p className="text-[15px] text-[var(--label-secondary)] mb-6 max-w-sm mx-auto">
+                <p className="text-[16px] text-[var(--label-secondary)] mb-6 max-w-sm mx-auto">
                   Add your investments to track portfolio performance
                 </p>
                 <Link to="/assets/add">
@@ -1554,7 +1536,7 @@ export default function Dashboard() {
               >
                 {/* Header */}
                 <div className="flex items-center justify-between px-5 py-4 border-b border-[var(--separator-opaque)] shrink-0">
-                  <h2 className="text-[17px] font-semibold text-[var(--label-primary)]">XIRR Breakdown</h2>
+                  <h2 className="text-[18px] font-semibold text-[var(--label-primary)]">XIRR Breakdown</h2>
                   <button
                     onClick={() => setShowXirrDebug(false)}
                     className="p-2 -mr-2 text-[var(--label-tertiary)] hover:text-[var(--label-secondary)] hover:bg-[var(--fill-tertiary)] rounded-lg transition-colors"
@@ -1570,26 +1552,26 @@ export default function Dashboard() {
                   {/* Summary */}
                   <div className="grid grid-cols-2 gap-3 mb-5">
                     <div className="p-3 bg-[var(--fill-tertiary)]/50 rounded-xl">
-                      <p className="text-[11px] text-[var(--label-tertiary)] uppercase mb-1">Total Invested</p>
-                      <p className="text-[17px] font-semibold text-[var(--label-primary)]">
+                      <p className="text-[12px] text-[var(--label-tertiary)] uppercase mb-1">Total Invested</p>
+                      <p className="text-[18px] font-semibold text-[var(--label-primary)]">
                         {formatCurrency(xirrDebugInfo.totalInvested)}
                       </p>
                     </div>
                     <div className="p-3 bg-[var(--fill-tertiary)]/50 rounded-xl">
-                      <p className="text-[11px] text-[var(--label-tertiary)] uppercase mb-1">Current Value</p>
-                      <p className="text-[17px] font-semibold text-[var(--label-primary)]">
+                      <p className="text-[12px] text-[var(--label-tertiary)] uppercase mb-1">Current Value</p>
+                      <p className="text-[18px] font-semibold text-[var(--label-primary)]">
                         {formatCurrency(xirrDebugInfo.currentValue)}
                       </p>
                     </div>
                     <div className="p-3 bg-[var(--fill-tertiary)]/50 rounded-xl">
-                      <p className="text-[11px] text-[var(--label-tertiary)] uppercase mb-1">Absolute Return</p>
-                      <p className={`text-[17px] font-semibold ${xirrDebugInfo.absoluteReturn >= 0 ? 'text-[#059669]' : 'text-[#DC2626]'}`}>
+                      <p className="text-[12px] text-[var(--label-tertiary)] uppercase mb-1">Absolute Return</p>
+                      <p className={`text-[18px] font-semibold ${xirrDebugInfo.absoluteReturn >= 0 ? 'text-[var(--system-green)]' : 'text-[var(--system-red)]'}`}>
                         {xirrDebugInfo.absoluteReturn >= 0 ? '+' : ''}{xirrDebugInfo.absoluteReturn.toFixed(2)}%
                       </p>
                     </div>
                     <div className="p-3 bg-[var(--chart-primary)]/10 rounded-xl">
-                      <p className="text-[11px] text-[var(--chart-primary)] uppercase mb-1">XIRR (Annualized)</p>
-                      <p className={`text-[17px] font-semibold ${xirrDebugInfo.xirr >= 0 ? 'text-[var(--chart-primary)]' : 'text-[#DC2626]'}`}>
+                      <p className="text-[12px] text-[var(--chart-primary)] uppercase mb-1">XIRR (Annualized)</p>
+                      <p className={`text-[18px] font-semibold ${xirrDebugInfo.xirr >= 0 ? 'text-[var(--chart-primary)]' : 'text-[var(--system-red)]'}`}>
                         {xirrDebugInfo.xirr >= 0 ? '+' : ''}{xirrDebugInfo.xirr.toFixed(2)}%
                       </p>
                     </div>
@@ -1597,15 +1579,15 @@ export default function Dashboard() {
 
                   {/* Time Period */}
                   <div className="mb-5 p-3 bg-[var(--fill-tertiary)]/30 rounded-xl">
-                    <div className="flex justify-between text-[13px]">
+                    <div className="flex justify-between text-[14px]">
                       <span className="text-[var(--label-tertiary)]">First Investment</span>
                       <span className="text-[var(--label-primary)] font-medium">{xirrDebugInfo.firstDate}</span>
                     </div>
-                    <div className="flex justify-between text-[13px] mt-1">
+                    <div className="flex justify-between text-[14px] mt-1">
                       <span className="text-[var(--label-tertiary)]">Current Date</span>
                       <span className="text-[var(--label-primary)] font-medium">{xirrDebugInfo.lastDate}</span>
                     </div>
-                    <div className="flex justify-between text-[13px] mt-1">
+                    <div className="flex justify-between text-[14px] mt-1">
                       <span className="text-[var(--label-tertiary)]">Total Transactions</span>
                       <span className="text-[var(--label-primary)] font-medium">{xirrDebugInfo.transactionCount}</span>
                     </div>
@@ -1613,23 +1595,23 @@ export default function Dashboard() {
 
                   {/* Cash Flows */}
                   <div>
-                    <h3 className="text-[11px] font-semibold text-[var(--label-tertiary)] uppercase tracking-wider mb-3">
+                    <h3 className="text-[12px] font-semibold text-[var(--label-tertiary)] uppercase tracking-wider mb-3">
                       Cash Flows (First 20)
                     </h3>
                     <div className="space-y-2 max-h-48 overflow-y-auto">
                       {xirrDebugInfo.cashFlows.slice(0, 20).map((cf, idx) => (
                         <div key={idx} className="flex items-center justify-between py-2 px-3 bg-[var(--fill-tertiary)]/30 rounded-lg">
                           <div>
-                            <p className="text-[13px] text-[var(--label-primary)]">{cf.date}</p>
-                            <p className="text-[11px] text-[var(--label-tertiary)]">{cf.type}</p>
+                            <p className="text-[14px] text-[var(--label-primary)]">{cf.date}</p>
+                            <p className="text-[12px] text-[var(--label-tertiary)]">{cf.type}</p>
                           </div>
-                          <p className={`text-[14px] font-medium ${cf.amount >= 0 ? 'text-[#059669]' : 'text-[#DC2626]'}`}>
+                          <p className={`text-[15px] font-medium ${cf.amount >= 0 ? 'text-[var(--system-green)]' : 'text-[var(--system-red)]'}`}>
                             {cf.amount >= 0 ? '+' : ''}{formatCurrency(cf.amount)}
                           </p>
                         </div>
                       ))}
                       {xirrDebugInfo.cashFlows.length > 20 && (
-                        <p className="text-[12px] text-[var(--label-tertiary)] text-center py-2">
+                        <p className="text-[13px] text-[var(--label-tertiary)] text-center py-2">
                           ... and {xirrDebugInfo.cashFlows.length - 20} more transactions
                         </p>
                       )}
@@ -1639,7 +1621,7 @@ export default function Dashboard() {
 
                 {/* Footer */}
                 <div className="px-5 py-3 bg-[var(--fill-tertiary)]/50 border-t border-[var(--separator-opaque)] shrink-0">
-                  <p className="text-[11px] text-[var(--label-tertiary)] text-center">
+                  <p className="text-[12px] text-[var(--label-tertiary)] text-center">
                     XIRR accounts for timing of investments. Differences with brokers may be due to dividends.
                   </p>
                 </div>

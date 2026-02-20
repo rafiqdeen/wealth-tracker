@@ -82,8 +82,8 @@ export function generatePortfolioReportHTML(data) {
           font-size: 14px;
           color: #8e8e93;
         }
-        .pnl-positive { color: #059669; }
-        .pnl-negative { color: #DC2626; }
+        .pnl-positive { color: #1A7A5C; }
+        .pnl-negative { color: #C03744; }
         table {
           width: 100%;
           border-collapse: collapse;

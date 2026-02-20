@@ -1,40 +1,26 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { formatCurrency, formatCompact } from '../../utils/formatting';
-
-function AssetTypeBadge({ type }) {
-  const labels = {
-    'STOCK': 'Stock', 'MUTUAL_FUND': 'MF', 'ETF': 'ETF', 'FD': 'FD',
-    'PPF': 'PPF', 'EPF': 'EPF', 'RD': 'RD', 'GOLD': 'Gold', 'SILVER': 'Silver',
-    'CRYPTOCURRENCY': 'Crypto', 'LAND': 'Land', 'PROPERTY': 'Property',
-    'SAVINGS_ACCOUNT': 'Savings', 'LIC': 'LIC', 'NPS': 'NPS',
-  };
-  const label = labels[type] || type?.replace(/_/g, ' ') || '';
-  return (
-    <span className="px-1.5 py-0.5 text-[9px] font-semibold rounded bg-[var(--fill-tertiary)] text-[var(--label-tertiary)] uppercase tracking-wide shrink-0">
-      {label}
-    </span>
-  );
-}
+import AssetTypeBadge from '../shared/AssetTypeBadge';
 
 function PerformerRow({ item, index, isGain, maxPercent }) {
-  const color = isGain ? '#10B981' : '#EF4444';
+  const color = isGain ? 'var(--system-green)' : 'var(--system-red)';
   return (
     <div className="flex items-start gap-2.5 p-2.5 bg-[var(--bg-secondary)] rounded-xl border border-[var(--separator-opaque)]/40">
-      <span className="text-[12px] font-bold text-[var(--label-tertiary)] tabular-nums mt-0.5 w-5 shrink-0 text-center">{index + 1}</span>
+      <span className="text-[13px] font-bold text-[var(--label-tertiary)] tabular-nums mt-0.5 w-5 shrink-0 text-center">{index + 1}</span>
       <div className="flex-1 min-w-0">
         <div className="flex items-center justify-between mb-0.5 gap-2">
           <div className="flex items-center gap-1.5 min-w-0">
-            <p className="text-[13px] font-medium text-[var(--label-primary)] truncate">{item.name}</p>
+            <p className="text-[14px] font-medium text-[var(--label-primary)] truncate">{item.name}</p>
             <AssetTypeBadge type={item.asset_type} />
           </div>
-          <p className="text-[13px] font-bold tabular-nums shrink-0" style={{ color }}>
+          <p className="text-[14px] font-bold tabular-nums shrink-0" style={{ color }}>
             {isGain ? '+' : ''}{(item.gainPercent || 0).toFixed(1)}%
           </p>
         </div>
         <div className="flex items-center justify-between">
-          <p className="text-[11px] text-[var(--label-tertiary)] tabular-nums">{formatCompact(item.currentValue)}</p>
-          <p className="text-[11px] tabular-nums" style={{ color: `${color}99` }}>
+          <p className="text-[12px] text-[var(--label-tertiary)] tabular-nums">{formatCompact(item.currentValue)}</p>
+          <p className="text-[12px] tabular-nums" style={{ color: `${color}99` }}>
             {isGain ? '+' : ''}{formatCompact(item.gain)}
           </p>
         </div>
@@ -53,8 +39,8 @@ function PerformerRow({ item, index, isGain, maxPercent }) {
 }
 
 const categoryColors = {
-  EQUITY: '#3B82F6', FIXED_INCOME: '#10B981', PHYSICAL: '#F59E0B',
-  REAL_ESTATE: '#EF4444', OTHER: '#6B7280', INSURANCE: '#06B6D4',
+  EQUITY: 'var(--chart-primary)', FIXED_INCOME: 'var(--system-green)', PHYSICAL: 'var(--system-amber)',
+  REAL_ESTATE: 'var(--system-red)', OTHER: '#6B7280', INSURANCE: 'var(--chart-primary)',
 };
 
 export default function PerformanceReport({
@@ -73,8 +59,8 @@ export default function PerformanceReport({
             <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 18L9 11.25l4.306 4.307a11.95 11.95 0 015.814-5.519l2.74-1.22m0 0l-5.94-2.28m5.94 2.28l-2.28 5.941" />
           </svg>
         </div>
-        <p className="text-[14px] font-medium text-[var(--label-secondary)] mb-1">No Performance Data</p>
-        <p className="text-[12px] text-[var(--label-tertiary)]">Add assets to see performance analysis</p>
+        <p className="text-[15px] font-medium text-[var(--label-secondary)] mb-1">No Performance Data</p>
+        <p className="text-[13px] text-[var(--label-tertiary)]">Add assets to see performance analysis</p>
       </div>
     );
   }
@@ -97,30 +83,24 @@ export default function PerformanceReport({
 
   return (
     <div>
-      {/* Title */}
-      <div className="mb-6">
-        <h2 className="text-[18px] font-bold text-[var(--label-primary)]">Performance Analysis</h2>
-        <p className="text-[13px] text-[var(--label-tertiary)] mt-0.5">Returns across {assetCount} assets</p>
-      </div>
-
       {/* Hero: Top Performer */}
       {topGainer && (topGainer.gainPercent || 0) > 0 && (
-        <div className="mb-6 p-5 bg-gradient-to-br from-[#8B5CF6]/10 to-[#7C3AED]/5 border border-[#8B5CF6]/20 rounded-2xl">
+        <div className="mb-6 p-5 bg-gradient-to-br from-[var(--system-purple)]/10 to-[var(--system-purple)]/5 border border-[var(--system-purple)]/20 rounded-2xl">
           <div className="flex items-center gap-2 mb-3">
-            <div className="w-8 h-8 rounded-xl bg-[#8B5CF6]/15 flex items-center justify-center">
-              <svg className="w-4 h-4 text-[#8B5CF6]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+            <div className="w-8 h-8 rounded-xl bg-[var(--system-purple)]/15 flex items-center justify-center">
+              <svg className="w-4 h-4 text-[var(--system-purple)]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 10.5L12 3m0 0l7.5 7.5M12 3v18" />
               </svg>
             </div>
-            <span className="text-[12px] font-semibold text-[#8B5CF6] uppercase tracking-wide">Top Performer</span>
+            <span className="text-[13px] font-semibold text-[var(--system-purple)] uppercase tracking-wide">Top Performer</span>
             <AssetTypeBadge type={topGainer.asset_type} />
           </div>
           <p className="text-[16px] font-semibold text-[var(--label-primary)] mb-1">{topGainer.name}</p>
           <div className="flex items-baseline gap-3">
-            <p className="text-[36px] font-bold text-[#8B5CF6] tabular-nums leading-none">
+            <p className="text-[36px] font-bold text-[var(--system-purple)] tabular-nums leading-none" style={{ fontFamily: 'var(--font-display)' }}>
               +{(topGainer.gainPercent || 0).toFixed(1)}%
             </p>
-            <p className="text-[14px] text-[#8B5CF6]/70 tabular-nums">
+            <p className="text-[15px] text-[var(--system-purple)]/70 tabular-nums">
               +{formatCompact(topGainer.gain)}
             </p>
           </div>
@@ -133,12 +113,12 @@ export default function PerformanceReport({
         {gainers.length > 0 && (
           <div>
             <div className="flex items-center gap-2 mb-3">
-              <div className="w-5 h-5 rounded-md bg-[#10B981]/15 flex items-center justify-center">
-                <svg className="w-3 h-3 text-[#10B981]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+              <div className="w-5 h-5 rounded-md bg-[var(--system-green)]/15 flex items-center justify-center">
+                <svg className="w-3 h-3 text-[var(--system-green)]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 10.5L12 3m0 0l7.5 7.5M12 3v18" />
                 </svg>
               </div>
-              <h4 className="text-[13px] font-semibold text-[#10B981] uppercase tracking-wide">Top Gainers</h4>
+              <h4 className="text-[14px] font-semibold text-[var(--system-green)] uppercase tracking-wide">Top Gainers</h4>
             </div>
             <div className="space-y-2">
               {displayGainers.map((item, index) => (
@@ -148,7 +128,7 @@ export default function PerformanceReport({
             {gainers.length > 5 && (
               <button
                 onClick={() => setShowAllGainers(!showAllGainers)}
-                className="mt-2 text-[12px] font-medium text-[#10B981] hover:text-[#059669] transition-colors"
+                className="mt-2 text-[13px] font-medium text-[var(--system-green)] hover:text-[var(--system-green)] transition-colors"
               >
                 {showAllGainers ? 'Show less' : `See all ${gainers.length} gainers`}
               </button>
@@ -160,12 +140,12 @@ export default function PerformanceReport({
         {losers.length > 0 && (
           <div>
             <div className="flex items-center gap-2 mb-3">
-              <div className="w-5 h-5 rounded-md bg-[#EF4444]/15 flex items-center justify-center">
-                <svg className="w-3 h-3 text-[#EF4444]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+              <div className="w-5 h-5 rounded-md bg-[var(--system-red)]/15 flex items-center justify-center">
+                <svg className="w-3 h-3 text-[var(--system-red)]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 13.5L12 21m0 0l-7.5-7.5M12 21V3" />
                 </svg>
               </div>
-              <h4 className="text-[13px] font-semibold text-[#EF4444] uppercase tracking-wide">Top Losers</h4>
+              <h4 className="text-[14px] font-semibold text-[var(--system-red)] uppercase tracking-wide">Top Losers</h4>
             </div>
             <div className="space-y-2">
               {displayLosers.map((item, index) => (
@@ -175,7 +155,7 @@ export default function PerformanceReport({
             {losers.length > 5 && (
               <button
                 onClick={() => setShowAllLosers(!showAllLosers)}
-                className="mt-2 text-[12px] font-medium text-[#EF4444] hover:text-[#DC2626] transition-colors"
+                className="mt-2 text-[13px] font-medium text-[var(--system-red)] hover:text-[var(--system-red)] transition-colors"
               >
                 {showAllLosers ? 'Show less' : `See all ${losers.length} losers`}
               </button>
@@ -187,20 +167,20 @@ export default function PerformanceReport({
       {/* Category Performance - full width */}
       {catEntries.length > 0 && (
         <div className="mt-6">
-          <h4 className="text-[13px] font-semibold text-[var(--label-secondary)] uppercase tracking-wide mb-3">Category Performance</h4>
+          <h4 className="text-[14px] font-semibold text-[var(--label-secondary)] uppercase tracking-wide mb-3">Category Performance</h4>
           <div className="space-y-2">
             {catEntries.map((cat) => (
               <div key={cat.category} className="p-3 bg-[var(--bg-secondary)] rounded-xl border border-[var(--separator-opaque)]/40">
                 <div className="flex items-center gap-2.5 mb-2">
                   <div className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: cat.color }} />
-                  <span className="flex-1 text-[13px] font-medium text-[var(--label-primary)] min-w-0">{cat.label}</span>
-                  <span className="text-[11px] text-[var(--label-tertiary)] tabular-nums shrink-0">{formatCompact(cat.invested)}</span>
+                  <span className="flex-1 text-[14px] font-medium text-[var(--label-primary)] min-w-0">{cat.label}</span>
+                  <span className="text-[12px] text-[var(--label-tertiary)] tabular-nums shrink-0">{formatCompact(cat.invested)}</span>
                   <svg className="w-3 h-3 text-[var(--label-quaternary)] shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" />
                   </svg>
-                  <span className="text-[11px] font-semibold text-[var(--label-primary)] tabular-nums shrink-0">{formatCompact(cat.current)}</span>
-                  <span className={`text-[12px] font-bold tabular-nums shrink-0 ${
-                    cat.gain >= 0 ? 'text-[#059669]' : 'text-[#DC2626]'
+                  <span className="text-[12px] font-semibold text-[var(--label-primary)] tabular-nums shrink-0">{formatCompact(cat.current)}</span>
+                  <span className={`text-[13px] font-bold tabular-nums shrink-0 ${
+                    cat.gain >= 0 ? 'text-[var(--system-green)]' : 'text-[var(--system-red)]'
                   }`}>
                     {cat.gain >= 0 ? '+' : ''}{formatCompact(cat.gain)}
                   </span>
@@ -226,8 +206,8 @@ export default function PerformanceReport({
           <svg className="w-4 h-4 text-[var(--label-quaternary)] shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M11.25 11.25l.041-.02a.75.75 0 011.063.852l-.708 2.836a.75.75 0 001.063.853l.041-.021M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9-3.75h.008v.008H12V8.25z" />
           </svg>
-          <p className="text-[11px] text-[var(--label-quaternary)] leading-relaxed">
-            Your portfolio returned <span className={`font-bold ${(totalGainPercent || 0) >= 0 ? 'text-[#059669]' : 'text-[#DC2626]'}`}>
+          <p className="text-[12px] text-[var(--label-quaternary)] leading-relaxed">
+            Your portfolio returned <span className={`font-bold ${(totalGainPercent || 0) >= 0 ? 'text-[var(--system-green)]' : 'text-[var(--system-red)]'}`}>
               {(totalGainPercent || 0) >= 0 ? '+' : ''}{(totalGainPercent || 0).toFixed(2)}%
             </span> ({(totalGain || 0) >= 0 ? '+' : ''}{formatCompact(totalGain)}) across {assetCount} assets
           </p>

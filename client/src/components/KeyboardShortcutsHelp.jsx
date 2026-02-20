@@ -13,7 +13,7 @@ const modalVariants = {
 
 function KeyBadge({ children }) {
   return (
-    <kbd className="inline-flex items-center justify-center min-w-[24px] h-6 px-1.5 bg-[var(--fill-tertiary)] border border-[var(--separator)]/30 rounded-md text-[12px] font-medium text-[var(--label-secondary)] shadow-sm">
+    <kbd className="inline-flex items-center justify-center min-w-[24px] h-6 px-1.5 bg-[var(--fill-tertiary)] border border-[var(--separator)]/30 rounded-md text-[13px] font-medium text-[var(--label-secondary)] shadow-sm">
       {children}
     </kbd>
   );
@@ -46,7 +46,7 @@ export default function KeyboardShortcutsHelp({ isOpen, onClose }) {
           >
             {/* Header */}
             <div className="flex items-center justify-between px-5 py-4 border-b border-[var(--separator)]/30">
-              <h2 className="text-[17px] font-semibold text-[var(--label-primary)]">Keyboard Shortcuts</h2>
+              <h2 className="text-[18px] font-semibold text-[var(--label-primary)]">Keyboard Shortcuts</h2>
               <button
                 onClick={onClose}
                 className="p-2 -mr-2 text-[var(--label-tertiary)] hover:text-[var(--label-secondary)] hover:bg-[var(--fill-tertiary)] rounded-lg transition-colors"
@@ -61,13 +61,13 @@ export default function KeyboardShortcutsHelp({ isOpen, onClose }) {
             <div className="px-5 py-4 max-h-[60vh] overflow-y-auto">
               {KEYBOARD_SHORTCUTS.map((group, i) => (
                 <div key={group.category} className={i > 0 ? 'mt-5' : ''}>
-                  <h3 className="text-[11px] font-semibold text-[var(--label-tertiary)] uppercase tracking-wider mb-3">
+                  <h3 className="text-[12px] font-semibold text-[var(--label-tertiary)] uppercase tracking-wider mb-3">
                     {group.category}
                   </h3>
                   <div className="space-y-2.5">
                     {group.shortcuts.map((shortcut, j) => (
                       <div key={j} className="flex items-center justify-between">
-                        <span className="text-[14px] text-[var(--label-secondary)]">
+                        <span className="text-[15px] text-[var(--label-secondary)]">
                           {shortcut.description}
                         </span>
                         <div className="flex items-center gap-1">
@@ -77,10 +77,10 @@ export default function KeyboardShortcutsHelp({ isOpen, onClose }) {
                                 {key === 'Cmd' ? '⌘' : key === 'Ctrl' ? 'Ctrl' : key}
                               </KeyBadge>
                               {k < shortcut.keys.length - 1 && shortcut.keys.length === 2 && shortcut.keys[0] !== 'g' && (
-                                <span className="text-[11px] text-[var(--label-quaternary)]">+</span>
+                                <span className="text-[12px] text-[var(--label-quaternary)]">+</span>
                               )}
                               {k < shortcut.keys.length - 1 && shortcut.keys[0] === 'g' && (
-                                <span className="text-[11px] text-[var(--label-quaternary)]">then</span>
+                                <span className="text-[12px] text-[var(--label-quaternary)]">then</span>
                               )}
                             </span>
                           ))}
@@ -94,7 +94,7 @@ export default function KeyboardShortcutsHelp({ isOpen, onClose }) {
 
             {/* Footer */}
             <div className="px-5 py-3 bg-[var(--fill-tertiary)]/50 border-t border-[var(--separator)]/30">
-              <p className="text-[12px] text-[var(--label-tertiary)] text-center">
+              <p className="text-[13px] text-[var(--label-tertiary)] text-center">
                 Press <KeyBadge>?</KeyBadge> to toggle this help
               </p>
             </div>

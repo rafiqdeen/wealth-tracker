@@ -105,12 +105,12 @@ export default function Modal({
                 <div className="flex items-start justify-between px-5 pt-5 pb-4 border-b border-[var(--separator-opaque)]">
                   <div className="flex-1 min-w-0 pr-4">
                     {title && (
-                      <h2 className="text-[17px] font-semibold text-[var(--label-primary)]">
+                      <h2 className="text-[18px] font-semibold text-[var(--label-primary)]">
                         {title}
                       </h2>
                     )}
                     {subtitle && (
-                      <p className="text-[13px] text-[var(--label-tertiary)] mt-0.5">
+                      <p className="text-[14px] text-[var(--label-tertiary)] mt-0.5">
                         {subtitle}
                       </p>
                     )}
@@ -181,12 +181,12 @@ export function ConfirmDialog({
     <Modal isOpen={isOpen} onClose={onClose} size="sm" showCloseButton={false}>
       <div className="p-5">
         {title && (
-          <h3 className="text-[17px] font-semibold text-[var(--label-primary)] mb-2">
+          <h3 className="text-[18px] font-semibold text-[var(--label-primary)] mb-2">
             {title}
           </h3>
         )}
         {message && (
-          <p className="text-[14px] text-[var(--label-secondary)] mb-5">
+          <p className="text-[15px] text-[var(--label-secondary)] mb-5">
             {message}
           </p>
         )}
@@ -194,7 +194,7 @@ export function ConfirmDialog({
           <motion.button
             whileTap={{ scale: 0.97 }}
             onClick={onClose}
-            className="flex-1 py-2.5 px-4 rounded-xl font-medium text-[14px] bg-[var(--fill-tertiary)] text-[var(--label-primary)] hover:bg-[var(--fill-secondary)] transition-colors"
+            className="flex-1 py-2.5 px-4 rounded-xl font-medium text-[15px] bg-[var(--fill-tertiary)] text-[var(--label-primary)] hover:bg-[var(--fill-secondary)] transition-colors"
           >
             {cancelLabel}
           </motion.button>
@@ -204,7 +204,7 @@ export function ConfirmDialog({
               onConfirm?.();
               onClose();
             }}
-            className={`flex-1 py-2.5 px-4 rounded-xl font-medium text-[14px] transition-colors ${buttonClass}`}
+            className={`flex-1 py-2.5 px-4 rounded-xl font-medium text-[15px] transition-colors ${buttonClass}`}
           >
             {confirmLabel}
           </motion.button>

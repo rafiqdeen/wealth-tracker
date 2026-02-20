@@ -194,8 +194,8 @@ export default function CSVImport({ asset, onSuccess, onCancel }) {
     <div className="p-5 space-y-5">
       {/* Asset Info */}
       <div className="bg-[var(--fill-tertiary)] rounded-xl p-4">
-        <p className="text-[15px] font-semibold text-[var(--label-primary)]">{asset.name}</p>
-        <p className="text-[13px] text-[var(--label-tertiary)]">Import transactions from CSV</p>
+        <p className="text-[16px] font-semibold text-[var(--label-primary)]">{asset.name}</p>
+        <p className="text-[14px] text-[var(--label-tertiary)]">Import transactions from CSV</p>
       </div>
 
       {/* Drop Zone */}
@@ -223,10 +223,10 @@ export default function CSVImport({ asset, onSuccess, onCancel }) {
                 <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
               </svg>
             </div>
-            <p className="text-[15px] font-medium text-[var(--label-primary)] mb-1">
+            <p className="text-[16px] font-medium text-[var(--label-primary)] mb-1">
               {parsing ? 'Parsing...' : 'Drop CSV file here or click to browse'}
             </p>
-            <p className="text-[13px] text-[var(--label-tertiary)]">
+            <p className="text-[14px] text-[var(--label-tertiary)]">
               Required columns: date, type, quantity, price
             </p>
           </motion.div>
@@ -234,7 +234,7 @@ export default function CSVImport({ asset, onSuccess, onCancel }) {
           {/* Template Download */}
           <button
             onClick={downloadTemplate}
-            className="w-full flex items-center justify-center gap-2 py-2.5 text-[14px] text-[var(--system-blue)] hover:bg-[var(--system-blue)]/5 rounded-xl transition-colors"
+            className="w-full flex items-center justify-center gap-2 py-2.5 text-[15px] text-[var(--system-blue)] hover:bg-[var(--system-blue)]/5 rounded-xl transition-colors"
           >
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
@@ -253,10 +253,10 @@ export default function CSVImport({ asset, onSuccess, onCancel }) {
             exit={{ opacity: 0, height: 0 }}
             className="bg-[var(--system-red)]/10 rounded-xl p-4"
           >
-            <p className="text-[13px] font-medium text-[var(--system-red)] mb-2">
+            <p className="text-[14px] font-medium text-[var(--system-red)] mb-2">
               {errors.length} error{errors.length > 1 ? 's' : ''} found:
             </p>
-            <ul className="text-[12px] text-[var(--system-red)] space-y-1 max-h-24 overflow-y-auto">
+            <ul className="text-[13px] text-[var(--system-red)] space-y-1 max-h-24 overflow-y-auto">
               {errors.slice(0, 5).map((err, i) => (
                 <li key={i}>{err}</li>
               ))}
@@ -279,24 +279,24 @@ export default function CSVImport({ asset, onSuccess, onCancel }) {
           {/* Summary */}
           <div className="grid grid-cols-3 gap-3">
             <div className="bg-[var(--fill-tertiary)] rounded-xl p-3 text-center">
-              <p className="text-[11px] text-[var(--label-tertiary)] uppercase tracking-wide mb-0.5">Transactions</p>
-              <p className="text-[17px] font-semibold text-[var(--label-primary)]">{parsedData.length}</p>
+              <p className="text-[12px] text-[var(--label-tertiary)] uppercase tracking-wide mb-0.5">Transactions</p>
+              <p className="text-[18px] font-semibold text-[var(--label-primary)]">{parsedData.length}</p>
             </div>
             <div className="bg-[var(--system-green)]/10 rounded-xl p-3 text-center">
-              <p className="text-[11px] text-[var(--system-green)] uppercase tracking-wide mb-0.5">Total Buy</p>
-              <p className="text-[15px] font-semibold text-[var(--system-green)]">{formatCurrency(totalBuy)}</p>
+              <p className="text-[12px] text-[var(--system-green)] uppercase tracking-wide mb-0.5">Total Buy</p>
+              <p className="text-[16px] font-semibold text-[var(--system-green)]">{formatCurrency(totalBuy)}</p>
             </div>
             <div className="bg-[var(--system-orange)]/10 rounded-xl p-3 text-center">
-              <p className="text-[11px] text-[var(--system-orange)] uppercase tracking-wide mb-0.5">Total Sell</p>
-              <p className="text-[15px] font-semibold text-[var(--system-orange)]">{formatCurrency(totalSell)}</p>
+              <p className="text-[12px] text-[var(--system-orange)] uppercase tracking-wide mb-0.5">Total Sell</p>
+              <p className="text-[16px] font-semibold text-[var(--system-orange)]">{formatCurrency(totalSell)}</p>
             </div>
           </div>
 
           {/* Transaction List Preview */}
           <div className="bg-[var(--fill-tertiary)] rounded-xl overflow-hidden max-h-48 overflow-y-auto">
-            <table className="w-full text-[13px]">
+            <table className="w-full text-[14px]">
               <thead className="bg-[var(--bg-secondary)] sticky top-0">
-                <tr className="text-[11px] text-[var(--label-tertiary)] uppercase">
+                <tr className="text-[12px] text-[var(--label-tertiary)] uppercase">
                   <th className="text-left px-3 py-2">Date</th>
                   <th className="text-center px-3 py-2">Type</th>
                   <th className="text-right px-3 py-2">Qty</th>
@@ -311,7 +311,7 @@ export default function CSVImport({ asset, onSuccess, onCancel }) {
                       {new Date(txn.transaction_date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: '2-digit' })}
                     </td>
                     <td className="px-3 py-2 text-center">
-                      <span className={`px-1.5 py-0.5 rounded text-[11px] font-medium ${
+                      <span className={`px-1.5 py-0.5 rounded text-[12px] font-medium ${
                         txn.type === 'BUY'
                           ? 'bg-[var(--system-green)]/10 text-[var(--system-green)]'
                           : 'bg-[var(--system-orange)]/10 text-[var(--system-orange)]'

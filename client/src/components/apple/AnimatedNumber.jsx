@@ -126,9 +126,9 @@ export function PnLDisplay({
   const colorClass = isPositive ? 'text-[var(--system-green)]' : 'text-[var(--system-red)]';
 
   const sizeClasses = {
-    sm: 'text-[13px]',
-    md: 'text-[15px]',
-    lg: 'text-[17px]',
+    sm: 'text-[14px]',
+    md: 'text-[16px]',
+    lg: 'text-[18px]',
   };
 
   return (
